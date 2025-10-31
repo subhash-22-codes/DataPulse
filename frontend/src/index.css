@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 700;
+  }
+}
+@layer base {
+  p {
+    font-family: 'manrope', sans-serif;
+    font-weight: 400;
+  }
+}
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none;    /* Firefox */
+  }
+
+  body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
+
+}
+@layer base {
+  /* Improve tap targets on mobile */
+  @media (hover: none) and (pointer: coarse) {
+    button, 
+    input[type="button"], 
+    input[type="submit"], 
+    [role="button"] {
+      min-height: 44px;
+    }
+  }
+  
+  /* Better touch scrolling on iOS */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+}
+
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-teal-700 transition-all duration-200 shadow-sm;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-gray-700 px-6 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-all duration-200 shadow-sm;
+  }
+}
+
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse 3s ease-in-out infinite;
+  }
+  .touch-target-44 {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Safe area padding for iOS */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out forwards;
+}
+
+.Landing-page-design-pattern {
+  /* Full screen & flex layout */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+
+  /* Background gradient (already in Tailwind, optional backup) */
+  background: linear-gradient(
+    135deg,
+    #f8fafc, /* slate-50 */
+    rgba(191, 219, 254, 0.3), /* blue-50/30 */
+    rgba(199, 210, 254, 0.2) /* indigo-50/20 */
+  );
+
+  /* Grid overlay */
+}
+
+.Landing-page-design-pattern::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* allow clicks through */
+  
+  /* Subtle grid pattern */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 40px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 40px);
+  z-index: 0;
+}
+
+.workspace-background {
+  background-color: #f9fafb;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}

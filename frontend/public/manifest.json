@@ -1,0 +1,21 @@
+{
+  "name": "DataPulse",
+  "short_name": "DataPulse",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d1117",
+  "description": "A unified platform for real-time data ingestion, visualization, and intelligent alerting. Built with FastAPI, PostgreSQL, React, and Celery.",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

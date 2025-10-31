@@ -1,0 +1,46 @@
+version: '3.8'
+
+# This file is for PRODUCTION.
+# It is optimized for security, performance, and stability.
+
+services:
+  # The Redis service is the same
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # The FastAPI service (UPGRADED FOR PRODUCTION)
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    
+    # --- 1. THE HOOD IS CLOSED ---
+    # The 'volumes' section is REMOVED.
+    # This seals your code inside the container for security and stability.
+    # It no longer links to your local folder.
+    
+    env_file:
+      - .env
+
+    # --- 2. THE PRODUCTION ENGINE IS INSTALLED ---
+    # We now use Gunicorn to manage multiple Uvicorn "workers" (pistons).
+    # This can handle many users at once.
+    command: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000
+    
+    depends_on:
+      - redis
+
+  # The Celery worker service (UPGRADED FOR PRODUCTION)
+  worker:
+    build: .
+    
+    # --- 1. THE HOOD IS CLOSED ---
+    # The 'volumes' section is also REMOVED here.
+    
+    env_file:
+      - .env
+    command: celery -A app.services.celery_worker.celery_app worker --loglevel=info
+    depends_on:
+      - redis
