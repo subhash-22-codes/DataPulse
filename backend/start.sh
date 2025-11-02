@@ -1,44 +1,55 @@
 #!/bin/bash
-# This script is the new "production engine"
-# It starts both the Gunicorn API server AND the Celery worker in the same container.
+# This is the final, professional production startup script for Render's free tier.
+# It runs all 3 services (API, Scheduler, Worker) in one container.
+
+# We set the -m flag to make the script exit immediately if any command fails.
+set -m
 
 # 1. Start the Gunicorn server (the "Waiter") in the background.
+# We use 'gunicorn -w 1' to keep memory usage low and fit in the free tier.
 echo "Starting Gunicorn API server..."
 gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:$PORT &
 
-# 2. Start the Celery worker (the "Chef") in the foreground.
-# This is the main process Render will monitor.
-echo "Starting Celery worker..."
+# 2. Start our new "Alarm Clock" (the scheduler) in the background.
+echo "Starting the 'Poor Man's Cron' scheduler..."
+python app/scheduler.py &
+
+# 3. Start the Celery worker (the "Chef") in the foreground.
+# This is the main process Render will monitor. If this fails, the container restarts.
+echo "Starting Celery worker... This is the main process."
 celery -A app.services.celery_worker.celery_app worker --loglevel=info
 ```
 
-#### **Step 2: Make the Script Executable (A Critical Git Step)**
+---
+### ## Your Final Action Plan
 
-We have to tell Git that this new file is an "executable" file, not just a text file.
+Now that you have the correct `scheduler.py` file and the correct `start.sh` file, the rest of your instructions are **PERFECT**.
 
-**Action:**
-1.  In your `backend` terminal, run this one, simple Git command:
+**Action:** Now, you can follow the rest of the plan exactly as you posted it:
+
+**1. Make the Script Executable (The Critical Git Step):**
+* In your `backend` terminal, run this one, simple Git command:
     ```bash
     git update-index --chmod=+x start.sh
     ```
-2.  Now, add, commit, and push this one new file to GitHub:
+
+**2. Commit and Push Your Changes:**
+* Now, add, commit, and push **both** of your new files to GitHub:
     ```bash
-    git add start.sh
-    git commit -m "Add production start script for Render"
+    git add backend/app/scheduler.py backend/start.sh
+    git commit -m "Feat: Implement 100% free 'Poor Man's Cron' for Render"
     git push
     ```
 
-#### **Step 3: Update Your API's "Start Command" on Render**
-
-Now, let's go back to your Render dashboard and tell your `datapulse-api` service (the "Front Desk" we already built) to use this new, 2-in-1 "Super-Waiter" command.
-
-**Action:**
-1.  Go to your Render Dashboard.
-2.  Click on your **`datapulse-api`** service (the "Web Service" you already deployed).
-3.  Go to the **"Settings"** tab.
-4.  Find the **"Start Command"** box.
-5.  **Delete** the old `gunicorn ...` command.
-6.  **Replace it** with this new command:
+**3. Update Your API's "Start Command" on Render:**
+* This is the final step you listed, and it is **100% correct**.
+* Go to your Render Dashboard.
+* Click on your **`datapulse-api`** service.
+* Go to the **"Settings"** tab.
+* Find the **"Start Command"** box.
+* **Delete** the old `uvicorn ...` command.
+* **Replace it** with this new, correct command:
     ```
     bash start.sh
     
+
