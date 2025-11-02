@@ -22,6 +22,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 origins = [
     "http://localhost:5173",
+    "https://data-pulse-eight.vercel.app"
 ]
 
 # --- CORS ---
