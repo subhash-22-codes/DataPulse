@@ -10,10 +10,10 @@ import os # <-- NEW: Import 'os' to read the smart switch
 from contextlib import asynccontextmanager
 
 # Import all your API routers
-from app.api import auth, workspaces, notifications, uploads, alerts, chat, users
+from app.api import auth, workspaces, notifications, uploads, alerts, chat
 
 # Import all your models so Alembic can see them
-from app.models import user, workspace, data_upload, notification, alert_rule, invitation, chat_message
+from app.models import user, workspace, data_upload, notification, alert_rule
 
 # --- Set up logging right at the start ---
 setup_logging()
@@ -82,7 +82,6 @@ app.include_router(notifications.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
-app.include_router(users.router, prefix="/api") # <-- I also added your 'users' router from our previous work
 
 @app.get("/")
 def root():
