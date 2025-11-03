@@ -12,7 +12,7 @@ services:
     
     # --- CHECK THIS ---
     # Make sure this matches your requirements file name
-    buildCommand: pip install -r requirements.txt 
+    buildCommand: pip install -r requirements.prod.txt 
     
     # --- CHECK THIS ---
     # Make sure this is the correct command to start YOUR server
