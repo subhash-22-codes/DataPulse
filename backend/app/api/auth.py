@@ -99,7 +99,7 @@ class SendOtpRequest(BaseModel):
 
 @router.post("/send-otp")
 @limiter.limit("5/minute")
-async def send_otp(request: Request, req: SendOtpRequest, db: Session = Depends(get_db)):
+def send_otp(request: Request, req: SendOtpRequest, db: Session = Depends(get_db)):
     email = req.email
     logger.info(f"📩 Received OTP request for email: {email}")
     
@@ -240,7 +240,7 @@ class SendPasswordResetRequest(BaseModel):
     
 @router.post("/send-password-reset")
 @limiter.limit("5/minute")
-async def send_password_reset_code(request: Request, req: SendPasswordResetRequest, db: Session = Depends(get_db)):
+def send_password_reset_code(request: Request, req: SendPasswordResetRequest, db: Session = Depends(get_db)):
     email = req.email
     logger.info(f"Password reset requested for email: {email}")
     user = db.query(User).filter(User.email == email).first()
