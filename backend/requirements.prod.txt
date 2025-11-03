@@ -35,6 +35,10 @@ requests==2.32.3
 # ===== Mail & Rate Limiting =====
 fastapi-mail==1.4.1
 slowapi==0.1.9
+sib-api-v3-sdk==7.6.0
+
+
+
 
 # ===== Utils =====
 python-dotenv==1.0.1

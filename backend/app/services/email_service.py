@@ -1,29 +1,44 @@
 import os
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
-from pydantic import EmailStr
-from typing import List, Dict
-import pytz
 import logging
-from fastapi import HTTPException
+import pytz
 import datetime
-import uuid
+from typing import List, Dict
+from fastapi import HTTPException
+from pydantic import EmailStr
+# --- NEW BREVO SDK IMPORTS ---
+from sib_api_v3_sdk import ApiClient, Configuration
+from sib_api_v3_sdk.api.transactional_emails_api import TransactionalEmailsApi
+from sib_api_v3_sdk.models import SendSmtpEmail
+from sib_api_v3_sdk.rest import ApiException
 
+import atexit
+import anyio # For wrapping blocking SDK calls
 
 logger = logging.getLogger(__name__)
 
+# --- Configuration (Reads from Render Environment Variables) ---
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+MAIL_FROM_EMAIL = os.getenv("MAIL_FROM_EMAIL") # Your verified sender email
+MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "DataPulse")
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=os.getenv("SMTP_EMAIL"),
-    MAIL_PASSWORD=os.getenv("SMTP_PASS"),
-    MAIL_FROM=os.getenv("SMTP_EMAIL"),
-    MAIL_FROM_NAME="DataPulse", 
-    MAIL_PORT=587,
-    MAIL_SERVER="smtp.gmail.com",
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
+# --- Initialize Brevo Client ---
+email_api = None
+api_client = None
+# The client is initialized once at startup.
+if BREVO_API_KEY and MAIL_FROM_EMAIL:
+    configuration = Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api_client = ApiClient(configuration)
+    email_api = TransactionalEmailsApi(api_client)
+    logger.info("Brevo API client initialized successfully.")
+    
+    # Ensure the API client is properly closed on shutdown
+    atexit.register(lambda: api_client.close() if api_client else None)
+else:
+    logger.error("BREVO_API_KEY or MAIL_FROM_EMAIL is missing. Email service disabled.")
+
+
+# --- Helper Functions (Copied from your existing file - UNCHANGED) ---
 def convert_utc_to_ist_str(utc_dt):
     if not utc_dt: return "N/A"
     try:
@@ -34,10 +49,56 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
-async def send_otp_email(to_email: str, otp: str, subject_type="verification"):
+def format_team_list(owner: Dict, team: List[Dict]) -> str:
+    owner_name = owner.get('name') or owner.get('email')
+    html = f'<li><strong>Owner:</strong> {owner_name} ({owner.get("email")})</li>'
+    for member in team:
+        member_name = member.get('name') or member.get('email')
+        html += f'<li><strong>Member:</strong> {member_name} ({member.get("email")})</li>'
+    return html
+
+
+# --- CORE SENDING LOGIC (NEW BREVO API CALL) ---
+async def _send_brevo_message(recipients: List[EmailStr], subject: str, html_content: str) -> None:
+    """Internal function to handle the Brevo API call, safely wrapped for async."""
+    
+    # 🟡 3. DEFENSIVE CHECK: Ensure the client is initialized before using it
+    if email_api is None:
+        logger.error("Brevo email_api not initialized. Email skipped.")
+        return 
+
+    try:
+        to_list = [{"email": r} for r in recipients]
+        
+        email_to_send = SendSmtpEmail(
+            sender={"name": MAIL_FROM_NAME, "email": MAIL_FROM_EMAIL},
+            to=to_list,
+            subject=subject,
+            html_content=html_content
+        )
+
+        # 🟡 1. THE MAIN FIX: Wrap the synchronous SDK call in anyio.to_thread.run_sync
+        await anyio.to_thread.run_sync(email_api.send_transac_email, email_to_send)
+        
+        logger.info(f"✅ Brevo API: Email sent successfully to {recipients}.")
+        
+    except ApiException as api_err:
+        logger.error(f"❌ Brevo API Error sending email: {api_err.status} - {api_err.reason}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Brevo API failed to send email: {api_err.reason}") from api_err
+
+    except Exception as e:
+        logger.error(f"❌ General error sending email via Brevo: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Unknown error in email service.") from e
+
+
+# --- Public Email Functions (OTP/Verification) ---
+
+async def send_otp_email(to_email: str, otp: str, subject_type="verification")-> None:
+    """Sends the OTP/Password Reset email."""
     now_utc = datetime.datetime.utcnow()
     timestamp_ist = convert_utc_to_ist_str(now_utc)
-
+    
+    # --- Subject and Message Logic (Copied from your original file) ---
     if subject_type == "password_reset":
         subject = f"Your DataPulse Password Reset Code - {timestamp_ist}"
         greeting = "Password Reset Request"
@@ -48,10 +109,11 @@ async def send_otp_email(to_email: str, otp: str, subject_type="verification"):
         greeting = "Welcome to DataPulse!"
         message = "Here is your verification code to get started:"
         note = "If you did not request this verification, please ignore this email."
-        
+    
     logo_url = "https://res.cloudinary.com/dggciuh9l/image/upload/v1761320636/profile_pics/fk2abjuswx8kzi01b2dk.png"
     
-    html = f"""
+    # --- PASTE YOUR OTP/VERIFICATION HTML TEMPLATE HERE ---
+    html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -239,33 +301,14 @@ async def send_otp_email(to_email: str, otp: str, subject_type="verification"):
     </html>
     """
 
-    message_schema = MessageSchema(
-        subject=subject,
-        recipients=[to_email],
-        body=html,
-        subtype="html"
-    )
-
-    fm = FastMail(conf)
-    try:
-        await fm.send_message(message_schema)
-        logger.info(f"📧 Professional OTP email sent to: {to_email}")
-    except Exception as e:
-        logger.error(f"❌ Failed to send professional OTP email: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to send email.")
+    # Call the core Brevo sender
+    await _send_brevo_message([to_email], subject, html_content)
 
 
+# --- Public Email Functions (Alerts/Notifications) ---
 
-def format_team_list(owner: Dict, team: List[Dict]) -> str:
-    owner_name = owner.get('name') or owner.get('email')
-    html = f'<li><strong>Owner:</strong> {owner_name} ({owner.get("email")})</li>'
-    for member in team:
-        member_name = member.get('name') or member.get('email')
-        html += f'<li><strong>Member:</strong> {member_name} ({member.get("email")})</li>'
-    return html
-
-async def send_detailed_alert_email(recipients: List[EmailStr], context: dict):
-    
+async def send_detailed_alert_email(recipients: List[EmailStr], context: dict)-> None:
+    """Sends the detailed alert email for schema/metric changes."""
     workspace_name = context.get("workspace_name", "your workspace")
     upload_time = context.get("upload_time_str", "now")
     upload_type = context.get("upload_type", "data")
@@ -274,10 +317,12 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict):
     owner_info = context.get("owner_info", {})
     team_info = context.get("team_info", [])
     ai_insight = context.get("ai_insight")
-    
     source_title = "Manual Upload" if upload_type == 'manual' else "Automated API Poll"
     
-    html_body = f"""
+    subject = f"🚨 DataPulse Alert: Structural Change in {workspace_name}"
+    
+    # --- PASTE YOUR DETAILED ALERT HTML TEMPLATE HERE ---
+    html_content = f"""
     <!DOCTYPE html>
     <html>
       <head>
@@ -543,32 +588,20 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict):
       </body>
     </html>
     """
+    
+    # Call the core Brevo sender
+    await _send_brevo_message(recipients, subject, html_content)
 
-    message = MessageSchema(
-        subject=f"DataPulse: {source_title} Change in {workspace_name} at {upload_time}",
-        recipients=recipients,
-        body=html_body,
-        subtype="html"
-    )
 
-    fm = FastMail(conf)
-    try:
-        await fm.send_message(message)
-        print(f"📧 Real email alert sent successfully to: {', '.join(recipients)}")
-    except Exception as e:
-        print(f"❌ Failed to send real email: {e}")
-
-        
-async def send_threshold_alert_email(recipients: List[EmailStr], context: dict):
-    """
-    Sends a dedicated HTML email when a user-defined threshold alert is triggered.
-    """
+async def send_threshold_alert_email(recipients: List[EmailStr], context: dict)-> None:
+    """Sends the threshold alert email."""
     workspace_name = context.get("workspace_name", "your workspace")
     rule = context.get("rule", {})
     
-    subject = f"DataPulse Smart Alert: '{rule.get('column_name')}' triggered in {workspace_name}"
-
-    html_body = f"""
+    subject = f"🔥 DataPulse Smart Alert: '{rule.get('column_name')}' triggered in {workspace_name}"
+    
+    # --- PASTE YOUR THRESHOLD ALERT HTML TEMPLATE HERE ---
+    html_content = f"""
     <html>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #333; line-height: 1.5;">
         <div style="max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #f9f9f9;">
@@ -595,17 +628,6 @@ async def send_threshold_alert_email(recipients: List[EmailStr], context: dict):
       </body>
     </html>
     """
-
-    message = MessageSchema(
-        subject=subject,
-        recipients=recipients,
-        body=html_body,
-        subtype="html"
-    )
-
-    fm = FastMail(conf)
-    try:
-        await fm.send_message(message)
-        print(f"📧 Smart Alert email sent successfully to: {', '.join(recipients)}")
-    except Exception as e:
-        print(f"❌ Failed to send Smart Alert email: {e}")
+    
+    # Call the core Brevo sender
+    await _send_brevo_message(recipients, subject, html_content)

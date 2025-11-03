@@ -37,3 +37,6 @@ cryptography==46.0.2
 
 google-generativeai==0.7.2
 markdown2==2.5.3
+
+#Email SDK
+sib-api-v3-sdk==7.6.0
