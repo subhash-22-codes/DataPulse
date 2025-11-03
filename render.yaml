@@ -18,4 +18,4 @@ services:
     
     # --- THE FIX ---
     # This is the magic line that solves your Python problem
-    pythonVersion: 3.12.3
+    pythonVersion: 3.11
