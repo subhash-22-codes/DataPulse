@@ -55,15 +55,39 @@ useEffect(() => {
 
   useEffect(() => {
     if (!id) return;
+    
     let socket: WebSocket;
     let connectInterval: ReturnType<typeof setTimeout>;
+
+    // 1. DETERMINE PROTOCOL (ws for http, wss for https)
+    // window.location.protocol returns 'http:' or 'https:'
+    const isLocalhost = window.location.hostname === 'localhost';
+    const wsProtocol = isLocalhost ? 'ws' : 'wss'; 
+    
+    // 2. DETERMINE HOST (localhost in dev, live URL in prod)
+    // NOTE: You are using VITE, so VITE_API_BASE_URL should be set to your Render URL (https://datapulse-backend-5khr.onrender.com)
+    // Assuming your base API URL is available in your global configuration:
+    const baseApiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+    
+    // Remove the protocol from the base API URL to get just the hostname/port
+    const host = baseApiUrl.replace(/https?:\/\//, '');
+
     const connect = () => {
       const clientId = Date.now().toString();
-      const wsUrl = `ws://localhost:8000/api/workspaces/${id}/ws/${clientId}`;
+      
+      // 3. BUILD THE FINAL WS URL
+      const wsUrl = `${wsProtocol}://${host}/api/workspaces/${id}/ws/${clientId}`;
+      
+      console.log("Attempting WebSocket connection to:", wsUrl); // Good for debugging
+      
       socket = new WebSocket(wsUrl);
       socket.onopen = () => console.log("WebSocket Connected");
       socket.onclose = () => (connectInterval = setTimeout(connect, 2000));
-      socket.onerror = () => socket.close();
+      socket.onerror = (error) => {
+        console.error("WebSocket Error:", error);
+        socket.close();
+      };
       socket.onmessage = (event) => {
         if (event.data === "job_complete" || event.data === "job_error") {
           setIsProcessing(false);
@@ -71,7 +95,9 @@ useEffect(() => {
         }
       };
     };
+    
     connect();
+    
     return () => {
       clearTimeout(connectInterval);
       if (socket) socket.close();
