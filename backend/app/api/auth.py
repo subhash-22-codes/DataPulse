@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.core.database import get_db
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from passlib.hash import bcrypt
-import os, jwt, datetime, random, uuid, logging, asyncio
+import os, jwt, datetime, random, uuid, logging
 from pydantic import BaseModel, EmailStr, field_validator
 from .dependencies import limiter
 
@@ -100,7 +100,7 @@ def google_login(request: Request, req: GoogleLoginRequest, db: Session = Depend
 
 @router.post("/send-otp")
 @limiter.limit("5/minute")
-def send_otp(request: Request, req: SendOtpRequest, db: Session = Depends(get_db)):
+def send_otp(request: Request, req: SendOtpRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     email = req.email
     logger.info(f"📩 Received OTP request for email: {email}")
     user = db.query(User).filter(User.email == email).first()
@@ -120,7 +120,7 @@ def send_otp(request: Request, req: SendOtpRequest, db: Session = Depends(get_db
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            asyncio.create_task(send_otp_email_task_async(email, otp, "verification"))
+            background_tasks.add_task(send_otp_email_task_async(email, otp, "verification"))
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "verification")
@@ -138,7 +138,7 @@ def send_otp(request: Request, req: SendOtpRequest, db: Session = Depends(get_db
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            asyncio.create_task(send_otp_email_task_async(email, otp, "verification"))
+            background_tasks.add_task(send_otp_email_task_async(email, otp, "verification"))
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "verification")
@@ -174,7 +174,7 @@ def login_email(request: Request, req: LoginEmailRequest, db: Session = Depends(
 
 @router.post("/send-password-reset")
 @limiter.limit("5/minute")
-def send_password_reset_code(request: Request, req: SendPasswordResetRequest, db: Session = Depends(get_db)):
+def send_password_reset_code(request: Request, req: SendPasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     email = req.email
     logger.info(f"Password reset requested for email: {email}")
     user = db.query(User).filter(User.email == email).first()
@@ -188,7 +188,7 @@ def send_password_reset_code(request: Request, req: SendPasswordResetRequest, db
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            asyncio.create_task(send_otp_email_task_async(email, otp, "password_reset"))
+            background_tasks.add_task(send_otp_email_task_async(email, otp, "password_reset"))
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "password_reset")
