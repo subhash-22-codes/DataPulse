@@ -1,46 +1,42 @@
-
-
-fastapi_scheduler==0.0.15
-
-
+# ===== Core FastAPI + Server =====
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
+gunicorn==22.0.0
 python-multipart==0.0.20
 websockets==12.0
 
+# ===== Scheduler =====
+fastapi_scheduler==0.0.15
 
-gunicorn==22.0.0
-
-
-
+# ===== Database =====
 sqlalchemy==2.0.31
 psycopg2-binary==2.9.10
 alembic==1.16.5
 
-
-
+# ===== Data Handling =====
 pandas==2.2.2
+numpy==1.26.4       
+cython==3.0.10      
 
-
+# ===== Security & Auth =====
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 PyJWT==2.10.1
+cryptography==46.0.2
+email-validator==2.3.0
+pydantic==2.8.2
+
+# ===== Google + API =====
 google-auth==2.32.0
 google-auth-oauthlib==1.2.2
+google-generativeai==0.7.2
 requests==2.32.3
 
-
-
-pydantic==2.8.2
-email-validator==2.3.0
-pytz==2024.1
-
-
-
-python-dotenv==1.0.1
+# ===== Mail & Rate Limiting =====
 fastapi-mail==1.4.1
 slowapi==0.1.9
-cryptography==46.0.2
 
-google-generativeai==0.7.2
+# ===== Utils =====
+python-dotenv==1.0.1
+pytz==2024.1
 markdown2==2.5.3
