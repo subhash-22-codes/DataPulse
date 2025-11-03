@@ -120,7 +120,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            background_tasks.add_task(send_otp_email_task_async(email, otp, "verification"))
+            background_tasks.add_task(send_otp_email_task_async, email, otp, "verification")
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "verification")
@@ -138,7 +138,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            background_tasks.add_task(send_otp_email_task_async(email, otp, "verification"))
+            background_tasks.add_task(send_otp_email_task_async, email, otp, "verification")
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "verification")
@@ -188,7 +188,7 @@ def send_password_reset_code(request: Request, req: SendPasswordResetRequest, ba
         # --- "SMART SWITCH" IN ACTION ---
         if APP_MODE == "production":
             logger.info(f"Running in PROD mode. Using asyncio task for {email}.")
-            background_tasks.add_task(send_otp_email_task_async(email, otp, "password_reset"))
+            background_tasks.add_task(send_otp_email_task_async, email, otp, "password_reset")
         else:
             logger.info(f"Running in DEV mode. Using Celery task for {email}.")
             send_otp_email_task.delay(email, otp, "password_reset")
