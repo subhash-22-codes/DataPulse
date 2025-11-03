@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_validator
 import asyncio
-import redis.asyncio as aioredis # For WebSocket listener
 from .dependencies import get_current_user
 from app.core.database import get_db
 from app.models.workspace import Workspace
@@ -13,12 +12,28 @@ import uuid
 import jwt
 import os
 from datetime import datetime
-from app.services.celery_worker import celery_app
 from app.models.data_upload import DataUpload
 from app.models.alert_rule import AlertRule
 from app.api.alerts import AlertRuleResponse 
 import shutil 
-from pathlib import Path 
+from pathlib import Path
+import logging 
+
+
+APP_MODE = os.getenv("APP_MODE")
+
+if APP_MODE == "production":
+    # In PRODUCTION, we import the lightweight "recipes" from tasks.py
+    logger = logging.getLogger(__name__)
+    logger.info("Workspaces running in PRODUCTION mode.")
+    from app.services.tasks import process_csv_task
+else:
+    # In DEVELOPMENT, we import the "Monster Truck" (Celery and Redis)
+    logger = logging.getLogger(__name__)
+    logger.info("Workspaces running in DEVELOPMENT mode.")
+    import redis.asyncio as aioredis
+    from app.services.celery_worker import celery_app
+# --- END OF "SMART SWITCH" ---
 
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
@@ -181,31 +196,45 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
     return workspace
 
 @router.put("/{workspace_id}", response_model=WorkspaceResponse)
-def update_workspace(workspace_id: str, workspace_update: WorkspaceUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def update_workspace(workspace_id: str, workspace_update: WorkspaceUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
+    
     db_workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     if db_workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this workspace")
+    
     update_data = workspace_update.model_dump(exclude_unset=True)
+    
+    # --- ADDED: This is your brilliant "Smart GPS" logic ---
+    if 'data_source' in update_data:
+        new_source = update_data['data_source']
+        if new_source == 'API':
+            db_workspace.db_host = None; db_workspace.db_port = None; db_workspace.db_user = None; db_workspace.db_password = None; db_workspace.db_name = None; db_workspace.db_query = None
+        elif new_source == 'DB':
+            db_workspace.api_url = None
+        elif new_source == 'CSV':
+            db_workspace.api_url = None; db_workspace.db_host = None; db_workspace.db_port = None; db_workspace.db_user = None; db_workspace.db_password = None; db_workspace.db_name = None; db_workspace.db_query = None
+            db_workspace.is_polling_active = False
+
     if "description" in update_data:
         db_workspace.description_last_updated_at = datetime.utcnow()
+
     if "team_member_emails" in update_data:
         emails: list[str] = update_data.pop("team_member_emails")
         db_workspace.team_members.clear()
         for email in emails:
             user = db.query(User).filter(User.email == email).first()
-            if not user:
-                raise HTTPException(status_code=400, detail=f"User with email {email} not registered")
-            if user.id == current_user.id:
-                continue
-            db_workspace.team_members.append(user)
+            if user and user.id != current_user.id:
+                db_workspace.team_members.append(user)
+    
     for key, value in update_data.items():
         setattr(db_workspace, key, value)
+    
     db.commit()
     db.refresh(db_workspace)
     return db_workspace
@@ -252,12 +281,15 @@ async def upload_csv_for_workspace(
     db.commit()
     db.refresh(new_upload)
 
-    # --- THIS IS THE PROFESSIONAL PATTERN ---
-    # We now send the ID of the upload, not the file path.
-    # This decouples the worker from the filesystem.
-    task = celery_app.send_task('process_csv_task', args=[str(new_upload.id)])
+    if APP_MODE == "production":
+        logger.info("Running in PROD mode. Calling task directly.")
+        process_csv_task(str(new_upload.id))
+        return {"task_id": "production_task", "message": "File upload successful, processing has started."}
+    else:
+        logger.info("Running in DEV mode. Sending task to Celery.")
+        task = celery_app.send_task('process_csv_task', args=[str(new_upload.id)])
+        return {"task_id": task.id, "message": "File upload successful, processing has started."}
     
-    return {"task_id": task.id, "message": "File upload successful, processing has started."}
 
 
 
@@ -321,24 +353,36 @@ def get_trend_data(
 @router.websocket("/{workspace_id}/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, workspace_id: str, client_id: str):
     await manager.connect(client_id, websocket)
-    redis_url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
     
-    try:
-        r = await aioredis.from_url(redis_url, decode_responses=True)
-        pubsub = r.pubsub()
-        await pubsub.subscribe(f"workspace:{workspace_id}")
+    # --- THIS IS THE "SMART SWITCH" ---
+    if APP_MODE == "production":
+        # In production, we don't have Redis.
+        # We just keep the connection alive for the AI Chatbot.
+        logger.info(f"WebSocket connected for client {client_id} in PROD mode.")
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(client_id)
+    else:
+        # In development, we run the full "Monster Truck" logic with Redis
+        logger.info(f"WebSocket connected for client {client_id} in DEV mode. Subscribing to Redis...")
+        redis_url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+        try:
+            r = await aioredis.from_url(redis_url, decode_responses=True)
+            pubsub = r.pubsub()
+            await pubsub.subscribe(f"workspace:{workspace_id}")
+            
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=None)
+                if message:
+                    await manager.broadcast(client_id, message['data'])
         
-        # Listen for messages from Redis and forward them to the client
-        while True:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=None)
-            if message:
-                await manager.broadcast(client_id, message['data'])
-    
-    except WebSocketDisconnect:
-        manager.disconnect(client_id)
-    except Exception as e:
-        print(f"WebSocket error for client {client_id}: {e}")
-        manager.disconnect(client_id)
+        except WebSocketDisconnect:
+            manager.disconnect(client_id)
+        except Exception as e:
+            logger.error(f"WebSocket error for client {client_id}: {e}")
+            manager.disconnect(client_id)
         
 @router.delete("/{workspace_id}", status_code=204)
 def delete_workspace(
@@ -364,18 +408,7 @@ def delete_workspace(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this workspace")
 
-    # 1. Delete the physical files from the server
-    uploads_dir = Path("uploads") / str(workspace.id)
-    if uploads_dir.exists() and uploads_dir.is_dir():
-        try:
-            shutil.rmtree(uploads_dir)
-            print(f"🗑️ Deleted folder and all its contents: {uploads_dir}")
-        except Exception as e:
-            print(f"❌ Error deleting files for workspace {workspace.id}: {e}")
-            # Decide if you want to stop or continue if file deletion fails
-            # For now, we'll continue to the database deletion
-
-    # 2. Delete the workspace from the database
+    # Delete the workspace from the database
     # ON DELETE CASCADE will handle associated uploads, notifications, etc.
     db.delete(workspace)
     db.commit()
