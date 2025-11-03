@@ -1,6 +1,6 @@
 
 
-fastapi-scheduler==0.1.3
+fastapi_scheduler==0.0.15
 
 
 fastapi==0.116.1
