@@ -3,6 +3,8 @@ services:
   - type: web
     name: datapulse-backend # You can change this name if you want
     env: python
+    plan: free 
+    region: oregon
     
     # --- CHECK THIS ---
     # Delete this line if your code is NOT in a 'backend' folder
@@ -15,7 +17,4 @@ services:
     # --- CHECK THIS ---
     # Make sure this is the correct command to start YOUR server
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    
-    # --- THE FIX ---
-    # This is the magic line that solves your Python problem
-    pythonVersion: 3.11
+  
