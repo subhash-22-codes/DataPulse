@@ -6,7 +6,7 @@ from starlette.requests import Request
 from app.api.dependencies import limiter
 from app.core.logging import setup_logging
 import logging
-import os # <-- NEW: Import 'os' to read the smart switch
+import os
 from contextlib import asynccontextmanager
 
 # Import all your API routers
@@ -19,13 +19,12 @@ from app.models import user, workspace, data_upload, notification, alert_rule
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# --- NEW: This is the "Smart Watch" Lifespan Function ---
+# --- This is the "Smart Watch" Lifespan Function ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # This code runs ONCE, when your app starts up.
     
     # --- THIS IS THE "SMART SWITCH" ---
-    # It checks for an environment variable that we will set on Render.
     if os.getenv("APP_MODE") == "production":
         logger.info("Application starting in PRODUCTION mode.")
         logger.info("Starting the 'FastAPI-Scheduler' (Smart Watch)...")
@@ -35,8 +34,7 @@ async def lifespan(app: FastAPI):
             from fastapi_scheduler import Scheduler, ASYNC
             
             # We import the "job" we want to run
-            # NOTE: We are importing from a NEW file, 'app.services.tasks'
-            # We will create this file in the next step.
+            # This is the line that is likely failing
             from app.services.tasks import schedule_data_fetches
             
             # Create the "Alarm Clock"
@@ -46,8 +44,17 @@ async def lifespan(app: FastAPI):
             # Turn the alarm clock ON
             scheduler.start()
             logger.info("✅ [FastAPI] 'Smart Watch' scheduler has started.")
+
+        # --- THIS IS THE DEBUG FIX ---
         except ImportError:
-            logger.error("❌ [FastAPI] Could not import 'fastapi-scheduler'. Production tasks will not run.")
+            # This will log the *entire* error traceback,
+            # showing us the real problem.
+            logger.error(
+                "❌ [FastAPI] A CRITICAL IMPORT FAILED. Production tasks will not run.",
+                exc_info=True  
+            )
+        # --- END FIX ---
+            
     else:
         logger.info("Application starting in DEVELOPMENT mode. (Celery Beat is expected to run in a separate container).")
     
