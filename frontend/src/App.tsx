@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // <-- ADDED useState and useEffect
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -12,14 +12,14 @@ import LandingPage from './pages/LandingPage';
 import PageNotFound from './pages/PageNotFound';
 import { Toaster } from 'react-hot-toast';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
-
-// --- 1. Import your new WakeUpScreen ---
-// (Make sure you have created this file in src/components/WakeUpScreen.tsx)
 import { WakeUpScreen } from './components/WakeUpScreen'; 
 
-// --- 2. Import your pre-configured axios instance ---
-// (Make sure this path to your api.ts file is correct)
-import { api } from './services/api';
+// --- 1. IMPORT AXIOS DIRECTLY ---
+// We need this to create a special ping client.
+import axios from 'axios';
+
+// (Your main `api` import from api.ts is no longer needed here,
+// but it's okay if other files still use it.)
 
 // --- Your AppRoutes component is unchanged ---
 function AppRoutes() {
@@ -42,39 +42,49 @@ function AppRoutes() {
   );
 }
 
-// --- Your main App component is UPDATED ---
 // --- Helper function to wait (utility) ---
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- Your main App component is UPDATED ---
 function App() {
-  // 1. Add state to track if the backend is awake
   const [isAwake, setIsAwake] = useState(false);
 
   useEffect(() => {
-    // 2. This is the new, robust wake-up logic
+    // This is the new, robust wake-up logic
     const pollUntilAwake = async () => {
       console.log("Pinging backend to wake it up...");
+      
+      // --- 2. THE FIX: Create a NEW ping client ---
+      // Get the base URL from your .env file
+      // This is the *ONLY* place we need to use import.meta.env
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      
+      // Create a new instance that hits the ROOT, not /api
+      const pingApi = axios.create({ baseURL: baseUrl });
+      // --- END FIX ---
       
       let attempts = 0;
       const maxAttempts = 15; // Max 15 attempts (e.g., 15 * 5s = 75s)
       
-      while (attempts < maxAttempts) {
+     while (attempts < maxAttempts) {
         try {
-          // 3. Send the "ping"
-          await api.get('/');
-          
-          // 4. If the request SUCCEEDS (no error), the server is awake!
+          await pingApi.get('/');
           console.log("✅ Backend is awake! Proceeding to app.");
           setIsAwake(true);
-          return; // Exit the loop and the function
+          return;
           
-        } catch (error) {
-          console.error("❗ Ping failed:", error);
-          // 5. If it fails (502, 504, timeout), the server is still sleeping.
+        } catch (error: unknown) { // <-- 1. Use 'unknown' instead of 'any'
           attempts++;
-          console.warn(`Attempt ${attempts}: Server is still sleeping. Retrying in 5 seconds...`);
-          // 6. Wait 5 seconds before the next attempt
+
+          // 2. Check the type of the error before using it
+          let errorMessage = "Server is still sleeping.";
+          if (error instanceof Error) {
+            errorMessage = error.message;
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          }
+          
+          console.warn(`Attempt ${attempts}: Server ping failed. Retrying in 5 seconds...`, errorMessage);
           await wait(5000); 
         }
       }
