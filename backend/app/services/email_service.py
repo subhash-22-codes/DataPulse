@@ -318,8 +318,8 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict)->
     team_info = context.get("team_info", [])
     ai_insight = context.get("ai_insight")
     source_title = "Manual Upload" if upload_type == 'manual' else "Automated API Poll"
-    
-    subject = f"🚨 DataPulse Alert: Structural Change in {workspace_name}"
+    timestamp_ist = convert_utc_to_ist_str(datetime.datetime.utcnow())
+    subject = f"🚨 DataPulse Alert: Structural Change in {workspace_name} at {timestamp_ist}"
     
     # --- PASTE YOUR DETAILED ALERT HTML TEMPLATE HERE ---
     html_content = f"""
@@ -532,7 +532,6 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict)->
       <body>
         <div class="container">
           <div class="header">
-            <span class="icon">📊</span>
             <h1>DataPulse Alert</h1>
           </div>
           
@@ -597,8 +596,8 @@ async def send_threshold_alert_email(recipients: List[EmailStr], context: dict)-
     """Sends the threshold alert email."""
     workspace_name = context.get("workspace_name", "your workspace")
     rule = context.get("rule", {})
-    
-    subject = f"🔥 DataPulse Smart Alert: '{rule.get('column_name')}' triggered in {workspace_name}"
+    timestamp_ist = convert_utc_to_ist_str(datetime.datetime.utcnow())
+    subject = f"🔥 DataPulse Smart Alert: '{rule.get('column_name')}' triggered in {workspace_name} at {timestamp_ist}"
     
     # --- PASTE YOUR THRESHOLD ALERT HTML TEMPLATE HERE ---
     html_content = f"""
