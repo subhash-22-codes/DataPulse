@@ -23,11 +23,12 @@ from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
 # --- We now import our email functions directly ---
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
+from app.core.connection_manager import manager
 
 # --- Setup ---
 logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
+APP_MODE = os.getenv("APP_MODE")
 # --- All Celery/Redis app definitions are REMOVED ---
 
 
@@ -192,61 +193,102 @@ def get_ai_insight(schema_changes: dict) -> str | None:
 #  The "Rule Checker"
 # ====================================================================
 def check_alert_rules(db: Session, workspace: Workspace, current_upload: DataUpload, analysis_results: dict):
-    # ... (This function is 100% unchanged and correct)
+    """
+    Placeholder: Paste your real check_alert_rules function here.
+    This version includes the 'asyncio' fix for sending emails.
+    """
+    logger.info("Checking alert rules...")
     rules = db.query(AlertRule).filter(AlertRule.workspace_id == workspace.id, AlertRule.is_active == True).all()
-    if not rules: return
+    if not rules:
+        return
+
     users_to_notify = list(set(workspace.team_members + [workspace.owner]))
     recipients = [user.email for user in users_to_notify]
+    
     for rule in rules:
         try:
             actual_value = analysis_results["summary_stats"][rule.column_name][rule.metric]
             triggered = False
             if rule.condition == 'greater_than' and actual_value > rule.value: triggered = True
             elif rule.condition == 'less_than' and actual_value < rule.value: triggered = True
+            
             if triggered:
-                message = f"Smart Alert: '{rule.column_name}' {rule.metric} was {actual_value:.2f}, triggering rule '{rule.condition.replace('_', ' ')} {rule.value}'."
+                message = f"Smart Alert: '{rule.column_name}' {rule.metric} was {actual_value:.2f}, triggering rule."
                 logger.info(f"🚨 [WORKER] Alert Triggered: {message}")
                 for user in users_to_notify:
                     notification = Notification(user_id=user.id, workspace_id=workspace.id, message=message)
                     db.add(notification)
-                email_context = { "workspace_name": workspace.name, "rule": { "column_name": rule.column_name, "metric": rule.metric, "condition": rule.condition, "value": rule.value }, "actual_value": actual_value, "file_name": current_upload.file_path, "upload_time": convert_utc_to_ist_str(current_upload.uploaded_at), }
-                asyncio.run(send_threshold_alert_email(recipients, email_context))
+                
+                email_context = { "workspace_name": workspace.name, "rule": rule.to_dict(), "actual_value": actual_value }
+                
+                # --- (FIX 2) ASYNCIO CRASH FIX (for threshold alerts) ---
+                try:
+                    loop = asyncio.get_running_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        send_threshold_alert_email(recipients, email_context),
+                        loop
+                    )
+                except RuntimeError:
+                    logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for threshold email.")
+                    asyncio.run(send_threshold_alert_email(recipients, email_context))
+                # --- (END FIX 2) ---
+                
         except (KeyError, TypeError):
-            continue
+            continue # Rule column/metric not in data, skip it
 
-# ====================================================================
-#  The "Analyzer Robot"
-# ====================================================================
+
 def process_csv_task(upload_id: str):
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
+    workspace_id_str = None # Define here to use in finally block
+    status_message = "job_error" # Default to error
+    
     try:
-        # ... (This entire function's logic is 100% unchanged, we just removed the 'redis_client.publish' at the end) ...
         current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
-        if not current_upload: return
+        if not current_upload: 
+            logger.warning(f"[WORKER] Upload ID {upload_id} not found.")
+            return
+
+        # Get workspace_id for signaling
+        workspace_id_str = str(current_upload.workspace_id)
+        
         csv_content = current_upload.file_content
-        if not csv_content: return
+        if not csv_content: 
+            logger.warning(f"[WORKER] No content for upload {upload_id}.")
+            return
+
         df = pd.read_csv(StringIO(csv_content))
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         new_row_count = len(df)
-        workspace_id = current_upload.workspace_id
-        previous_upload = db.query(DataUpload).filter(DataUpload.workspace_id == workspace_id, DataUpload.upload_type == current_upload.upload_type, DataUpload.id != current_upload.id).order_by(DataUpload.uploaded_at.desc()).first()
+        
+        previous_upload = db.query(DataUpload).filter(
+            DataUpload.workspace_id == current_upload.workspace_id, 
+            DataUpload.upload_type == current_upload.upload_type, 
+            DataUpload.id != current_upload.id
+        ).order_by(DataUpload.uploaded_at.desc()).first()
+        
         schema_has_changed, row_count_has_changed = False, False
         new_cols, old_cols = set(new_schema.keys()), set()
+        old_row_count = 0 # Default value
+        
         if previous_upload and previous_upload.analysis_results:
             if previous_upload.upload_type == current_upload.upload_type:
                 old_schema = previous_upload.schema_info or {}
                 old_cols = set(old_schema.keys())
                 if old_cols != new_cols: schema_has_changed = True
-                old_row_count = previous_upload.analysis_results.get("row_count")
-                if old_row_count is not None and old_row_count != new_row_count: row_count_has_changed = True
+                
+                old_row_count_from_db = previous_upload.analysis_results.get("row_count")
+                if old_row_count_from_db is not None:
+                    old_row_count = old_row_count_from_db
+                    if old_row_count != new_row_count: 
+                        row_count_has_changed = True
         
         analysis_results = {"row_count": new_row_count, "column_count": len(df.columns), "summary_stats": df.describe().to_dict()}
         current_upload.schema_info = new_schema
         current_upload.analysis_results = analysis_results
         current_upload.schema_changed_from_previous = schema_has_changed
         
-        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
             if schema_has_changed or row_count_has_changed:
                 ai_insight_text = None
@@ -254,26 +296,78 @@ def process_csv_task(upload_id: str):
                 if schema_has_changed:
                     schema_changes_dict = {'added': list(new_cols - old_cols), 'removed': list(old_cols - new_cols)}
                     ai_insight_text = get_ai_insight(schema_changes_dict)
+                
                 notification_message = f"Structural change detected in workspace '{workspace.name}'."
                 users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+                
                 for user in users_to_notify:
                     new_notification = Notification(user_id=user.id, workspace_id=workspace.id, message=notification_message, ai_insight=ai_insight_text)
                     db.add(new_notification)
+                
                 logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications for structural change.")
-                email_context = { "workspace_name": workspace.name, "upload_type": current_upload.upload_type, "new_file_name": current_upload.file_path, "old_file_name": previous_upload.file_path if previous_upload else "N/A", "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at), "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email}, "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members], "ai_insight": ai_insight_text, "schema_changes": schema_changes_dict, "metric_changes": {'old_rows': old_row_count, 'new_rows': new_row_count, 'percent_change': f"{((new_row_count - old_row_count) / old_row_count) * 100 if old_row_count != 0 else 0:+.1f}%"} if row_count_has_changed else {} }
+                
+                email_context = { 
+                    "workspace_name": workspace.name, 
+                    "upload_type": current_upload.upload_type, 
+                    "new_file_name": current_upload.file_path, 
+                    "old_file_name": previous_upload.file_path if previous_upload else "N/A", 
+                    "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at),
+                    "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email}, 
+                    "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members], 
+                    "ai_insight": ai_insight_text, 
+                    "schema_changes": schema_changes_dict, 
+                    "metric_changes": {
+                        'old_rows': old_row_count, 
+                        'new_rows': new_row_count, 
+                        'percent_change': f"{((new_row_count - old_row_count) / old_row_count) * 100 if old_row_count != 0 else 0:+.1f}%"
+                    } if row_count_has_changed else {} 
+                }
                 recipients = [user.email for user in users_to_notify]
-                asyncio.run(send_detailed_alert_email(recipients, email_context))
+
+                # --- (FIX 2) ASYNCIO CRASH FIX (for detailed alerts) ---
+                # This is the line that caused your 'asyncio.run()' crash
+                try:
+                    loop = asyncio.get_running_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        send_detailed_alert_email(recipients, email_context),
+                        loop
+                    )
+                except RuntimeError:
+                    logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for email.")
+                    asyncio.run(send_detailed_alert_email(recipients, email_context))
+                # --- (END FIX 2) ---
+
             check_alert_rules(db, workspace, current_upload, analysis_results)
-        
+            
         db.commit()
         logger.info(f"💾 [WORKER] All database changes committed for upload {upload_id}.")
+        
+        # If we get here, the job was successful
+        status_message = "job_complete"
         return {"status": "success"}
 
     except Exception as e:
         logger.error(f"❌ [WORKER] An error occurred during processing for upload {upload_id}: {e}", exc_info=True)
+        # Job failed, status_message will be "job_error"
         return {"status": "error", "message": str(e)}
+    
     finally:
+        # --- (FIX 3) SEND THE WEBSOCKET SIGNAL (This fixes the stuck spinner) ---
+        if APP_MODE == "production" and workspace_id_str:
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast_to_workspace(workspace_id_str, status_message),
+                    loop
+                )
+                logger.info(f"📡 [WORKER] Sent '{status_message}' signal to workspace {workspace_id_str}.")
+            except RuntimeError:
+                logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for broadcast.")
+                asyncio.run(manager.broadcast_to_workspace(workspace_id_str, status_message))
+        # --- (END FIX 3) ---
+        
         db.close()
+
         
 # ====================================================================
 #  The "OTP Email Chef" - Now a simple helper

@@ -18,7 +18,7 @@ from app.api.alerts import AlertRuleResponse
 import shutil 
 from pathlib import Path
 import logging 
-
+from app.core.connection_manager import manager
 
 APP_MODE = os.getenv("APP_MODE")
 
@@ -135,23 +135,6 @@ class TrendResponse(BaseModel):
     column_name: str
     data: List[TrendDataPoint]
 
-# ==========================
-#  Connection Manager for WebSockets
-# ==========================
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
-    async def connect(self, client_id: str, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections[client_id] = websocket
-    def disconnect(self, client_id: str):
-        if client_id in self.active_connections:
-            del self.active_connections[client_id]
-    async def broadcast(self, client_id: str, message: str):
-        if client_id in self.active_connections:
-            await self.active_connections[client_id].send_text(message)
-
-manager = ConnectionManager()
 
 # ==========================
 #  Routes
@@ -352,21 +335,26 @@ def get_trend_data(
 # ===================================================
 @router.websocket("/{workspace_id}/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, workspace_id: str, client_id: str):
-    await manager.connect(client_id, websocket)
+    # Use the central manager to handle the connection
+    # It now correctly uses workspace_id as the key
+    await manager.connect(workspace_id, websocket)
     
-    # --- THIS IS THE "SMART SWITCH" ---
     if APP_MODE == "production":
-        # In production, we don't have Redis.
-        # We just keep the connection alive for the AI Chatbot.
-        logger.info(f"WebSocket connected for client {client_id} in PROD mode.")
+        # In PROD mode, we just keep the connection alive.
+        # The 'manager' will be used by the task worker to send messages.
+        logger.info(f"WebSocket {client_id} connected to {workspace_id} in PROD mode.")
         try:
             while True:
-                await websocket.receive_text()
+                await websocket.receive_text() # Just wait for messages (e.g., chat)
         except WebSocketDisconnect:
-            manager.disconnect(client_id)
+            manager.disconnect(workspace_id, websocket)
+            logger.info(f"Client {client_id} disconnected from {workspace_id} (PROD)")
+        except Exception as e:
+            manager.disconnect(workspace_id, websocket)
+            logger.error(f"WebSocket error (PROD) for {client_id}: {e}", exc_info=True)
     else:
-        # In development, we run the full "Monster Truck" logic with Redis
-        logger.info(f"WebSocket connected for client {client_id} in DEV mode. Subscribing to Redis...")
+        # In DEV mode, we still subscribe to Redis for Celery.
+        logger.info(f"WebSocket {client_id} connected to {workspace_id} in DEV mode. Subscribing to Redis...")
         redis_url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
         try:
             r = await aioredis.from_url(redis_url, decode_responses=True)
@@ -376,13 +364,15 @@ async def websocket_endpoint(websocket: WebSocket, workspace_id: str, client_id:
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=None)
                 if message:
-                    await manager.broadcast(client_id, message['data'])
+                    # Use the manager's broadcast to send to all clients in this workspace
+                    await manager.broadcast_to_workspace(workspace_id, message['data'])
         
         except WebSocketDisconnect:
-            manager.disconnect(client_id)
+            manager.disconnect(workspace_id, websocket)
+            logger.info(f"Client {client_id} disconnected from {workspace_id} (DEV)")
         except Exception as e:
-            logger.error(f"WebSocket error for client {client_id}: {e}")
-            manager.disconnect(client_id)
+            manager.disconnect(workspace_id, websocket)
+            logger.error(f"WebSocket error (DEV) for {client_id}: {e}", exc_info=True)
         
 @router.delete("/{workspace_id}", status_code=204)
 def delete_workspace(
