@@ -6,7 +6,7 @@ python-multipart==0.0.20
 websockets==12.0
 
 # ===== Scheduler =====
-fastapi_scheduler==0.0.15
+apscheduler==3.11.1
 
 # ===== Database =====
 sqlalchemy==2.0.31

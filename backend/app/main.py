@@ -9,6 +9,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+# --- NEW APSCHEDULER IMPORT ---
+# We now import the real library, not the broken wrapper
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# --- END NEW IMPORT ---
+
 # Import all your API routers
 from app.api import auth, workspaces, notifications, uploads, alerts, chat
 
@@ -19,48 +24,54 @@ from app.models import user, workspace, data_upload, notification, alert_rule
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# --- This is the "Smart Watch" Lifespan Function ---
+# --- THIS IS THE NEW "Smart Watch" (APScheduler) ---
+# We create the scheduler instance here
+scheduler = AsyncIOScheduler(timezone="UTC")
+
+# --- LIFESPAN FUNCTION (UPDATED) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # This code runs ONCE, when your app starts up.
     
-    # --- THIS IS THE "SMART SWITCH" ---
     if os.getenv("APP_MODE") == "production":
         logger.info("Application starting in PRODUCTION mode.")
-        logger.info("Starting the 'FastAPI-Scheduler' (Smart Watch)...")
+        logger.info("Starting the 'APScheduler' (Smart Watch)...")
         
         try:
-            # We import the "Smart Watch" library
-            from fastapi_scheduler import Scheduler, ASYNC
-            
             # We import the "job" we want to run
-            # This is the line that is likely failing
             from app.services.tasks import schedule_data_fetches
             
-            # Create the "Alarm Clock"
-            scheduler = Scheduler(policy=ASYNC)
-            # Set the alarm: run this job every 60 seconds
-            scheduler.add_job(schedule_data_fetches, "interval", seconds=60, max_instances=1)
-            # Turn the alarm clock ON
+            # Add the job to the scheduler
+            scheduler.add_job(
+                schedule_data_fetches, 
+                "interval", 
+                seconds=60, 
+                id="schedule_data_fetches_job"
+            )
+            
+            # Start the scheduler
             scheduler.start()
-            logger.info("✅ [FastAPI] 'Smart Watch' scheduler has started.")
-
-        # --- THIS IS THE DEBUG FIX ---
+            logger.info("✅ [APScheduler] 'Smart Watch' has started.")
+            
         except ImportError:
-            # This will log the *entire* error traceback,
-            # showing us the real problem.
+            # This will now correctly catch if 'schedule_data_fetches' is broken
             logger.error(
-                "❌ [FastAPI] A CRITICAL IMPORT FAILED. Production tasks will not run.",
+                "❌ [APScheduler] A CRITICAL IMPORT FAILED. Production tasks will not run.",
                 exc_info=True  
             )
-        # --- END FIX ---
+        except Exception as e:
+            logger.error(f"❌ [APScheduler] Failed to start: {e}", exc_info=True)
             
     else:
         logger.info("Application starting in DEVELOPMENT mode. (Celery Beat is expected to run in a separate container).")
     
     yield
     
-    logger.info("Application shutting down.")
+    # This code runs ONCE, when your app shuts down.
+    logger.info("Application shutting down...")
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("[APScheduler] 'Smart Watch' shut down.")
 
 # --- We pass the new 'lifespan' function to our app ---
 app = FastAPI(lifespan=lifespan)
@@ -94,3 +105,4 @@ app.include_router(chat.router, prefix="/api")
 def root():
     logger.info("Root endpoint was hit.")
     return {"msg": "DataPulse backend is running 🔥"}
+
