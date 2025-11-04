@@ -1,3 +1,4 @@
+from fastapi import BackgroundTasks 
 from sqlalchemy.orm import joinedload
 from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File, WebSocket, WebSocketDisconnect, Query, Response
 from sqlalchemy.orm import Session
@@ -233,6 +234,7 @@ def get_team_workspaces(current_user: User = Depends(get_current_user), db: Sess
 @router.post("/{workspace_id}/upload-csv", response_model=TaskResponse)
 async def upload_csv_for_workspace(
     workspace_id: str,
+    background_tasks: BackgroundTasks, # <-- 1. ADD BackgroundTasks
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -264,17 +266,26 @@ async def upload_csv_for_workspace(
     db.commit()
     db.refresh(new_upload)
 
+    task_id_to_return = str(new_upload.id) # Use the upload ID as the task ID
+    message = "File upload successful, processing has started."
+
     if APP_MODE == "production":
-        logger.info("Running in PROD mode. Calling task directly.")
-        process_csv_task(str(new_upload.id))
-        return {"task_id": "production_task", "message": "File upload successful, processing has started."}
+        logger.info("Running in PROD mode. Adding task to background.")
+        
+        # --- 2. THE FIX ---
+        # Get the main event loop
+        loop = asyncio.get_event_loop()
+        # Add the task to run in the background, passing the loop
+        background_tasks.add_task(process_csv_task, str(new_upload.id), loop) 
+        # --- END FIX ---
+
     else:
         logger.info("Running in DEV mode. Sending task to Celery.")
         task = celery_app.send_task('process_csv_task', args=[str(new_upload.id)])
-        return {"task_id": task.id, "message": "File upload successful, processing has started."}
+        task_id_to_return = task.id
     
-
-
+    # The API returns INSTANTLY, while the task runs in the background
+    return {"task_id": task_id_to_return, "message": message}
 
 # --- UPDATED: Endpoint to get a workspace's upload history ---
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])

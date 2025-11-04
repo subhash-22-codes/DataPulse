@@ -13,28 +13,29 @@ import pytz
 from urllib.parse import quote_plus
 from io import StringIO
 
-# --- All Celery/Redis imports are REMOVED ---
-
 from app.core.database import SessionLocal
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload
 from app.models.user import User
 from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
-# --- We now import our email functions directly ---
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
+
+# --- (FIX 1) IMPORT THE NEW CENTRAL MANAGER ---
 from app.core.connection_manager import manager
+# --- (END FIX 1) ---
 
 # --- Setup ---
 logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 APP_MODE = os.getenv("APP_MODE")
-# --- All Celery/Redis app definitions are REMOVED ---
 
+# ====================================================================
+#  Helper Functions
+# ====================================================================
 
 def convert_utc_to_ist_str(utc_dt):
-    if not utc_dt:
-        return "N/A"
+    if not utc_dt: return "N/A"
     try:
         ist_zone = pytz.timezone('Asia/Kolkata')
         aware_utc_dt = pytz.utc.localize(utc_dt) if utc_dt.tzinfo is None else utc_dt
@@ -43,134 +44,7 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
-# ====================================================================
-#  The "Universal Alarm Clock" Job
-# ====================================================================
-# --- NOTE: This is now a NORMAL function, not a Celery task ---
-def schedule_data_fetches():
-    logger.info("⏰ [SCHEDULER] 'Smart Watch' alarm rang. Checking for scheduled data fetches...")
-    db: Session = SessionLocal()
-    try:
-        now = datetime.utcnow()
-        workspaces_to_check = db.query(Workspace).filter(Workspace.is_polling_active == True).all()
-        logger.info(f"-> Found {len(workspaces_to_check)} workspace(s) with active polling.")
-
-        for ws in workspaces_to_check:
-            is_due = False
-            # ... (All your time-checking logic is 100% correct and unchanged) ...
-            if ws.polling_interval == 'every_minute':
-                 if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(minutes=1):
-                    is_due = True
-            elif ws.polling_interval == 'hourly':
-                 if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(hours=1):
-                    is_due = True
-            elif ws.polling_interval == 'daily':
-                 if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(days=1):
-                    is_due = True
-
-            if is_due:
-                # --- THIS IS THE KEY ---
-                # Instead of .delay(), we just CALL the function directly.
-                # This all runs inside the main API process.
-                if ws.data_source == 'API' and ws.api_url:
-                    logger.info(f"✅ API DUE! Running API fetch for '{ws.name}'.")
-                    fetch_api_data(str(ws.id))
-                elif ws.data_source == 'DB' and ws.db_host and ws.db_query:
-                    logger.info(f"✅ DB DUE! Running DB fetch for '{ws.name}'.")
-                    fetch_db_data(str(ws.id))
-    finally:
-        db.close()
-
-# ====================================================================
-#  The "API Fetcher Robot"
-# ====================================================================
-def fetch_api_data(workspace_id: str):
-    logger.info(f"🤖 [API FETCHER] Starting API fetch for workspace: {workspace_id}")
-    db: Session = SessionLocal()
-    try:
-        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if not (workspace and workspace.api_url):
-            logger.warning(f"-> [API FETCHER] Workspace or API URL not found for {workspace_id}. Aborting.")
-            return
-        
-        # ... (Fetching logic is unchanged) ...
-        response = requests.get(workspace.api_url)
-        response.raise_for_status()
-        data = response.json()
-        df = pd.json_normalize(data)
-        
-        csv_content = df.to_csv(index=False)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_api_poll.csv"
-
-        new_upload = DataUpload(
-            workspace_id=workspace.id, 
-            file_path=file_name,
-            file_content=csv_content,
-            upload_type='api_poll'
-        )
-        db.add(new_upload)
-        workspace.last_polled_at = datetime.utcnow()
-        db.commit()
-        db.refresh(new_upload)
-
-        logger.info("-> [API FETCHER] Handing off to the analyzer task...")
-        # --- THE KEY CHANGE: Call the function directly, no .delay() ---
-        process_csv_task(str(new_upload.id))
-
-    except Exception as e:
-        logger.error(f"❌ [API FETCHER] An error occurred: {e}", exc_info=True)
-    finally:
-        db.close()
-
-# ====================================================================
-#  The "Database Robot"
-# ====================================================================
-def fetch_db_data(workspace_id: str):
-    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
-    db: Session = SessionLocal()
-    try:
-        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if not (workspace and workspace.db_host and workspace.db_user and workspace.db_password and workspace.db_name and workspace.db_query):
-            logger.warning(f"-> [DB FETCHER] Incomplete DB config for {workspace_id}. Aborting.")
-            return
-        
-        # ... (DB connection logic is unchanged) ...
-        encoded_password = quote_plus(workspace.db_password)
-        connection_url = f"postgresql://{workspace.db_user}:{encoded_password}@{workspace.db_host}:{workspace.db_port}/{workspace.db_name}"
-        engine = create_engine(connection_url)
-        with engine.connect() as connection:
-            df = pd.read_sql(workspace.db_query, connection)
-
-        csv_content = df.to_csv(index=False)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_db_query.csv"
-
-        new_upload = DataUpload(
-            workspace_id=workspace.id, 
-            file_path=file_name,
-            file_content=csv_content,
-            upload_type='db_query'
-        )
-        db.add(new_upload)
-        workspace.last_polled_at = datetime.utcnow()
-        db.commit()
-        db.refresh(new_upload)
-
-        logger.info("-> [DB FETCHER] Handing off to the analyzer task...")
-        # --- THE KEY CHANGE: Call the function directly, no .delay() ---
-        process_csv_task(str(new_upload.id))
-
-    except Exception as e:
-        logger.error(f"❌ [DB FETCHER] An error occurred: {e}", exc_info=True)
-    finally:
-        db.close()
-        
-# ====================================================================
-#  The "AI Business Analyst"
-# ====================================================================
 def get_ai_insight(schema_changes: dict) -> str | None:
-    # ... (This function is 100% unchanged and correct)
     if not GEMINI_API_KEY:
         logger.warning("GEMINI_API_KEY not found. Skipping AI insight.")
         return None
@@ -188,15 +62,38 @@ def get_ai_insight(schema_changes: dict) -> str | None:
     except Exception as e:
         logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
         return "<p>AI analysis could not be performed for this change.</p>"
-        
-# ====================================================================
-#  The "Rule Checker"
-# ====================================================================
-def check_alert_rules(db: Session, workspace: Workspace, current_upload: DataUpload, analysis_results: dict):
+
+
+# --- (FIX 2) CREATE A HELPER TO RUN ASYNC CODE SAFELY ---
+def run_async_safely(coro, loop: asyncio.AbstractEventLoop = None):
     """
-    Placeholder: Paste your real check_alert_rules function here.
-    This version includes the 'asyncio' fix for sending emails.
+    Safely runs a coroutine from a synchronous thread.
+    Uses the provided loop if available (from FastAPI)
+    or falls back to asyncio.run() (for APScheduler).
     """
+    if loop:
+        # If we have the loop, schedule the task on it thread-safely
+        asyncio.run_coroutine_threadsafe(coro, loop)
+    else:
+        # Fallback for APScheduler (which runs in a sync thread)
+        logger.warning("[WORKER] No event loop provided, falling back to asyncio.run().")
+        try:
+            asyncio.run(coro)
+        except RuntimeError as e:
+            # This happens if asyncio.run() is called from an already running loop
+            logger.error(f"[WORKER] asyncio.run() failed: {e}. Trying to get/create a loop.")
+            try:
+                # Try to get the loop that's *already* running in this thread
+                loop = asyncio.get_running_loop()
+                loop.create_task(coro)
+            except RuntimeError:
+                # Last resort: create a new loop (this is rare)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(coro)
+
+
+def check_alert_rules(db: Session, workspace: Workspace, current_upload: DataUpload, analysis_results: dict, loop: asyncio.AbstractEventLoop = None):
     logger.info("Checking alert rules...")
     rules = db.query(AlertRule).filter(AlertRule.workspace_id == workspace.id, AlertRule.is_active == True).all()
     if not rules:
@@ -219,37 +116,153 @@ def check_alert_rules(db: Session, workspace: Workspace, current_upload: DataUpl
                     notification = Notification(user_id=user.id, workspace_id=workspace.id, message=message)
                     db.add(notification)
                 
-                email_context = { "workspace_name": workspace.name, "rule": rule.to_dict(), "actual_value": actual_value }
+                email_context = { 
+                    "workspace_name": workspace.name, 
+                    "rule": rule.to_dict(), 
+                    "actual_value": actual_value,
+                    "file_name": current_upload.file_path,
+                    "upload_time": convert_utc_to_ist_str(current_upload.uploaded_at),
+                }
                 
-                # --- (FIX 2) ASYNCIO CRASH FIX (for threshold alerts) ---
-                try:
-                    loop = asyncio.get_running_loop()
-                    asyncio.run_coroutine_threadsafe(
-                        send_threshold_alert_email(recipients, email_context),
-                        loop
-                    )
-                except RuntimeError:
-                    logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for threshold email.")
-                    asyncio.run(send_threshold_alert_email(recipients, email_context))
-                # --- (END FIX 2) ---
+                # --- (FIX 2.1) Use the safe helper for threshold emails ---
+                logger.info("[WORKER] Scheduling threshold alert email...")
+                run_async_safely(send_threshold_alert_email(recipients, email_context), loop)
                 
         except (KeyError, TypeError):
-            continue # Rule column/metric not in data, skip it
+            continue
 
+# ====================================================================
+#  Scheduled Tasks (Called by APScheduler)
+# ====================================================================
+def schedule_data_fetches():
+    logger.info("⏰ [SCHEDULER] 'Smart Watch' alarm rang. Checking for scheduled data fetches...")
+    db: Session = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        workspaces_to_check = db.query(Workspace).filter(Workspace.is_polling_active == True).all()
+        logger.info(f"-> Found {len(workspaces_to_check)} workspace(s) with active polling.")
 
-def process_csv_task(upload_id: str):
+        for ws in workspaces_to_check:
+            is_due = False
+            if ws.polling_interval == 'every_minute':
+                if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(minutes=1):
+                    is_due = True
+            elif ws.polling_interval == 'hourly':
+                if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(hours=1):
+                    is_due = True
+            elif ws.polling_interval == 'daily':
+                if not ws.last_polled_at or (now - ws.last_polled_at) > timedelta(days=1):
+                    is_due = True
+
+            if is_due:
+                if ws.data_source == 'API' and ws.api_url:
+                    logger.info(f"✅ API DUE! Running API fetch for '{ws.name}'.")
+                    fetch_api_data(str(ws.id))
+                elif ws.data_source == 'DB' and ws.db_host and ws.db_query:
+                    logger.info(f"✅ DB DUE! Running DB fetch for '{ws.name}'.")
+                    fetch_db_data(str(ws.id))
+    finally:
+        db.close()
+
+def fetch_api_data(workspace_id: str):
+    logger.info(f"🤖 [API FETCHER] Starting API fetch for workspace: {workspace_id}")
+    db: Session = SessionLocal()
+    try:
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not (workspace and workspace.api_url):
+            logger.warning(f"-> [API FETCHER] Workspace or API URL not found for {workspace_id}. Aborting.")
+            return
+        
+        response = requests.get(workspace.api_url)
+        response.raise_for_status()
+        data = response.json()
+        df = pd.json_normalize(data)
+        
+        csv_content = df.to_csv(index=False)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"{timestamp}_api_poll.csv"
+
+        new_upload = DataUpload(
+            workspace_id=workspace.id, 
+            file_path=file_name,
+            file_content=csv_content,
+            upload_type='api_poll'
+        )
+        db.add(new_upload)
+        workspace.last_polled_at = datetime.utcnow()
+        db.commit()
+        db.refresh(new_upload)
+
+        logger.info("-> [API FETCHER] Handing off to the analyzer task...")
+        # Note: We don't pass a loop here, so it will use the asyncio.run() fallback
+        process_csv_task(str(new_upload.id)) 
+
+    except Exception as e:
+        logger.error(f"❌ [API FETCHER] An error occurred: {e}", exc_info=True)
+    finally:
+        db.close()
+
+def fetch_db_data(workspace_id: str):
+    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
+    db: Session = SessionLocal()
+    try:
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not (workspace and workspace.db_host and workspace.db_user and workspace.db_password and workspace.db_name and workspace.db_query):
+            logger.warning(f"-> [DB FETCHER] Incomplete DB config for {workspace_id}. Aborting.")
+            return
+        
+        encoded_password = quote_plus(workspace.db_password)
+        connection_url = f"postgresql://{workspace.db_user}:{encoded_password}@{workspace.db_host}:{workspace.db_port}/{workspace.db_name}"
+        engine = create_engine(connection_url)
+        with engine.connect() as connection:
+            df = pd.read_sql(workspace.db_query, connection)
+
+        csv_content = df.to_csv(index=False)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"{timestamp}_db_query.csv"
+
+        new_upload = DataUpload(
+            workspace_id=workspace.id, 
+            file_path=file_name,
+            file_content=csv_content,
+            upload_type='db_query'
+        )
+        db.add(new_upload)
+        workspace.last_polled_at = datetime.utcnow()
+        db.commit()
+        db.refresh(new_upload)
+
+        logger.info("-> [DB FETCHER] Handing off to the analyzer task...")
+        # Note: We don't pass a loop here, so it will use the asyncio.run() fallback
+        process_csv_task(str(new_upload.id))
+
+    except Exception as e:
+        logger.error(f"❌ [DB FETCHER] An error occurred: {e}", exc_info=True)
+    finally:
+        db.close()
+        
+# ====================================================================
+#  The "Analyzer Robot" (The fully corrected function)
+# ====================================================================
+
+# --- (FIX 3) UPDATE THE FUNCTION SIGNATURE to accept the loop ---
+def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
+    """
+    Analyzes a CSV file.
+    'loop' is the main event loop passed from the FastAPI endpoint.
+    It is None when called from the synchronous APScheduler.
+    """
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
-    workspace_id_str = None # Define here to use in finally block
-    status_message = "job_error" # Default to error
+    workspace_id_str = None
+    status_message = "job_error"
     
     try:
         current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
         if not current_upload: 
             logger.warning(f"[WORKER] Upload ID {upload_id} not found.")
             return
-
-        # Get workspace_id for signaling
+        
         workspace_id_str = str(current_upload.workspace_id)
         
         csv_content = current_upload.file_content
@@ -269,7 +282,7 @@ def process_csv_task(upload_id: str):
         
         schema_has_changed, row_count_has_changed = False, False
         new_cols, old_cols = set(new_schema.keys()), set()
-        old_row_count = 0 # Default value
+        old_row_count = 0
         
         if previous_upload and previous_upload.analysis_results:
             if previous_upload.upload_type == current_upload.upload_type:
@@ -324,59 +337,47 @@ def process_csv_task(upload_id: str):
                 }
                 recipients = [user.email for user in users_to_notify]
 
-                # --- (FIX 2) ASYNCIO CRASH FIX (for detailed alerts) ---
-                # This is the line that caused your 'asyncio.run()' crash
-                try:
-                    loop = asyncio.get_running_loop()
-                    asyncio.run_coroutine_threadsafe(
-                        send_detailed_alert_email(recipients, email_context),
-                        loop
-                    )
-                except RuntimeError:
-                    logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for email.")
-                    asyncio.run(send_detailed_alert_email(recipients, email_context))
-                # --- (END FIX 2) ---
+                # --- (FIX 4) Use the safe helper for detailed alerts ---
+                logger.info("[WORKER] Scheduling detailed alert email...")
+                run_async_safely(send_detailed_alert_email(recipients, email_context), loop)
 
-            check_alert_rules(db, workspace, current_upload, analysis_results)
+            # --- (FIX 5) Pass the loop to check_alert_rules ---
+            check_alert_rules(db, workspace, current_upload, analysis_results, loop)
             
         db.commit()
         logger.info(f"💾 [WORKER] All database changes committed for upload {upload_id}.")
         
-        # If we get here, the job was successful
         status_message = "job_complete"
         return {"status": "success"}
 
     except Exception as e:
         logger.error(f"❌ [WORKER] An error occurred during processing for upload {upload_id}: {e}", exc_info=True)
-        # Job failed, status_message will be "job_error"
+        status_message = "job_error"
         return {"status": "error", "message": str(e)}
     
     finally:
-        # --- (FIX 3) SEND THE WEBSOCKET SIGNAL (This fixes the stuck spinner) ---
+        # --- (FIX 6) SEND THE WEBSOCKET SIGNAL (This fixes the stuck spinner) ---
         if APP_MODE == "production" and workspace_id_str:
-            try:
-                loop = asyncio.get_running_loop()
-                asyncio.run_coroutine_threadsafe(
-                    manager.broadcast_to_workspace(workspace_id_str, status_message),
-                    loop
-                )
-                logger.info(f"📡 [WORKER] Sent '{status_message}' signal to workspace {workspace_id_str}.")
-            except RuntimeError:
-                logger.warning("[WORKER] No running event loop, falling back to asyncio.run() for broadcast.")
-                asyncio.run(manager.broadcast_to_workspace(workspace_id_str, status_message))
-        # --- (END FIX 3) ---
+            logger.info(f"📡 [WORKER] Scheduling '{status_message}' signal for {workspace_id_str}...")
+            # Use our safe helper to send the signal
+            run_async_safely(
+                manager.broadcast_to_workspace(workspace_id_str, status_message),
+                loop
+            )
+        # --- (END FIX 6) ---
         
         db.close()
 
-        
+
 # ====================================================================
-#  The "OTP Email Chef" - Now a simple helper
+#  The "OTP Email Chef" - Helper for auth.py
 # ====================================================================
 async def send_otp_email_task_async(to_email: str, otp: str, subject_type: str):
     """
-    This is a new helper function that our auth.py will call.
+    This is the helper function that auth.py calls.
     It runs the async email function in the background.
     """
     logger.info(f"📨 [WORKER] Preparing to send OTP email to {to_email}...")
+    # This calls the *real* email sending function from email_service.py
     await send_otp_email(to_email, otp, subject_type)
 
