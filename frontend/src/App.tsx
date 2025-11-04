@@ -43,30 +43,48 @@ function AppRoutes() {
 }
 
 // --- Your main App component is UPDATED ---
+// --- Helper function to wait (utility) ---
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// --- Your main App component is UPDATED ---
 function App() {
-  // 3. Add state to track if the backend is awake
+  // 1. Add state to track if the backend is awake
   const [isAwake, setIsAwake] = useState(false);
 
   useEffect(() => {
-    // 4. This effect runs ONCE when the app first loads
-    const wakeUpBackend = async () => {
+    // 2. This is the new, robust wake-up logic
+    const pollUntilAwake = async () => {
       console.log("Pinging backend to wake it up...");
-      try {
-        // 5. Send a simple "ping" to your backend's root URL
-        // This is the request that wakes up Render.
-        await api.get('/'); 
-        
-      } catch (error) {
-        console.error("Error waking up backend:", error);
-        // Even if the ping fails (e.g., 404, 500), the server is now awake.
-        console.warn("Wake-up ping finished, proceeding to app.");
-      } finally {
-        // 6. Set 'isAwake' to true to show the real app.
-        setIsAwake(true);
+      
+      let attempts = 0;
+      const maxAttempts = 15; // Max 15 attempts (e.g., 15 * 5s = 75s)
+      
+      while (attempts < maxAttempts) {
+        try {
+          // 3. Send the "ping"
+          await api.get('/');
+          
+          // 4. If the request SUCCEEDS (no error), the server is awake!
+          console.log("✅ Backend is awake! Proceeding to app.");
+          setIsAwake(true);
+          return; // Exit the loop and the function
+          
+        } catch (error) {
+          console.error("❗ Ping failed:", error);
+          // 5. If it fails (502, 504, timeout), the server is still sleeping.
+          attempts++;
+          console.warn(`Attempt ${attempts}: Server is still sleeping. Retrying in 5 seconds...`);
+          // 6. Wait 5 seconds before the next attempt
+          await wait(5000); 
+        }
       }
+      
+      // 7. If we get here, the server failed to wake up after max attempts.
+      console.error("❌ Backend failed to wake up after max attempts. Proceeding anyway.");
+      setIsAwake(true); // Still show the app, but log the error
     };
 
-    wakeUpBackend();
+    pollUntilAwake();
   }, []); // The empty array [] means this runs only once.
 
   return (
