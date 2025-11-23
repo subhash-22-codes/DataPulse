@@ -55,6 +55,7 @@ export interface Workspace {
   polling_interval?: string;
   is_polling_active?: boolean;
   tracked_column?: string;
+  api_header_name?: string; 
   db_type?: string;
   db_host?: string;
   db_port?: number;

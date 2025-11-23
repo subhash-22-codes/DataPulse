@@ -2,7 +2,7 @@ import React, { Fragment, useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { Dialog, Transition, RadioGroup, Switch } from '@headlessui/react';
-import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText, Info, Server, User, Key, BookOpen } from "lucide-react";
+import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText, Info, Server, User, Key, BookOpen, Lock } from "lucide-react";
 import { Workspace } from "../../types";
 import toast from 'react-hot-toast';
 
@@ -19,6 +19,10 @@ interface UpdatePayload {
     is_polling_active?: boolean;
     polling_interval?: string;
     api_url?: string;
+    // --- NEW: API Authentication Fields ---
+    api_header_name?: string;
+    api_header_value?: string;
+    // --------------------------------------
     db_type?: string;
     db_host?: string;
     db_port?: number;
@@ -28,8 +32,7 @@ interface UpdatePayload {
     db_query?: string;
 }
 
-// --- NEW: A reusable sub-component for the polling configuration ---
-// This is a professional pattern to keep our code DRY (Don't Repeat Yourself)
+// --- A reusable sub-component for the polling configuration ---
 const PollingSection: React.FC<{
     pollingInterval: string;
     setPollingInterval: (val: string) => void;
@@ -64,7 +67,7 @@ const PollingSection: React.FC<{
                     onChange={setIsPollingActive}
                     className={`${
                         isPollingActive ? 'bg-blue-600' : 'bg-gray-300'
-                    } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+                    } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-offset-2`}
                 >
                     <span
                         aria-hidden="true"
@@ -83,15 +86,23 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
   const { token } = useAuth();
   const [dataSource, setDataSource] = useState(workspace.data_source || "CSV");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  // API State
   const [apiUrl, setApiUrl] = useState('');
   const [pollingInterval, setPollingInterval] = useState('hourly');
   const [isPollingActive, setIsPollingActive] = useState(false);
+  // --- NEW: API Key State ---
+  const [apiHeaderName, setApiHeaderName] = useState('');
+  const [apiHeaderValue, setApiHeaderValue] = useState('');
+  
+  // DB State
   const [dbHost, setDbHost] = useState('');
   const [dbPort, setDbPort] = useState(5432);
   const [dbUser, setDbUser] = useState('');
   const [dbPassword, setDbPassword] = useState('');
   const [dbName, setDbName] = useState('');
   const [dbQuery, setDbQuery] = useState('SELECT * FROM your_table LIMIT 100;');
+  
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -100,6 +111,10 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
       setApiUrl(workspace.api_url || '');
       setPollingInterval(workspace.polling_interval || 'hourly');
       setIsPollingActive(workspace.is_polling_active || false);
+      // Initialize API Header Name (Value is kept secret/empty)
+      setApiHeaderName(workspace.api_header_name || ''); 
+      setApiHeaderValue(''); 
+
       setDbHost(workspace.db_host || '');
       setDbPort(workspace.db_port || 5432);
       setDbUser(workspace.db_user || '');
@@ -117,9 +132,13 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
         is_polling_active: isPollingActive,
         polling_interval: pollingInterval
     };
+    
     if (dataSource === 'API') {
       if (!apiUrl.trim()) { setIsSaving(false); return toast.error("API URL cannot be empty."); }
       payload.api_url = apiUrl;
+      // --- Include Auth Fields if provided ---
+      if (apiHeaderName.trim()) payload.api_header_name = apiHeaderName;
+      if (apiHeaderValue.trim()) payload.api_header_value = apiHeaderValue;
     } 
     else if (dataSource === 'DB') {
       if (!dbHost.trim() || !dbUser.trim() || !dbName.trim() || !dbQuery.trim()) {
@@ -254,6 +273,7 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                     {dataSource === 'API' && (
                       <div className="pt-5 border-t border-gray-200 space-y-5">
                         {workspace.is_polling_active && workspace.data_source === 'API' && <div className="p-4 rounded-lg flex items-start space-x-3 border border-blue-200 bg-blue-50"><div className="w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0"><Info className="h-5 w-5 text-white" /></div><div className="text-sm text-left flex-1"><p className="font-semibold text-blue-900 mb-1">Active Polling Detected</p><p className="text-blue-800 leading-relaxed">Polling is currently active. To modify settings, disable the toggle, save, then reopen this modal.</p></div></div>}
+                        
                         <div className="space-y-2">
                           <label className="block text-sm font-semibold text-gray-900">API Endpoint URL</label>
                           <div className="relative">
@@ -261,6 +281,37 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                             <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 hover:border-gray-400 text-sm" placeholder="https://api.example.com/v1/data"/>
                           </div>
                         </div>
+
+                        {/* --- NEW: Authentication Section --- */}
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-4">
+                            <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                <Lock className="h-4 w-4 text-gray-500" /> Authentication (Optional)
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-semibold text-gray-700">Header Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={apiHeaderName} 
+                                        onChange={e => setApiHeaderName(e.target.value)} 
+                                        className="w-full px-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm text-sm" 
+                                        placeholder="Authorization"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-semibold text-gray-700">Header Value</label>
+                                    <input 
+                                        type="password" 
+                                        value={apiHeaderValue} 
+                                        onChange={e => setApiHeaderValue(e.target.value)} 
+                                        className="w-full px-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm text-sm" 
+                                        placeholder="Bearer sk_..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        {/* ----------------------------------- */}
+
                         <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
                       </div>
                     )}
