@@ -59,6 +59,8 @@ class Workspace(Base):
     api_url = Column(String(255), nullable=True)
     polling_interval = Column(String(50), nullable=True)
     last_polled_at = Column(DateTime, nullable=True)
+    api_header_name = Column(String(100), nullable=True) # e.g., 'Authorization', 'X-API-Key'
+    api_header_value = Column(EncryptedString, nullable=True) # The secret key, encrypted at rest
 
     # --- ADD THIS LINE for the On/Off switch ---
     is_polling_active = Column(Boolean, default=False, nullable=False, server_default='false')

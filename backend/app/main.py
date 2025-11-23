@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
             
             # Start the scheduler
             scheduler.start()
-            logger.info("✅ [APScheduler] 'Smart Watch' has started.")
+            logger.info("✅ [APScheduler] 'Smart Watch' has started. (Interval: 60 secondss)")
             
         except ImportError:
             # This will now correctly catch if 'schedule_data_fetches' is broken

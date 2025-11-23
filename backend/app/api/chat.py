@@ -1,20 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import os
+import logging
 import google.generativeai as genai
 
 from .dependencies import get_current_user
 from app.models.user import User
 
+# --- Setup ---
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- THIS IS THE FINAL, COMPREHENSIVE KNOWLEDGE BASE ---
+# --- Global Model Initialization ---
+# We initialize the model once at startup for better performance.
+chat_model = None
+
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        # Use a model optimized for chat if available, or standard flash
+        chat_model = genai.GenerativeModel('gemini-2.5-flash')
+        logger.info("✅ Gemini AI (Chat) initialized successfully.")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to initialize Gemini AI for chat: {e}")
+else:
+    logger.warning("⚠️ GEMINI_API_KEY not found. AI Chat will be disabled.")
+
+
+# --- KNOWLEDGE BASE (UPDATED WITH TEAM INFO) ---
 SYSTEM_PROMPT = """
 You are DataPulse AI, a friendly and expert assistant for the DataPulse application. 
 Your goal is to answer user questions about what DataPulse is and how its features work.
 Use Markdown for clear formatting (like bullet points and bold text).
+Keep answers concise and helpful.
 
 Here is your comprehensive knowledge base about the DataPulse application:
 
@@ -86,8 +106,23 @@ Here is your comprehensive knowledge base about the DataPulse application:
   - An owner can invite a maximum of **2 team members** to a workspace.
   -  **Smart Alerts:** Up to **10 custom Smart Alerts** per workspace.
   - **Data Sources (per workspace, per month):**
-    - **50 Manual CSV Uploads**  
-    - **50 API Polling Runs**  
+    - **50 Manual CSV Uploads** - **50 API Polling Runs**
+
+---
+
+### **5. About the Team**
+
+- **Who built DataPulse?**
+  - DataPulse was built by a passionate team of developers dedicated to simplifying data monitoring.
+  
+  - **Subhash Yaganti:** Lead Full Stack Engineer & UI/UX Designer. He crafted the intuitive user interface, responsive design, and seamless frontend architecture.
+  
+  - **Siri Mahalaxmi Vemula:** Backend Architect & AI Specialist. She designed the robust server architecture, database schemas, and integrated the Gemini AI for smart insights and chat capabilities.
+
+- **Our Mission:**
+  - To empower small teams and developers with enterprise-grade data monitoring tools without the enterprise price tag.
+
+---
 
 When a user asks a question, use this knowledge base to give a friendly, helpful, structured and step-by-step answer.
 """
@@ -96,24 +131,44 @@ class ChatMessage(BaseModel):
     message: str
 
 @router.post("/")
-def handle_chat_message(
+async def handle_chat_message(
     chat_message: ChatMessage,
     current_user: User = Depends(get_current_user)
 ):
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="AI service is not configured.")
+    """
+    Handles user chat queries using the Gemini AI model context.
+    """
+    # 1. Fail fast if AI is not ready
+    if not chat_model:
+        logger.error("Chat endpoint hit but AI is not configured.")
+        raise HTTPException(status_code=503, detail="AI service is currently unavailable.")
     
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        full_prompt = f"{SYSTEM_PROMPT}\n\nUser Question: {chat_message.message}"
+    # 2. Validate Input
+    user_query = chat_message.message.strip()
+    if not user_query:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-        print(f"🧠 [AI CHAT] Sending prompt to Gemini for user {current_user.email}...")
-        response = model.generate_content(full_prompt)
+    try:
+        # 3. Construct Prompt
+        # We add the user context to make it feel personal ("Hello Surya...")
+        prompt_context = f"User's Name: {current_user.name or 'User'}\n"
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt_context}User Question: {user_query}"
+
+        logger.info(f"🧠 [AI CHAT] Processing query for {current_user.email}...")
         
-        return {"reply": response.text}
+        # 4. Generate Response (Async if possible, but Gemini lib is sync-blocking wrapper)
+        # In a high-load app, we'd wrap this in run_in_threadpool, but for a simple chat, this is fine.
+        response = chat_model.generate_content(full_prompt)
+        
+        # 5. Return Clean Response
+        # .text can sometimes raise an error if the AI blocked the response (safety settings)
+        if response.parts:
+            return {"reply": response.text}
+        else:
+             # Fallback if AI returns empty (e.g., safety block)
+            logger.warning(f"⚠️ [AI CHAT] Gemini returned empty response (Safety Block?) for: {user_query}")
+            return {"reply": "I'm sorry, I couldn't generate a response to that specific question. Could you try rephrasing it?"}
         
     except Exception as e:
-        print(f"❌ [AI CHAT] Error: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred with the AI service.")
+        logger.error(f"❌ [AI CHAT] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
