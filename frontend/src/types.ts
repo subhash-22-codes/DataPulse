@@ -73,3 +73,7 @@ export interface AlertRule {
   condition: string;
   value: number;
 }
+
+export interface IllustrationProps {
+  className?: string;
+}
