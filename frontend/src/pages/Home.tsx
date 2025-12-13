@@ -193,26 +193,40 @@ const Home: React.FC = () => {
 
     const navigate = useNavigate();
 
-    const fetchData = useCallback(async () => {
+   const fetchData = useCallback(async () => {
         if (!user) return;
         
         setLoading(true);
         setError("");
+
         try {
             const [ownedRes, teamRes] = await Promise.all([
                 api.get<Workspace[]>("/workspaces/"),
                 api.get<Workspace[]>("/workspaces/team/")
             ]);
+
+            // 🔒 Runtime contract validation
+            // If Vercel sends HTML (string) or API fails, this catches it immediately.
+            if (!Array.isArray(ownedRes.data) || !Array.isArray(teamRes.data)) {
+                console.error("Received invalid data:", ownedRes.data, teamRes.data); // Log for debugging
+                throw new Error("Invalid workspace response format");
+            }
+
             setOwnedWorkspaces(ownedRes.data);
             setTeamWorkspaces(teamRes.data);
+            
             setIsNetworkError(false);
             setHasLoadedOnce(true);
+
         } catch (err) {
+            console.error("Fetch Error:", err); // <--- Add this so you see the error in F12 console
+
             if (err instanceof AxiosError && err.code === "ERR_NETWORK") {
-                setError("Could not connect to the DataPulse server. It. may be offline.");
+                setError("Could not connect to the DataPulse server. It may be offline.");
                 setIsNetworkError(true);
             } else {
-                setError("Failed to fetch workspaces.");
+                // This will catch your "Invalid workspace response format" error
+                setError("Failed to load workspace data.");
             }
         } finally {
             setLoading(false);
