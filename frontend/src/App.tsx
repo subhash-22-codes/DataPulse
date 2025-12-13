@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
+import { Loader2 } from 'lucide-react'; 
 
 // Contexts
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -12,6 +13,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { WakeUpScreen } from './components/WakeUpScreen'; 
 
 // Pages
+import { Trash } from './pages/Trash';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
@@ -21,84 +23,78 @@ import { Legal } from './pages/Legal';
 import LandingPage from './pages/LandingPage';
 import PageNotFound from './pages/PageNotFound';
 
-// --- AppRoutes Component ---
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+         <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+         <p className="text-sm font-medium text-gray-400 animate-pulse">Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <Routes>
-      {/* Public routes */}
-      {/* If logged in, go to Home. If not, show the Landing Page */}
       <Route path="/" element={isAuthenticated ? <Navigate to="/home" /> : <LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path='/legal' element={<Legal />} />
-      
-      {/* Protected routes */}
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
       <Route path="/workspace/:id" element={<ProtectedRoute><WorkspaceDetail /></ProtectedRoute>} />
-      
-      {/* Fallback route */}
+      <Route path="/trash" element={
+        <ProtectedRoute>
+            <Trash />
+        </ProtectedRoute>
+      } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
 }
 
-// --- Helper function to wait ---
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- Main App Component ---
 function App() {
-  const [isAwake, setIsAwake] = useState(false);
+  // Two states to handle the smooth transition
+  const [isBackendReady, setIsBackendReady] = useState(false); // 1. Server is Awake
+  const [showApp, setShowApp] = useState(false);               // 2. Animation Finished, Show App
+
+  const pollUntilAwake = useCallback(async () => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const pingApi = axios.create({ baseURL: baseUrl });
+    
+    let attempts = 0;
+    const maxAttempts = 90; // 180s coverage
+    
+    while (attempts < maxAttempts) {
+      try {
+        await pingApi.get('/'); 
+        console.log("✅ Backend is awake! Starting 100% animation...");
+        setIsBackendReady(true); // <--- Triggers the WakeUpScreen animation
+        return; 
+      } catch (error) {
+        console.error(error);
+        attempts++;
+        if (attempts % 5 === 0) console.log(`Backend sleeping... Attempt ${attempts}/${maxAttempts}`);
+        await wait(2000); 
+      }
+    }
+    console.error("❌ Backend unresponsive after 3 minutes.");
+  }, []);
 
   useEffect(() => {
-    const pollUntilAwake = async () => {
-      console.log("Pinging backend to wake it up...");
-      
-      // Get the base URL from your .env file
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      
-      // Create a new instance that hits the ROOT, not /api
-      const pingApi = axios.create({ baseURL: baseUrl });
-      
-      let attempts = 0;
-      const maxAttempts = 15; // Max 15 attempts (e.g., 15 * 5s = 75s)
-      
-      while (attempts < maxAttempts) {
-        try {
-          await pingApi.get('/');
-          console.log("✅ Backend is awake! Proceeding to app.");
-          setIsAwake(true);
-          return;
-          
-        } catch (error: unknown) {
-          attempts++;
-          let errorMessage = "Server is still sleeping.";
-          
-          if (error instanceof Error) {
-            errorMessage = error.message;
-          } else if (typeof error === 'string') {
-            errorMessage = error;
-          }
-          
-          console.warn(`Attempt ${attempts}: Server ping failed. Retrying in 5 seconds...`, errorMessage);
-          await wait(5000); 
-        }
-      }
-      
-      console.error("❌ Backend failed to wake up after max attempts. Proceeding anyway.");
-      setIsAwake(true); // Still show the app, but log the error
-    };
-
     pollUntilAwake();
-  }, []);
+  }, [pollUntilAwake]);
 
   return (
     <Router>
-      <AuthProvider>
-        {/* WRAP CONTENT IN THEME PROVIDER SO NAVBAR WORKS */}
-          
+      {/* FIX: Add key={isBackendReady.toString()}. 
+        This forces React to destroy and re-build AuthProvider 
+        only AFTER the backend is actually awake. 
+      */}
+      <AuthProvider key={isBackendReady.toString()}>
           <Toaster
             position="top-right"
             toastOptions={{
@@ -113,18 +109,19 @@ function App() {
             }}
           />
           
-          {!isAwake ? (
-            // If backend is not awake, show the loading screen
-            <WakeUpScreen />
+          {/* Logic: Show WakeUpScreen until the animation is fully complete */}
+          {!showApp ? (
+            <WakeUpScreen 
+              isSystemReady={isBackendReady} 
+              onAnimationComplete={() => setShowApp(true)}
+            />
           ) : (
-            // Once awake, render your real application
             <>
               <AppRoutes />
               <CookieConsentBanner />
             </>
           )}
           
-
       </AuthProvider>
     </Router>
   );

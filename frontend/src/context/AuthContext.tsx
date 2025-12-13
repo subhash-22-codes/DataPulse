@@ -1,146 +1,211 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { jwtDecode } from 'jwt-decode';
-import { User, AuthContextType, DecodedToken } from '../types/auth';
-import { authService } from '../services/api';
-import { AxiosError } from 'axios';
-import toast from 'react-hot-toast';
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useEffect,
+    ReactNode,
+    useMemo,
+    useCallback,
+} from "react";
+import { useNavigate } from "react-router-dom";
+// NOTE: Ensure your AuthContextType (in ../types/auth) includes: 
+// loginSuccess: boolean;
+import { User, AuthContextType } from "../types/auth"; 
+import { authService } from "../services/api";
+import { AxiosError } from "axios";
+import toast from "react-hot-toast";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// NOTE: The useAuth hook remains here. It's a very common pattern,
 export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
+    const ctx = useContext(AuthContext);
+    if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+    return ctx;
 };
 
 interface Props {
-  children: ReactNode;
+    children: ReactNode;
 }
 
 export const AuthProvider: React.FC<Props> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
-  // --- THIS IS THE FIX for the 'any' type ---
-  // We use 'unknown' which is the type-safe version of 'any'.
-  const handleError = (error: unknown, defaultMessage: string) => {
-    const err = error as AxiosError<{ detail?: string }>;
-    if (err.response?.status === 429) {
-      toast.error("Too many requests. Please wait a moment and try again.");
-    } else {
-      toast.error(err.response?.data?.detail || defaultMessage);
-    }
-    throw err;
-  };
+    const [user, setUser] = useState<User | null>(null);
+    const [token, setToken] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    // CRITICAL ADDITION: State to control the temporary success message UI
+    const [loginSuccess, setLoginSuccess] = useState(false); 
 
-  const checkTokenExpiry = (jwt: string): boolean => {
-    try {
-      const decoded: DecodedToken = jwtDecode(jwt);
-      return Date.now() < decoded.exp * 1000;
-    } catch {
-      return false;
-    }
-  };
+    // --- Helper Functions ---
+    const saveAuth = useCallback((userData: User) => {
+        setUser(userData);
+        localStorage.setItem("datapulse_user", JSON.stringify(userData));
+        setLoginSuccess(true); // Set to true on successful login
+    }, [setLoginSuccess]);
 
-  const saveAuth = (jwt: string, userData: User) => {
-    setToken(jwt);
-    setUser(userData);
-    localStorage.setItem('datapulse_token', jwt);
-    localStorage.setItem('datapulse_user', JSON.stringify(userData));
-  };
+    const clearAuth = useCallback(() => {
+        setUser(null);
+        setToken(null);
+        setLoginSuccess(false); // CRITICAL FIX: Reset success state on failure/logout
+        localStorage.removeItem("datapulse_user");
+    }, [setLoginSuccess]);
+    
+    const handleError = useCallback((error: unknown, fallbackMsg: string) => {
+        const err = error as AxiosError<{ detail?: string }>;
 
-  const clearAuth = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('datapulse_token');
-    localStorage.removeItem('datapulse_user');
-  };
+        if (err.response?.status === 429) {
+            toast.error("Too many requests. Please try again shortly.");
+        } else {
+            // Note: The toast is handled here for errors 
+            toast.error(err.response?.data?.detail || fallbackMsg);
+        }
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('datapulse_token');
-    const storedUser = localStorage.getItem('datapulse_user');
-    if (storedToken && storedUser && checkTokenExpiry(storedToken)) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-    } else {
-      clearAuth();
-    }
-    setLoading(false);
-  }, []);
+        if (err.response?.status !== 401) {
+            throw err;
+        }
+    }, []);
 
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      const res = await authService.emailLogin(email, password);
-      saveAuth(res.token, res.user);
-    } catch (error) {
-      handleError(error, "Invalid email or password.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const googleLogin = async (googleToken: string) => {
-    setLoading(true);
-    try {
-      const res = await authService.googleLogin(googleToken);
-      saveAuth(res.token, res.user);
-    } catch (error) {
-      handleError(error, "Google login failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Flicker Fix: Server-First Initialization
+    useEffect(() => {
+        const initAuth = async () => {
+            try {
+                const res = await authService.checkSession();
+                saveAuth(res.user);
+            } catch {
+                clearAuth();
+            } finally {
+                setLoading(false);
+            }
+        };
+        initAuth();
+    }, [saveAuth, clearAuth]);
 
-  const register = async (email: string) => {
-    setLoading(true);
-    try {
-      await authService.sendOtp(email);
-    } catch (error) {
-      handleError(error, "Failed to send OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const verifyOtp = async (name: string, email: string, otp: string, password: string) => {
-    setLoading(true);
-    try {
-      await authService.verifyOtp(name, email, otp, password);
-    } catch (error) {
-      handleError(error, "Failed to verify OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const sendPasswordReset = async (email: string) => {
-    setLoading(true);
-    try {
-      await authService.sendPasswordReset(email);
-    } catch (error) {
-      handleError(error, "Failed to send reset code.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // 🔑 Login function (CENTRALIZED FIX)
+    const login = useCallback(async (email: string, password: string) => {
+        try {
+            const res = await authService.emailLogin(email, password);
+            saveAuth(res.user);
+            return res; // Return success response to the caller (Login.tsx)
+        } catch (error) {
+            handleError(error, "Invalid email or password");
+            clearAuth();
+            throw error; // Essential: Re-throw the error so Login.tsx catches it
+        } 
+    }, [saveAuth, handleError, clearAuth]); // 'navigate' removed from deps
 
-  const resetPassword = async (email: string, otp: string, newPassword: string) => {
-    setLoading(true);
-    try {
-      await authService.resetPassword(email, otp, newPassword);
-    } catch (error) {
-      handleError(error, "Failed to reset password.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // 🔑 Google Login (CONSISTENCY FIX)
+    const googleLogin = useCallback(async (googleToken: string) => {
+        try {
+            const res = await authService.googleLogin(googleToken);
+            saveAuth(res.user);
+            // navigate("/home") is removed here for consistency
+            return res; // Return success response to the caller
+        } catch (error) {
+            handleError(error, "Google login failed");
+            clearAuth();
+            throw error; // Re-throw the error
+        } 
+    }, [saveAuth, handleError, clearAuth]); // 'navigate' removed from deps
 
-  const logout = () => clearAuth();
 
-  const value: AuthContextType = { user, token, login, googleLogin, register, verifyOtp, sendPasswordReset, resetPassword, logout, loading, isAuthenticated: !!token };
+    // 🔑 Registration
+    const register = useCallback(async (email: string): Promise<boolean> => {
+        try {
+            await authService.sendOtp(email);
+            return true;
+        } catch (error) {
+            handleError(error, "Failed to send OTP.");
+            clearAuth();
+            return false;
+        } 
+    }, [handleError, clearAuth]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+
+    // 🔑 Verify OTP
+    const verifyOtp = useCallback(async (
+        name: string,
+        email: string,
+        otp: string,
+        password: string
+    ) => {
+        try {
+            await authService.verifyOtp(name, email, otp, password);
+        } catch (error) {
+            handleError(error, "Failed to verify OTP");
+            clearAuth();
+        } 
+    }, [handleError, clearAuth]);
+
+
+    // 🔑 Password Reset
+    const sendPasswordReset = useCallback(async (email: string): Promise<boolean> => {
+        try {
+            await authService.sendPasswordReset(email);
+            return true;
+        } catch (error) {
+            handleError(error, "Failed to send reset code");
+            clearAuth();
+            return false;
+        } 
+    }, [handleError, clearAuth]);
+
+
+    // 🔑 Reset Password
+    const resetPassword = useCallback(async (
+        email: string,
+        otp: string,
+        newPassword: string
+    ) => {
+        try {
+            await authService.resetPassword(email, otp, newPassword);
+        } catch (error) {
+            handleError(error, "Failed to reset password");
+            clearAuth();
+        } 
+    }, [handleError, clearAuth]);
+
+
+    // 🔑 Optimistic Logout
+    const logout = useCallback(async () => {
+        clearAuth();
+        setLoading(true);
+        navigate("/login");
+
+        try {
+            await authService.logout();
+        } catch (err) {
+            console.warn("Logout API failed; session cookies may already be cleared");
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    }, [clearAuth, navigate]);
+
+
+    // 🔑 Final Context Value (useMemo): Now includes loginSuccess
+    const value: AuthContextType = useMemo(() => ({
+        user,
+        token,
+        loginSuccess, // EXPOSED: Success state
+        login,
+        googleLogin,
+        register,
+        verifyOtp,
+        sendPasswordReset,
+        resetPassword,
+        logout,
+        loading,
+        isAuthenticated: !!user,
+    }), [
+        user, 
+        token, 
+        loginSuccess, 
+        loading, 
+        // Functions are stable references
+        login, googleLogin, register, verifyOtp, sendPasswordReset, resetPassword, logout
+    ]);
+
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

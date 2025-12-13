@@ -430,7 +430,7 @@ export const Legal: React.FC = () => {
                             Request Data Export
                           </h4>
                           <p className="text-sm mb-0">
-                            Contact us at <a href="mailto:contact.datapulse@gmail.com" className="font-semibold text-blue-600 hover:text-blue-700">contact.datapulse@gmail.com</a> to request a copy of your personal data in a portable format.
+                            Contact us at <a href="mailto:datapulseapp@gmail.com" className="font-semibold text-blue-600 hover:text-blue-700">datapulseapp@gmail.com</a> to request a copy of your personal data in a portable format.
                           </p>
                         </div>
                       </div>
@@ -574,10 +574,10 @@ export const Legal: React.FC = () => {
                       <div className="bg-white rounded-lg p-4 border border-blue-200">
                         <p className="text-sm text-slate-600 mb-2">Email us at:</p>
                         <a
-                          href="mailto:contact.datapulse@gmail.com"
+                          href="mailto:datapulseapp@gmail.com"
                           className="text-base font-semibold text-blue-600 hover:text-blue-700 transition-colors"
                         >
-                          contact.datapulse@gmail.com
+                          datapulseapp@gmail.com
                         </a>
                       </div>
                       <p className="mt-4 text-sm mb-0">

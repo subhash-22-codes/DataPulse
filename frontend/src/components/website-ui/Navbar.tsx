@@ -244,7 +244,7 @@ const handleItemClick = () => {
 
             <Link
               to="/register" 
-              className="group relative font-poppins inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-full overflow-hidden transition-all hover:bg-blue-700 hover:shadow-lg  active:scale-95 ring-offset-2 focus:ring-2 focus:ring-blue-600"
+              className="group relative font-poppins inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-full overflow-hidden transition-all hover:bg-blue-700 hover:shadow-lg  active:scale-95"
             >
               <span>Get Started</span>
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />

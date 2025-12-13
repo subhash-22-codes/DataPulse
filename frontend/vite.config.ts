@@ -8,12 +8,17 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
-    host: '0.0.0.0', // allow access from other devices in same WiFi
+    host: '0.0.0.0', // Allow access from other devices (like your phone)
     proxy: {
       '/api': {
-        target: 'http://localhost:8000', // your backend
+        target: 'https://datapulse-backend-5khr.onrender.com',
+        
+        //target: 'http://localhost:8000',
+
         changeOrigin: true,
         secure: false,
+        ws: true, 
+        
       },
     },
   },

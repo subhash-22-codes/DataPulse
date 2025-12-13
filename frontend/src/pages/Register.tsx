@@ -4,8 +4,7 @@ import { Activity, ArrowLeft, Mail, Lock, Eye, EyeOff, Check, BarChart3, BellRin
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
-import Lottie from 'lottie-react';
-import animationData from '../assets/animations/Data-analytics.json';
+
 const Register: React.FC = () => {
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const [email, setEmail] = useState('');
@@ -141,50 +140,69 @@ const Register: React.FC = () => {
   };
 
 // Core OTP sending logic (no event handling here)
-const sendOtp = async (isFromResend = false) => {
-  // --- THIS IS THE FIX (Part 1) ---
-  // We replace the ternary operator with a clear if/else block
-  // to satisfy the linter and improve readability.
-  if (isFromResend) {
-    setIsResending(true);
-  } else {
-    setIsLoading(true);
-  }
+// src/pages/Register.tsx (Modified Functions)
 
-  try {
-    await register(email);
-    // This is the "Honest Waiter" message we discussed
-    toast.success(
-      isFromResend
-        ? 'Request received! Your new OTP is on its way.'
-        : 'Request received! Your OTP is on its way.'
-    );
-    setStep('otp');
-    setOtp(['', '', '', '', '', '']);
-  } catch (error) {
-    console.log(error);
-    // No need for a catch block here!
-    // The error toast is now handled professionally by your AuthContext.
-  } finally {
-    // --- THIS IS THE FIX (Part 2) ---
-    // We do the same thing in the finally block for consistency.
-    if (isFromResend) {
-      setIsResending(false);
+// Core OTP sending logic (no event handling here)
+const sendOtp = async (isFromResend = false) => {
+    // 1. Set the correct loading state
+    if (!isFromResend) { 
+        setIsLoading(true);
     } else {
-      setIsLoading(false);
+        setIsResending(true);
     }
-  }
+    
+    // Set success to false initially
+    let success = false;
+
+    try {
+        // 2. Await the result from AuthContext
+        console.log("--- 📞 Calling API. Global Loading: ON");
+        success = await register(email); 
+
+        if (success) {
+            // 3. If API Succeeded, update UI and state
+            console.log("--- ✅ API Success. Setting Step to 'otp'");
+            toast.success(
+                isFromResend
+                    ? 'Request received! Your new OTP is on its way.'
+                    : 'Request received! Your OTP is on its way.'
+            );
+            
+            // 🔑 CRITICAL FIX: Only change the step on confirmed success.
+            setStep('otp');
+            setOtp(['', '', '', '', '', '']);
+            
+            // Clear email from local storage immediately to prevent conflicts
+            localStorage.removeItem('register-email'); 
+        }
+    } catch (error) {
+        // AuthContext handles the error toast, we just log it.
+        console.error("Error during OTP process:", error);
+    } finally {
+        // 4. Always reset the loading state
+        console.log("--- 🛑 Resetting local Loading state");
+        if (!isFromResend) {
+            // Add a small delay for visual feedback if the backend is ultra-fast
+            setTimeout(() => setIsLoading(false), success ? 0 : 500);
+        } else {
+            setIsResending(false);
+        }
+    }
 };
 
 // For initial form submit
-const handleSendOtp = (e: React.FormEvent) => {
-  e.preventDefault();
-  sendOtp(false);
+const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !email.includes('@')) {
+        toast.error('Please enter a valid email address.');
+        return;
+    }
+    await sendOtp(false);
 };
 
 // For resend button
 const handleResendOtp = () => {
-  sendOtp(true);
+    sendOtp(true);
 };
 
 const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -232,21 +250,22 @@ const handleVerifyOtp = async (e: React.FormEvent) => {
   return (
     <div className="min-h-screen bg-white">
       {/* Mobile Header with Branding - Only visible on mobile */}
-      <div className="lg:hidden bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-6 safe-area-top">
-        <div className="flex items-center justify-center space-x-3">
-          <div className="bg-white p-2.5 rounded-xl shadow-sm">
+     <div className="lg:hidden px-4 py-4 bg-white">
+        <div className="flex items-center space-x-1">
+          
           <img 
             src="/DPLogo2.png" 
-            alt="Datapulse Logo" 
-            className="h-6 w-6 object-contain"
+            alt="DataPulse Logo"
+            className="h-8 w-8 object-contain"
           />
-        </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">DataPulse</h1>
-            <p className="text-blue-100 text-xs">Transform data into insights</p>
+
+          <div className="flex flex-col">
+            <h1 className="text-lg font-medium text-slate-900">DataPulse</h1>
           </div>
+
         </div>
       </div>
+
 
       <div className="flex min-h-screen lg:min-h-screen">
         {/* Left Side - Registration Form (40% on desktop) */}
@@ -351,7 +370,22 @@ const handleVerifyOtp = async (e: React.FormEvent) => {
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="pl-10 sm:pl-12 pr-3 sm:pr-4 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
+                           className="
+                              pl-10 sm:pl-12 pr-3 sm:pr-4 w-full
+                              py-3 sm:py-3.5
+                              border border-slate-200
+                              rounded-xl
+                              bg-slate-50/50
+                              text-slate-900 placeholder:text-slate-400
+                              text-sm sm:text-base
+
+                              focus:bg-white
+                              focus:border-gray-500
+                              focus:outline-none
+                              focus:ring-1 focus:ring-gray-400/60
+
+                              transition-all duration-200
+                            "
                             placeholder="Enter your email address"
                           />
                         </div>
@@ -637,14 +671,6 @@ const handleVerifyOtp = async (e: React.FormEvent) => {
        {/* Right Side - Desktop Branding (60% on desktop, Hidden on mobile) */}
 <div className="hidden lg:flex lg:w-3/5 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
 
-  <div className="absolute top-3 right-3 opacity-30 pointer-events-none">
-    <Lottie
-      animationData={animationData}
-      loop
-      autoplay
-      className="w-[450px] max-w-[600px]"
-    />
-  </div>
 
   <div className="relative z-10 flex flex-col justify-center items-center text-white p-12 xl:p-16">
     

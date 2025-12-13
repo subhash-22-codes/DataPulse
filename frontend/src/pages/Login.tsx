@@ -4,8 +4,9 @@ import { Activity, Mail, Lock, Eye, EyeOff, ArrowLeft, Check, BarChart3, BellRin
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import Lottie from 'lottie-react';
-import animationData from '../assets/animations/pulse.json'; // Adjust the path as necessary
+const PulseIllustration = React.lazy(() => import('../components/website-ui/Illustrations/PulseIllustration'));
+
+
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,41 +20,46 @@ const Login: React.FC = () => {
 
   const from = location.state?.from?.pathname || '/home';
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+ // Login.tsx
+const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      navigate(from, { replace: true });
-      toast.success('Logged in successfully');
+        await login(email, password); // This now returns successfully
+        
+        // SUCCESS HANDLING (Only runs if 'await login' completes without throwing)
+        toast.success('Logged in successfully'); 
+        navigate(from, { replace: true }); // <-- Navigation now happens here
+        
     } catch (error) {
-      const err = error as { response?: { data?: { detail?: string } } };      
-      toast.error(err.response?.data?.detail || 'Login failed. Please try again.');
+       console.error("Login failed:", error);
+       
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  };
+};
 
   return (
     <div className="min-h-screen bg-white">
       {/* Mobile Header with Branding - Only visible on mobile */}
-      <div className="lg:hidden bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-6 safe-area-top">
-        <div className="flex items-center justify-center space-x-3">
-         <div className="bg-white p-2.5 rounded-xl shadow-sm">
+      <div className="lg:hidden px-4 py-4 bg-white">
+        <div className="flex items-center space-x-1">
+          
           <img 
             src="/DPLogo2.png" 
-            alt="Datapulse Logo" 
-            className="h-6 w-6 object-contain"
+            alt="DataPulse Logo"
+            className="h-8 w-8 object-contain"
           />
-        </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">DataPulse</h1>
-            <p className="text-blue-100 text-xs">Welcome back to your dashboard</p>
+
+          <div className="flex flex-col">
+            <h1 className="text-lg font-medium text-slate-900">DataPulse</h1>
           </div>
+
         </div>
       </div>
+
 
       <div className="flex min-h-screen lg:min-h-screen">
         {/* Left Side - Login Form (40% on desktop) */}
@@ -150,7 +156,7 @@ const Login: React.FC = () => {
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="pl-10 sm:pl-12 pr-3 sm:pr-4 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
+                          className="pl-10 sm:pl-12 pr-3 sm:pr-4 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-gray-400/60 focus:border-gray-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
                           placeholder="Enter your email address"
                         />
                       </div>
@@ -169,7 +175,7 @@ const Login: React.FC = () => {
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="pl-10 sm:pl-12 pr-10 sm:pr-12 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
+                          className="pl-10 sm:pl-12 pr-10 sm:pr-12 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-gray-400/60 focus:border-gray-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
                           placeholder="Enter your password"
                         />
                         <button
@@ -299,12 +305,7 @@ const Login: React.FC = () => {
 
           {/* Animated Lottie Background */}
           <div className="absolute top-3 right-3 opacity-30 pointer-events-none">
-          <Lottie
-            animationData={animationData}
-            loop
-            autoplay
-            className="w-[450px] max-w-[600px]"
-          />
+          <PulseIllustration className="w-96 h-96 lg:w-[500px] lg:h-[500px] animate-slow-spin text-white/20" />
         </div>
         {/* Overlay Gradient for Depth */}
         <div className="absolute inset-0 bg-gradient-to-t from-blue-900/50 via-transparent to-transparent"></div>

@@ -1,12 +1,10 @@
 import React, { Fragment, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Dialog, Transition } from '@headlessui/react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, LayoutGrid, Sparkles  } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Workspace } from '../types';
 import { AxiosError } from "axios";
-
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean;
@@ -15,7 +13,6 @@ interface CreateWorkspaceModalProps {
 }
 
 export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOpen, setIsOpen, onWorkspaceCreated }) => {
-  const { token } = useAuth();
   const [name, setName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
@@ -25,9 +22,8 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
     }
     setIsCreating(true);
     try {
-      const res = await api.post<Workspace>('/workspaces/', { name }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.post<Workspace>('/workspaces/', { name });
+      
       toast.success(`Workspace '${name}' created!`);
       onWorkspaceCreated(res.data);
       setName('');
@@ -38,8 +34,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
       } else {
         toast.error("Failed to create workspace.");
       }
-    }
- finally {
+    } finally {
       setIsCreating(false);
     }
   };
@@ -51,115 +46,140 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
     }
   };
 
+  const suggestions = ['Engineering', 'Q4 Marketing', 'Product Analytics', 'Sales Data'];
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
+        
+        {/* Overlay - No Blur for max performance */}
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="ease-out duration-200"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-in duration-150"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40" />
+          <div className="fixed inset-0 bg-gray-900/50 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto">
+        <div className="fixed inset-0 overflow-y-auto z-50">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
+              enterFrom="opacity-0 scale-95 translate-y-4"
+              enterTo="opacity-100 scale-100 translate-y-0"
               leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
+              leaveFrom="opacity-100 scale-100 translate-y-0"
+              leaveTo="opacity-0 scale-95 translate-y-4"
             >
-              <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-lg transition-all">
-                {/* Header */}
-                <div className="relative px-6 pt-6 pb-4">
-                  <div className="flex items-center justify-between">
-                    <Dialog.Title as="h3" className="text-lg font-semibold text-gray-900">
-                      Create New Workspace
-                    </Dialog.Title>
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all border border-gray-100">
+                
+                {/* --- HEADER --- */}
+                <div className="px-6 pt-6 pb-4 flex justify-between items-start">
+                    <div className="flex gap-4">
+                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-200 shadow-sm">
+                            <LayoutGrid className="w-5 h-5 text-gray-700" />
+                        </div>
+                        <div>
+                            <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 leading-6">
+                                New Workspace
+                            </Dialog.Title>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Create a dedicated space for your data & team.
+                            </p>
+                        </div>
+                    </div>
                     <button
-                      onClick={handleClose}
-                      disabled={isCreating}
-                      className="p-1 text-gray-400 hover:text-gray-600 rounded-md transition-colors disabled:opacity-50"
+                        type="button"
+                        className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                        onClick={handleClose}
+                        disabled={isCreating}
                     >
-                      <X className="w-5 h-5" />
+                        <X className="h-5 w-5" />
                     </button>
-                  </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Set up a new workspace to organize your projects
-                  </p>
                 </div>
 
-                {/* Content */}
-                <div className="px-6 py-6">
-                  <div>
-                    <label htmlFor="workspace-name" className="block text-sm font-medium text-gray-700 mb-2">
-                      Workspace Name
-                    </label>
-                    <input
-                      id="workspace-name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter workspace name..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500"
-                      onKeyPress={(e) => e.key === 'Enter' && !isCreating && name.trim() && handleCreate()}
-                      disabled={isCreating}
-                      autoFocus
-                    />
-                  </div>
-                  
-                  {/* Quick suggestions */}
-                  <div className="mt-4">
-                    <p className="text-xs text-gray-500 mb-2">Quick suggestions:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {['Marketing Analytics', 'Sales Dashboard', 'Product Metrics'].map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => setName(suggestion)}
-                          disabled={isCreating}
-                          className="px-2 py-1 text-xs text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
+                {/* --- BODY --- */}
+                <div className="px-6 py-2">
+                  <div className="space-y-5">
+                    
+                    {/* Input Field */}
+                    <div>
+                      <label htmlFor="workspace-name" className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        id="workspace-name"
+                        className={`block w-full rounded-xl border-gray-300 py-3 px-4 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400 sm:text-sm transition-all outline-none ${
+                          isCreating ? 'bg-gray-50 opacity-70 cursor-wait' : 'bg-white'
+                        }`}
+                        placeholder="Ex: Engineering Team"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && !isCreating && name.trim() && handleCreate()}
+                        disabled={isCreating}
+                        autoFocus
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    {/* Quick Suggestions */}
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                        <p className="text-xs font-semibold text-gray-500">Suggestions</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setName(suggestion)}
+                            disabled={isCreating}
+                            type="button"
+                            className="inline-flex items-center rounded-lg bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 hover:border-gray-300 transition-all active:scale-95"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Footer */}
-                <div className="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={handleClose}
-                      disabled={isCreating}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCreate}
-                      disabled={isCreating || !name.trim()}
-                      className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 min-w-[100px] flex items-center justify-center"
-                    >
-                      {isCreating ? (
-                        <>
-                          <Loader2 className="animate-spin w-4 h-4 mr-2" />
-                          Creating...
-                        </>
-                      ) : (
-                        'Create Workspace'
-                      )}
-                    </button>
+                {/* --- FOOTER --- */}
+                <div className="mt-6 bg-gray-50/50 px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    className="inline-flex justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none transition-all"
+                    onClick={handleClose}
+                    disabled={isCreating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-70"
+                    onClick={handleCreate}
+                    disabled={isCreating || !name.trim()}
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Create</span>
+                      </>
+                    )}
+                  </button>
                 </div>
+
               </Dialog.Panel>
             </Transition.Child>
           </div>

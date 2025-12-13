@@ -1,5 +1,5 @@
 import React, { Fragment, useState, useEffect } from "react";
-import { useAuth } from "../../context/AuthContext";
+// import { useAuth } from "../../context/AuthContext"; // Removed: Not needed
 import { api } from "../../services/api";
 import { Dialog, Transition, RadioGroup, Switch } from '@headlessui/react';
 import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText, Info, Server, User, Key, BookOpen, Lock } from "lucide-react";
@@ -19,10 +19,8 @@ interface UpdatePayload {
     is_polling_active?: boolean;
     polling_interval?: string;
     api_url?: string;
-    // --- NEW: API Authentication Fields ---
     api_header_name?: string;
     api_header_value?: string;
-    // --------------------------------------
     db_type?: string;
     db_host?: string;
     db_port?: number;
@@ -83,7 +81,7 @@ const PollingSection: React.FC<{
 
 
 export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsOpen, workspace, onUpdate, onUploadStart }) => {
-  const { token } = useAuth();
+  // 1. FIX: Removed 'token'. Not using useAuth anymore.
   const [dataSource, setDataSource] = useState(workspace.data_source || "CSV");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
@@ -91,7 +89,6 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
   const [apiUrl, setApiUrl] = useState('');
   const [pollingInterval, setPollingInterval] = useState('hourly');
   const [isPollingActive, setIsPollingActive] = useState(false);
-  // --- NEW: API Key State ---
   const [apiHeaderName, setApiHeaderName] = useState('');
   const [apiHeaderValue, setApiHeaderValue] = useState('');
   
@@ -111,7 +108,6 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
       setApiUrl(workspace.api_url || '');
       setPollingInterval(workspace.polling_interval || 'hourly');
       setIsPollingActive(workspace.is_polling_active || false);
-      // Initialize API Header Name (Value is kept secret/empty)
       setApiHeaderName(workspace.api_header_name || ''); 
       setApiHeaderValue(''); 
 
@@ -136,7 +132,6 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     if (dataSource === 'API') {
       if (!apiUrl.trim()) { setIsSaving(false); return toast.error("API URL cannot be empty."); }
       payload.api_url = apiUrl;
-      // --- Include Auth Fields if provided ---
       if (apiHeaderName.trim()) payload.api_header_name = apiHeaderName;
       if (apiHeaderValue.trim()) payload.api_header_value = apiHeaderValue;
     } 
@@ -154,8 +149,14 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
       payload.db_query = dbQuery;
     }
     try {
-      const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+      // 2. FIX: Removed headers. Cookies are sent automatically.
+      const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, payload);
+      
       onUpdate(res.data);
+      if (isPollingActive) {
+          onUploadStart(); 
+      }
+      
       toast.success("Configuration saved successfully!");
       setIsOpen(false);
     } catch (error) {
@@ -172,9 +173,18 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     const formData = new FormData();
     formData.append("file", selectedFile);
     try {
-      await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, { headers: { Authorization: `Bearer ${token}` } });
+      // 3. FIX: Removed headers from upload call.
+      await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
+          headers: {
+              'Content-Type': 'multipart/form-data',
+          }
+      });
+      
       onUploadStart();
-      const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { data_source: 'CSV', is_polling_active: false }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      // 4. FIX: Removed headers from update call.
+      const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { data_source: 'CSV', is_polling_active: false });
+      
       onUpdate(res.data);
       toast.success("Upload successful! Processing has started.");
       setIsOpen(false);

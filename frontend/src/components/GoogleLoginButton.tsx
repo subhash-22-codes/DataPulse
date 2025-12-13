@@ -6,6 +6,7 @@ import { CredentialResponse } from 'google-one-tap';
 import { AxiosError } from 'axios';
 import { Loader2, AlertCircle } from 'lucide-react';
 
+
 // A simple SVG for the Google logo
 const GoogleLogo = () => (
   <svg className="w-5 h-5" viewBox="0 0 48 48">

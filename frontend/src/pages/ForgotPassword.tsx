@@ -423,19 +423,19 @@ const ForgotPassword: React.FC = () => {
   return (
     <div className="min-h-screen bg-white">
       {/* Mobile Header with Branding - Only visible on mobile */}
-      <div className="lg:hidden bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-6 safe-area-top">
-        <div className="flex items-center justify-center space-x-3">
-        <div className="bg-white p-2.5 rounded-xl shadow-sm">
+       <div className="lg:hidden px-4 py-4 bg-white">
+        <div className="flex items-center space-x-1">
+          
           <img 
             src="/DPLogo2.png" 
-            alt="Datapulse Logo" 
-            className="h-6 w-6 object-contain"
+            alt="DataPulse Logo"
+            className="h-8 w-8 object-contain"
           />
-        </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">DataPulse</h1>
-            <p className="text-blue-100 text-xs">Secure password recovery</p>
+
+          <div className="flex flex-col">
+            <h1 className="text-lg font-medium text-slate-900">DataPulse</h1>
           </div>
+
         </div>
       </div>
 

@@ -140,7 +140,7 @@ export default function Footer() {
             <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-6">Contact</h4>
             <ul className="space-y-4">
               <li>
-                <a href="mailto:support@datapulse.com" className="flex items-start gap-3 group">
+                <a href="mailto:datapulseapp@gmail.com" className="flex items-start gap-3 group">
                   <div className="mt-1 p-1.5 rounded-md bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                     <Mail className="w-3.5 h-3.5" />
                   </div>

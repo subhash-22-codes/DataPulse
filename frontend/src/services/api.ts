@@ -1,36 +1,52 @@
 import axios from 'axios';
-import { AuthResponse, OtpResponse, VerifyOtpResponse, PasswordResetResponse } from '../types/auth';
+import { AuthResponse, OtpResponse, VerifyOtpResponse, PasswordResetResponse, User } from '../types/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
-if (!API_BASE_URL) {
-  console.error(
-    'VITE_API_BASE_URL is not defined in your .env file! Please set it to http://localhost:8000'
-  );
-}
+// 1. Point to the PROXY. 
+// Vercel/Vite will forward this to the real backend.
+const API_BASE_URL = '/api'; 
 
 export const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: API_BASE_URL,
+  // 2. CRITICAL: Allow cookies to be sent/received
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('datapulse_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// --- NO REQUEST INTERCEPTOR NEEDED ---
+// The browser attaches cookies automatically.
 
-// Handle token expiry
+
+// --- RESPONSE INTERCEPTOR (The "Silent Refresh" Logic) ---
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('datapulse_token');
-      localStorage.removeItem('datapulse_user');
-      window.location.href = '/login';
+
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Check if error is 401 (Unauthorized) and we haven't retried yet
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url.includes('/auth/login') &&
+      !originalRequest.url.includes('/auth/refresh')
+    ) {
+      originalRequest._retry = true;
+
+      try {
+        console.log("🔄 Access token expired. Attempting silent refresh...");
+        await api.post('/auth/refresh');
+        console.log("✅ Refresh successful. Retrying original request.");
+        return api(originalRequest);
+
+      } catch (refreshError) {
+        console.error("❌ Refresh failed. Allowing error to propagate for AuthContext handling.");
+
+        return Promise.reject(refreshError);
+      }
     }
+
     return Promise.reject(error);
   }
 );
@@ -44,6 +60,7 @@ export const authService = {
 
   // Email/Password Login
   async emailLogin(email: string, password: string): Promise<AuthResponse> {
+    // Note: The Backend now sets the cookies. We just get a success message.
     const response = await api.post('/auth/login-email', { email, password });
     return response.data;
   },
@@ -72,14 +89,20 @@ export const authService = {
     return response.data;
   },
 
-  // Verify token (you might want to add this endpoint to your backend)
-  async verifyToken(token: string): Promise<boolean> {
-    try {
-      api.defaults.headers.Authorization = `Bearer ${token}`;
-      // You could add a /auth/verify endpoint to your backend
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  async checkSession(): Promise<{ user: User }> {
+ // Use the new dedicated GET endpoint for a cleaner read operation.
+ const response = await api.get('/auth/session-check'); 
+ 
+ // Return the data, which we expect to be { user: {...} } from the backend.
+ return response.data;
+ 
+ // If this call fails (401), Axios will throw an error, 
+ // which the AuthContext will catch to set the state to logged out.
+ },
+
+ // 🔑 CORE FIX 2: Logout function stops forcing a full page reload
+ async logout(): Promise<void> {
+ await api.post('/auth/logout');// 🚨 REMOVED: window.location.href = '/login';  // The navigation is now handled by the AuthContext for a smoother transition.
+ },
+  
 };

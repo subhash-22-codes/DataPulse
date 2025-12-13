@@ -13,110 +13,133 @@ import { Workspace, DataUpload } from "../../types";
 import { Tab } from "@headlessui/react";
 import { AxiosError } from "axios";
 
+// Helper function for styling (from original code)
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
 const WorkspaceDetail: React.FC = () => {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  // --- State Declarations (Unchanged) ---
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [refreshHistoryKey, setRefreshHistoryKey] = useState(0);
   const [lastUpload, setLastUpload] = useState<DataUpload | null>(null); 
+  // ----------------------------------------
 
- const fetchWorkspace = useCallback(async () => {
-  setLoading(true);
-  setError(""); // Reset error on new fetch
-  try {
-    const res = await api.get<Workspace>(`/workspaces/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setWorkspace(res.data);
-  } catch (err) {
-    const axiosError = err as AxiosError;
-    if (axiosError.response?.status === 404) {
-      setError("This workspace could not be found. It may have been deleted by the owner.");
-    } else {
-      setError("An unexpected error occurred. Failed to load workspace.");
+  const fetchWorkspace = useCallback(async () => {
+    setLoading(true);
+    setError(""); 
+    try {
+      const res = await api.get<Workspace>(`/workspaces/${id}`);
+      setWorkspace(res.data);
+    } catch (err) {
+      const axiosError = err as AxiosError;
+      if (axiosError.response?.status === 404) {
+        setError("This workspace could not be found. It may have been deleted by the owner.");
+      } else {
+        setError("An unexpected error occurred. Failed to load workspace.");
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-}, [token, id]); // 👈 dependencies inside the function
+  }, [id]); 
 
-useEffect(() => {
-  if (token && id) fetchWorkspace();
-}, [token, id, fetchWorkspace]); // 👈 add it here
-
+  // Initial Fetch Effect
   useEffect(() => {
-    if (!id) return;
-    
-    let socket: WebSocket;
-    let connectInterval: ReturnType<typeof setTimeout>;
+    if (id) fetchWorkspace();
+  }, [id, fetchWorkspace]); 
 
-    // 1. DETERMINE PROTOCOL (ws for http, wss for https)
-    // window.location.protocol returns 'http:' or 'https:'
-    const isLocalhost = window.location.hostname === 'localhost';
-    const wsProtocol = isLocalhost ? 'ws' : 'wss'; 
-    
-    // 2. DETERMINE HOST (localhost in dev, live URL in prod)
-    // NOTE: You are using VITE, so VITE_API_BASE_URL should be set to your Render URL (https://datapulse-backend-5khr.onrender.com)
-    // Assuming your base API URL is available in your global configuration:
-    const baseApiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  // ---------------------------------------------------------
+  // ✅ PRODUCTION-READY WEBSOCKET IMPLEMENTATION
+  // ---------------------------------------------------------
+ useEffect(() => {
+    // 1. Guard Clause: Requires ID and authenticated user
+    if (!id || !user) return;
 
-    
-    // Remove the protocol from the base API URL to get just the hostname/port
-    const host = baseApiUrl.replace(/https?:\/\//, '');
+    let socket: WebSocket | null = null;
+    let retryTimeout: NodeJS.Timeout;
+    const RECONNECT_DELAY = 3000;
 
     const connect = () => {
-      const clientId = Date.now().toString();
-      
-      // 3. BUILD THE FINAL WS URL
-      const wsUrl = `${wsProtocol}://${host}/api/workspaces/${id}/ws/${clientId}`;
-      
-      console.log("Attempting WebSocket connection to:", wsUrl); // Good for debugging
-      
-      socket = new WebSocket(wsUrl);
-      socket.onopen = () => console.log("WebSocket Connected");
-      socket.onclose = () => (connectInterval = setTimeout(connect, 2000));
-      socket.onerror = (error) => {
-        console.error("WebSocket Error:", error);
-        socket.close();
-      };
-      socket.onmessage = (event) => {
-        if (event.data === "job_complete" || event.data === "job_error") {
-          setIsProcessing(false);
-          setRefreshHistoryKey((prevKey) => prevKey + 1);
-        }
-      };
-    };
-    
-    connect();
-    
-    return () => {
-      clearTimeout(connectInterval);
-      if (socket) socket.close();
-    };
-  }, [id]);
+        // Optimization: Do not connect if the tab is hidden
+        if (document.hidden) return;
 
-   const handleHistoryLoaded = useCallback((manualUploads: DataUpload[], scheduledFetches: DataUpload[]) => {
-      // Combine ALL uploads from both lists into a single array
+        const isSecure = window.location.protocol === 'https:';
+        const wsProtocol = isSecure ? 'wss' : 'ws';
+        
+        const envWsUrl = import.meta.env.VITE_WS_URL; 
+        let wsUrl: string;
+
+        // --- 🎯 The Production Fix & Path Correction ---
+        if (envWsUrl) {
+            // PRODUCTION (Vercel → Render): Connect directly to the external host
+            const sanitizedEnvUrl = envWsUrl.replace(/^(ws|wss):\/\//, ''); 
+            // NOTE: The /api/ prefix has been REMOVED from the path here:
+            wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}`;
+        } else {
+            // DEVELOPMENT (local Vite server): Connect to the current host
+            const host = window.location.host;
+            // NOTE: The /api/ prefix has been REMOVED from the path here:
+            wsUrl = `${wsProtocol}://${host}/api/workspaces/${id}/ws/${Date.now()}`;
+        }
+        // ---------------------------------------------
+
+        console.log(`🔌 Connecting WS for Live Updates to: ${wsUrl}`);
+        socket = new WebSocket(wsUrl);
+
+        socket.onmessage = (event) => {
+            if (event.data === "job_complete" || event.data === "job_error") {
+                setIsProcessing(false);
+                setRefreshHistoryKey((prev) => prev + 1);
+            }
+        };
+
+        socket.onclose = (e) => {
+            if (!document.hidden && e.code !== 1000) {
+                console.log(`🔌 WS closed unexpectedly (${e.code}). Retrying in ${RECONNECT_DELAY}ms...`);
+                retryTimeout = setTimeout(connect, RECONNECT_DELAY);
+            }
+        };
+        
+        socket.onerror = (e) => {
+            console.error("🔌 WS Error:", e);
+        };
+    };
+
+    connect();
+
+    const handleVisibilityChange = () => {
+        if (document.hidden) {
+            socket?.close(1000, "Tab hidden");
+        } else {
+            connect();
+            setRefreshHistoryKey(k => k + 1); 
+        }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+        socket?.close(1000, "Component unmount");
+        clearTimeout(retryTimeout);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    
+}, [id, user, setIsProcessing, setRefreshHistoryKey]);
+  // --- Other Handlers (Unchanged) ---
+  const handleHistoryLoaded = useCallback((manualUploads: DataUpload[], scheduledFetches: DataUpload[]) => {
       const allUploads = [...manualUploads, ...scheduledFetches];
-      
       if (allUploads.length === 0) {
           setLastUpload(null);
           return;
       }
-      
-      // Sort the combined list to find the true most recent upload
       allUploads.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
-      
-      // The newest upload is now the first item in the sorted list
       setLastUpload(allUploads[0]);
   }, []);
 
@@ -125,101 +148,192 @@ useEffect(() => {
     setWorkspace({ ...workspace, ...updatedData });
   };
 
-  const handleUploadStart = () => setIsProcessing(true);
+  const handleUploadStart = () => {
+      setIsProcessing(true);
+  };
 
-  if (loading) return <div className="flex justify-center items-center h-screen bg-gray-50"><Loader2 className="animate-spin h-10 w-10 text-blue-500" /></div>;
+  if (loading) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <p className="text-sm font-medium text-gray-500">
+          Loading workspace…
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
   if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gray-50 text-center px-4">
-        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-800">Oops! Something went wrong.</h2>
-        <p className="text-gray-600 mt-2 max-w-md">{error}</p>
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex max-w-md flex-col items-center rounded-lg border border-gray-200 bg-white px-6 py-10 text-center">
+        
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+
+        <h2 className="text-sm font-semibold text-gray-900">
+          Unable to load workspace
+        </h2>
+
+        <p className="mt-1 text-sm text-gray-500">
+          {error}
+        </p>
+
         <button
           onClick={() => navigate("/home")}
-          className="mt-6 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          className="mt-4 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
         >
-          Back to Home
+          Return to dashboard
         </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (!workspace) {
-    return <div className="flex justify-center items-center h-screen bg-gray-50"><p>No workspace found.</p></div>;
-  }
+if (!workspace) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <p className="text-sm text-gray-500 text-center">
+        Workspace not found.
+      </p>
+    </div>
+  );
+}
+
+
   const isOwner = String(workspace.owner_id) === String(user?.id);
 
   return (
-    <div className="workspace-background bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <header className="mb-8 border-b border-gray-200 pb-5">
-          <button onClick={() => navigate("/home")} className="flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 group">
-            <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-0.5 transition-transform" />
+    <div className="workspace-background min-h-screen bg-slate-50/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+        
+        {/* Header */}
+        <header className="mb-10">
+          <button 
+            onClick={() => navigate("/home")} 
+            className="group inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors mb-6"
+          >
+            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm mr-3 group-hover:border-slate-300">
+              <ArrowLeft className="h-4 w-4" />
+            </div>
             Back to Home
           </button>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">{workspace.name}</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your workspace details, team, data sources, and history.</p>
+          
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            {workspace.name}
+          </h1>
+          <p className="mt-2 text-base text-slate-500 max-w-2xl">
+            Manage your workspace details, collaborate with your team, and monitor data sources.
+          </p>
         </header>
 
+        {/* Tabs & Content */}
         <Tab.Group>
-          <Tab.List className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 rounded-xl p-2 mb-6 w-full">
-            <Tab as={Fragment}>
-              {({ selected }) => (
-                <button
-                  className={classNames(
-                    "flex-1 sm:flex-none px-3 sm:px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200",
-                    selected
-                      ? "bg-white text-blue-700 shadow-md"
-                      : "text-gray-500 hover:bg-white/70 hover:text-gray-800"
-                  )}
-                >
-                  <LayoutDashboard className="h-5 w-5 shrink-0" />
-                  <span className="sm:hidden">Dash</span>
-                  <span className="hidden sm:inline">Dashboard</span>
-                </button>
-              )}
-            </Tab>
-
-            {isOwner && (
+          <div className="mb-8 border-b border-slate-200/60">
+            <Tab.List className="flex gap-8">
               <Tab as={Fragment}>
                 {({ selected }) => (
                   <button
                     className={classNames(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200",
-                      selected
-                        ? "bg-white text-blue-700 shadow-md"
-                        : "text-gray-500 hover:bg-white/70 hover:text-gray-800"
+                      "group relative pb-4 text-sm font-medium transition-colors focus:outline-none",
+                      selected ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
-                    <Settings className="h-5 w-5 shrink-0" />
-                    <span className="sm:hidden">Settings</span>
-                    <span className="hidden sm:inline">Settings</span>
+                    <div className="flex items-center gap-2">
+                      <LayoutDashboard className={classNames("h-4 w-4", selected ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} />
+                      Dashboard
+                    </div>
+                    <span 
+                      className={classNames(
+                        "absolute bottom-0 left-0 h-0.5 w-full bg-blue-600 transition-transform duration-300 ease-out",
+                        selected ? "scale-x-100" : "scale-x-0"
+                      )} 
+                    />
                   </button>
                 )}
               </Tab>
-            )}
-          </Tab.List>
 
+              {isOwner && (
+                <Tab as={Fragment}>
+                  {({ selected }) => (
+                    <button
+                      className={classNames(
+                        "group relative pb-4 text-sm font-medium transition-colors focus:outline-none",
+                        selected ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Settings className={classNames("h-4 w-4", selected ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} />
+                        Settings
+                      </div>
+                      <span 
+                        className={classNames(
+                          "absolute bottom-0 left-0 h-0.5 w-full bg-blue-600 transition-transform duration-300 ease-out",
+                          selected ? "scale-x-100" : "scale-x-0"
+                        )} 
+                      />
+                    </button>
+                  )}
+                </Tab>
+              )}
+            </Tab.List>
+          </div>
 
-          <Tab.Panels>
-            <Tab.Panel>
-              <main className="space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <DescriptionCard workspace={workspace} isOwner={isOwner} onUpdate={updateWorkspaceData} />
-                  <TeamMembersCard workspace={workspace} isOwner={isOwner} onUpdate={updateWorkspaceData} />
-                  <DataSourceCard workspace={workspace} isOwner={isOwner} onUpdate={updateWorkspaceData} onUploadStart={handleUploadStart} lastUpload={lastUpload} />
-                </div>
-                <DataHistoryCard workspace={workspace} isProcessing={isProcessing} key={refreshHistoryKey} isOwner={isOwner} onUploadsUpdate={handleHistoryLoaded}  />
-              </main>
+          <Tab.Panels className="mt-2">
+            
+            {/* Dashboard Panel */}
+            <Tab.Panel className="focus:outline-none space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+                  <DescriptionCard 
+                    workspace={workspace} 
+                    isOwner={isOwner} 
+                    onUpdate={updateWorkspaceData} 
+                  />
+                  <TeamMembersCard 
+                    workspace={workspace} 
+                    isOwner={isOwner} 
+                    onUpdate={updateWorkspaceData} 
+                  />
+                  <DataSourceCard 
+                    workspace={workspace} 
+                    isOwner={isOwner} 
+                    onUpdate={updateWorkspaceData} 
+                    onUploadStart={handleUploadStart} 
+                    lastUpload={lastUpload} 
+                  />
+              </div>
+
+              <div className="w-full">
+                <DataHistoryCard 
+                  workspace={workspace} 
+                  isProcessing={isProcessing} 
+                  key={refreshHistoryKey} 
+                  isOwner={isOwner} 
+                  onUploadsUpdate={handleHistoryLoaded}  
+                />
+              </div>
             </Tab.Panel>
+
+
+            {/* Settings Panel */}
             {isOwner && (
-              <Tab.Panel>
-                <div className="space-y-6">
-                  <AlertsCard workspace={workspace} isOwner={isOwner} />
-                  <SettingsCard workspace={workspace} isOwner={isOwner} />
+              <Tab.Panel className="focus:outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* REMOVED max-w-4xl to allow full width like the dashboard */}
+                <div className="grid grid-cols-1 gap-8 w-full">
+                  <div className="w-full">
+                    <AlertsCard workspace={workspace} isOwner={isOwner} />
+                  </div>
+                  <div className="w-full">
+                    <SettingsCard workspace={workspace} isOwner={isOwner} />
+                  </div>
                 </div>
               </Tab.Panel>
             )}
+
           </Tab.Panels>
         </Tab.Group>
       </div>

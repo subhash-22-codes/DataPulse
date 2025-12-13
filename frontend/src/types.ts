@@ -63,6 +63,8 @@ export interface Workspace {
   db_name?: string;
   db_query?: string;
   description_last_updated_at?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 // In src/types.ts
