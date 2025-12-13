@@ -31,6 +31,7 @@ DUMMY_HASH = "$2b$12$R.Sj9u7W9mD1jK3pI5oE3tY4n0X8zV6vB4aM7hL2cO0fP1qA3rI7l"
 logger = logging.getLogger(__name__)
 APP_MODE = os.getenv("APP_MODE", "development")
 
+
 # --- SMART SWITCH: Task Dispatcher ---
 if APP_MODE == "production":
     logger.info("🚀 Auth running in PRODUCTION mode. Using asyncio tasks.")
@@ -133,15 +134,13 @@ def create_tokens_and_set_cookies(response: Response, user: User, db: Session):
     db.add(new_refresh_token)
     db.commit()
 
-    # 4. Set HttpOnly Cookies
-    # Note: samesite="lax" works because we use the Vercel/Vite Proxy.
-    
+    # 4. Set HttpOnly Cookies    
     response.set_cookie(
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,
         secure=True, 
-        samesite="lax",
+        samesite="none",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
@@ -150,7 +149,7 @@ def create_tokens_and_set_cookies(response: Response, user: User, db: Session):
         value=refresh_token_str,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
 
@@ -339,7 +338,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         value=f"Bearer {new_access_token}",
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
     return {"message": "Token refreshed"}
