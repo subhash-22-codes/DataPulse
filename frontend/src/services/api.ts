@@ -3,11 +3,10 @@ import { AuthResponse, OtpResponse, VerifyOtpResponse, PasswordResetResponse, Us
 
 // 1. Point to the PROXY. 
 // Vercel/Vite will forward this to the real backend.
-const API_BASE_URL = '/api'; 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  // 2. CRITICAL: Allow cookies to be sent/received
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
