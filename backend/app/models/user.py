@@ -17,6 +17,8 @@ class User(Base):
     otp_code = Column(String(6), nullable=True)
     otp_expiry = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    delete_confirmation_otp = Column(String(6), nullable=True)
+    delete_confirmation_expiry = Column(DateTime, nullable=True)
 
     # Relationships
     workspaces = relationship(
@@ -30,4 +32,10 @@ class User(Base):
         "Workspace",
         secondary="workspace_team",
         back_populates="team_members"
+    )
+    
+    refresh_tokens = relationship(
+        "RefreshToken", 
+        back_populates="user", 
+        cascade="all, delete-orphan"
     )

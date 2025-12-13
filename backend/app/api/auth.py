@@ -9,7 +9,7 @@ import string
 from typing import Optional
 
 # FastAPI & Pydantic
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Response, status
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 
 # Database & Auth
@@ -20,9 +20,13 @@ from google.auth.transport import requests as google_requests
 
 # App Modules
 from app.models.user import User
+from app.models.token import RefreshToken 
 from app.core.database import get_db
 from .dependencies import limiter
+from app.api.dependencies import get_current_user 
 
+
+DUMMY_HASH = "$2b$12$R.Sj9u7W9mD1jK3pI5oE3tY4n0X8zV6vB4aM7hL2cO0fP1qA3rI7l"
 # --- Setup ---
 logger = logging.getLogger(__name__)
 APP_MODE = os.getenv("APP_MODE", "development")
@@ -44,6 +48,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = 15  # Security Standard
+REFRESH_TOKEN_EXPIRE_DAYS = 7     # Convenience Standard
 
 # --- Helper: Secure OTP Generation ---
 def generate_otp(length=6):
@@ -88,19 +94,73 @@ class ResetPasswordRequest(BaseModel):
 
 # --- Response Schemas ---
 class AuthResponse(BaseModel):
-    token: str # <--- CHANGED BACK TO 'token' TO FIX FRONTEND
+    message: str
     user: dict 
+    # NOTICE: No 'token' here anymore! It's in the cookie.
     
 class OtpResponse(BaseModel):
     msg: str
 
 # ==========================
-#  Routes
+#   INTERNAL HELPER (DRY)
+# ==========================
+def create_tokens_and_set_cookies(response: Response, user: User, db: Session):
+    """
+    Generates Access/Refresh tokens, saves Refresh to DB, and sets HttpOnly cookies.
+    Used by both Login and Google Auth.
+    """
+    # 1. Access Token (JWT) - Short Lived
+    expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_payload = {
+        "sub": str(user.id), 
+        "user_id": str(user.id),
+        "email": user.email, 
+        "auth_type": user.auth_type, 
+        "type": "access",
+        "exp": expiration
+    }
+    access_token = jwt.encode(access_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    # 2. Refresh Token (UUID) - Long Lived
+    refresh_token_str = str(uuid.uuid4())
+
+    # 3. Save Refresh Token to DB
+    new_refresh_token = RefreshToken(
+        token=refresh_token_str,
+        user_id=user.id,
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    db.add(new_refresh_token)
+    db.commit()
+
+    # 4. Set HttpOnly Cookies
+    # Note: samesite="lax" works because we use the Vercel/Vite Proxy.
+    
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        secure=True, 
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token_str,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    )
+
+# ==========================
+#   Routes
 # ==========================
 
 @router.post("/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
-def google_login(request: Request, req: GoogleLoginRequest, db: Session = Depends(get_db)):
+def google_login(response: Response, request: Request, req: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
         idinfo = id_token.verify_oauth2_token(req.token, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo.get('email')
@@ -118,16 +178,18 @@ def google_login(request: Request, req: GoogleLoginRequest, db: Session = Depend
             user = User(email=email, name=name, auth_type="google", is_verified=True)
             db.add(user); db.commit(); db.refresh(user)
 
-        # Use UTC for token expiration
-        expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
-        payload = {"user_id": str(user.id), "email": user.email, "auth_type": user.auth_type, "exp": expiration}
-        token_jwt = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        # --- CHANGED: Use Helper to set Cookies ---
+        create_tokens_and_set_cookies(response, user, db)
         
-        # --- FIX: Return 'token' instead of 'access_token' ---
-        return {"token": token_jwt, "user": {"id": str(user.id), "email": user.email, "name": user.name}}
+        return {
+            "message": "Login successful",
+            "user": {"id": str(user.id), "email": user.email, "name": user.name}
+        }
 
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid Google token")
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Google login error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -189,24 +251,115 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
 
 @router.post("/login-email", response_model=AuthResponse)
 @limiter.limit("10/minute") 
-def login_email(request: Request, req: LoginEmailRequest, db: Session = Depends(get_db)):
+def login_email(response: Response, request: Request, req: LoginEmailRequest, db: Session = Depends(get_db)):
     logger.info(f"Login attempt for {req.email}")
+    
+    # Define the generic authentication error response
+    auth_error = HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # 1. Look up the user
     user = db.query(User).filter(User.email == req.email).first()
     
-    auth_error = HTTPException(status_code=401, detail="Invalid email or password")
+    # 2. Handle User Not Found (Timing Attack Prevention)
+    if not user:
+        # NOTE: This block is crucial. If user is None, you must stop execution here.
+        # Dummy check to simulate time taken for security (using your valid DUMMY_HASH)
+        try:
+            bcrypt.verify("fake", DUMMY_HASH) 
+        except Exception:
+            pass # Ignore errors, the purpose is time consumption
+        
+        raise auth_error  # <-- CRITICAL FIX: Raise the error and exit the function
 
-    if not user: raise auth_error
-    if not user.is_verified: raise HTTPException(status_code=403, detail="Email not verified.")
-    if not user.password_hash or not bcrypt.verify(req.password, user.password_hash): raise auth_error
+    # --- Execution continues only if 'user' is NOT None ---
 
-    expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
-    payload = {"user_id": str(user.id), "email": user.email, "auth_type": "email", "exp": expiration}
-    token_jwt = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    
+    # 3. Handle Unverified User (Optional, but recommended)
+    if not user.is_verified: 
+        raise HTTPException(status_code=403, detail="Email not verified.")
+        
+    # 4. Handle Password Verification
+    if not user.password_hash or not bcrypt.verify(req.password, bcrypt.normhash(user.password_hash)): 
+        raise auth_error
+
     logger.info(f"✅ User {req.email} logged in successfully.")
     
-    # --- FIX: Return 'token' instead of 'access_token' ---
-    return {"token": token_jwt, "user": {"id": str(user.id), "email": user.email, "name": user.name}}
+    # ... rest of your successful login logic ...
+    create_tokens_and_set_cookies(response, user, db)
+    
+    return {
+        "message": "Login successful",
+        "user": {"id": str(user.id), "email": user.email, "name": user.name}
+    }
+#Check session for refresh token
+@router.get("/session-check")
+def check_session(current_user: User = Depends(get_current_user)):
+    """
+    Checks for a valid access_token cookie using the dependency.
+    If valid, returns the user object (HTTP 200 OK).
+    If invalid, the dependency raises a 401 error.
+    """
+    # The 'current_user' is guaranteed to be a valid, authenticated user object here.
+    return {"user": current_user}
+
+# --- NEW: Refresh Endpoint ---
+@router.post("/refresh")
+def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    refresh_token_str = request.cookies.get("refresh_token")
+    if not refresh_token_str:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+
+    db_token = db.query(RefreshToken).filter(
+        RefreshToken.token == refresh_token_str,
+        RefreshToken.revoked == False
+    ).first()
+
+    if not db_token:
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if db_token.expires_at < datetime.datetime.now():
+        raise HTTPException(status_code=401, detail="Token expired")
+
+    # Issue NEW Access Token
+    user = db_token.user
+    expiration = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": str(user.id), 
+        "user_id": str(user.id),
+        "email": user.email, 
+        "auth_type": user.auth_type, 
+        "type": "access",
+        "exp": expiration
+    }
+    new_access_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {new_access_token}",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    return {"message": "Token refreshed"}
+
+# --- NEW: Logout Endpoint ---
+@router.post("/logout")
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    refresh_token_str = request.cookies.get("refresh_token")
+    
+    if refresh_token_str:
+        db_token = db.query(RefreshToken).filter(RefreshToken.token == refresh_token_str).first()
+        if db_token:
+            db.delete(db_token)
+            db.commit()
+    
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    
+    return {"message": "Logged out"}
+
 
 @router.post("/send-password-reset")
 @limiter.limit("5/minute")
@@ -251,5 +404,10 @@ def reset_password(request: Request, req: ResetPasswordRequest, db: Session = De
 
     user.password_hash = bcrypt.hash(req.new_password)
     user.otp_code = None; user.otp_expiry = None; user.is_verified = True
+    
+    # --- SECURITY UPGRADE: Kill all active sessions ---
+    # Since they reset the password, we should force logout everywhere.
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+    
     db.commit()
-    return {"msg": "Password has been reset successfully"}
+    return {"msg": "Password has been reset successfully. Please login again."}

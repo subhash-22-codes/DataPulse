@@ -1,5 +1,7 @@
 import os
 import uuid
+import random
+from datetime import datetime, timedelta
 import logging
 from datetime import datetime
 from typing import List, Optional
@@ -8,18 +10,20 @@ import asyncio
 from fastapi import (
     APIRouter, Depends, HTTPException, Header, UploadFile, 
     File, WebSocket, WebSocketDisconnect, Query, Response, 
-    BackgroundTasks
+    BackgroundTasks, status
 )
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict, HttpUrl
 
 # Database & Models
 from sqlalchemy.orm import Session, joinedload, defer
 from sqlalchemy import func, or_
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload
 from app.models.alert_rule import AlertRule
+from app.services.email_service import send_delete_otp_email
+from app.models.notification import Notification
 
 # Services & Managers
 from app.api.alerts import AlertRuleResponse 
@@ -94,6 +98,8 @@ class WorkspaceResponse(BaseModel):
     db_user: str | None = None
     db_name: str | None = None
     db_query: str | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -162,6 +168,9 @@ class TrendDataPoint(BaseModel):
 class TrendResponse(BaseModel):
     column_name: str
     data: List[TrendDataPoint]
+    
+class DeleteConfirmation(BaseModel):
+    otp: str
 # ==========================
 #  Routes
 # ==========================
@@ -196,10 +205,25 @@ def list_workspaces(current_user: User = Depends(get_current_user), db: Session 
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
     ).filter(
-        Workspace.owner_id == current_user.id
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False
     ).all()
     
     return workspaces
+
+@router.get("/trash", response_model=List[WorkspaceResponse]) # Ensure response_model matches your schema
+def get_trash(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch only the workspaces that have been soft-deleted.
+    """
+    return db.query(Workspace).filter(
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == True  # <--- Only fetch deleted ones
+    ).all()
+
 
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
 def get_workspace(workspace_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -214,7 +238,8 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
     ).filter(
-        Workspace.id == ws_uuid
+        Workspace.id == ws_uuid,
+        Workspace.is_deleted == False
     ).first()
     
     if not workspace:
@@ -231,11 +256,11 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
         
     return workspace
 
-
 @router.put("/{workspace_id}", response_model=WorkspaceResponse)
 async def update_workspace(
     workspace_id: str, 
     workspace_update: WorkspaceUpdate, 
+    background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
@@ -245,7 +270,6 @@ async def update_workspace(
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
     
     # 1. Fetch Workspace
-    # We need the object to update it, so fetching full object is okay here.
     db_workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     
     if not db_workspace:
@@ -255,14 +279,33 @@ async def update_workspace(
     if db_workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this workspace")
     
+    # Extract only the fields that were set by the client
     update_data = workspace_update.model_dump(exclude_unset=True)
     
+    # --- ⭐ NEW: CONFIG CHANGE TRACKING ---
+    # Define fields that, if changed, warrant an immediate data fetch/connection test.
+    data_source_fields = {
+        "data_source",
+        "api_url",
+        "api_header_name",
+        "api_header_value",
+        "db_host",
+        "db_port",
+        "db_user",
+        "db_password",
+        "db_name",
+        "db_query",
+        "polling_interval",
+    }
+    
+    # Check if any data source configuration field is present in the update payload
+    config_changed = any(field in update_data for field in data_source_fields)
+    # --- END NEW LOGIC ---
+
     # 3. Optimized "Smart GPS" Logic (Clear incompatible fields)
     if 'data_source' in update_data:
         new_source = update_data['data_source']
         
-        # Helper list of fields to clear for each type
-        # (This is cleaner than the massive if/elif block)
         db_fields = ['db_host', 'db_port', 'db_user', 'db_password', 'db_name', 'db_query']
         api_fields = ['api_url', 'api_header_name', 'api_header_value']
         
@@ -273,43 +316,58 @@ async def update_workspace(
             for field in api_fields: setattr(db_workspace, field, None)
             
         elif new_source == 'CSV':
-            # Clear ALL remote connection fields
             for field in db_fields + api_fields: setattr(db_workspace, field, None)
             db_workspace.is_polling_active = False
 
     if "description" in update_data:
         db_workspace.description_last_updated_at = datetime.utcnow()
 
-    # 4. Optimized Team Member Update (Batch Query)
+    # 4. Optimized Team Member Update (Logic remains the same)
     if "team_member_emails" in update_data:
         emails: list[str] = update_data.pop("team_member_emails")
-        
-        # Fetch ALL valid users in ONE query (No loop!)
         valid_users = db.query(User).filter(User.email.in_(emails)).all()
         valid_emails = {user.email for user in valid_users}
         
-        # Check for missing users
         for email in emails:
             if email not in valid_emails:
-                 raise HTTPException(status_code=400, detail=f"User with email '{email}' is not a registered user on DataPulse.")
+                raise HTTPException(status_code=400, detail=f"User '{email}' is not registered.")
 
-        # Update the relationship
         new_team_members = [u for u in valid_users if u.id != current_user.id]
-        
         db_workspace.team_members.clear()
         db_workspace.team_members.extend(new_team_members)
 
     # 5. Apply generic updates
     for key, value in update_data.items():
-        # FIX: Convert Pydantic HttpUrl objects to strings for the database
         if key == 'api_url' and value is not None:
             value = str(value)
-            
         setattr(db_workspace, key, value)
     
     db.commit()
     db.refresh(db_workspace)
+
+    
+    # 6. ✅ CONNECT-ON-DEMAND TRIGGER (FIXED LOGIC)
+    # Trigger fetch ONLY if config changed, and it's an API/DB source with active polling.
+    
+    should_trigger_fetch = (
+        config_changed and # <--- NEW CRITICAL CONDITION
+        db_workspace.data_source in ["API", "DB"] and 
+        db_workspace.is_polling_active is True 
+    )
+
+    if should_trigger_fetch:
+        # We assume APP_MODE check matches your logic
+        if APP_MODE == "production":
+            # Import inside function to avoid circular dependency
+            from app.services.tasks import process_data_fetch_task 
+            
+            loop = asyncio.get_event_loop()
+            
+            # Pass the ID and the Loop
+            background_tasks.add_task(process_data_fetch_task, str(db_workspace.id), loop)
+
     return db_workspace
+
 
 @router.get("/team/", response_model=List[WorkspaceResponse])
 def get_team_workspaces(
@@ -325,7 +383,8 @@ def get_team_workspaces(
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
     ).filter(
-        Workspace.team_members.any(User.id == current_user.id)
+        Workspace.team_members.any(User.id == current_user.id),
+        Workspace.is_deleted == False
     ).all()
 
 
@@ -490,106 +549,249 @@ def get_trend_data(
 # ===================================================
 #  NEW: WebSocket Endpoint for Real-time Updates
 # ===================================================
+# REMOVE 'db: Session = Depends(get_db)' from here 
 @router.websocket("/{workspace_id}/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, workspace_id: str, client_id: str):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    workspace_id: str, 
+    client_id: str
+):
     """
-    Handles real-time WebSocket connections.
-    Optimized with keep-alive heartbeat and robust disconnect handling.
+    Handles real-time WebSocket connections with 'Auth & Release' pattern
+    to prevents DB connection leaks.
     """
-    await manager.connect(workspace_id, websocket)
-    
+    # 1. Manually Open Session
+    db = SessionLocal() 
+    user_id_str = None
+
     try:
-        if APP_MODE == "production":
-            logger.info(f"WS Connected: {client_id} -> {workspace_id} (PROD)")
-            
-            # Optimization: Simple Keep-Alive Loop
-            # This prevents Render/Load Balancers from killing idle connections.
-            while True:
-                # Wait for a message (like a ping from client)
-                # If no message comes, we just wait.
-                # Ideally, the client should send a 'ping' every 30s to keep this active.
-                data = await websocket.receive_text()
-                
-                # Optional: Respond to pings
-                if data == "ping":
-                    await websocket.send_text("pong")
-                    
-        else:
-            # DEV Mode: Redis Subscription
-            logger.info(f"WS Connected: {client_id} -> {workspace_id} (DEV - Redis)")
-            redis_url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-            
-            r = await aioredis.from_url(redis_url, decode_responses=True)
-            pubsub = r.pubsub()
-            await pubsub.subscribe(f"workspace:{workspace_id}")
-            
-            # We use a task to listen to Redis so we can also listen for client disconnects
-            async def redis_listener():
-                async for message in pubsub.listen():
-                    if message['type'] == 'message':
-                        await manager.broadcast_to_workspace(workspace_id, message['data'])
+        # Mock request for auth
+        mock_scope = websocket.scope.copy()
+        mock_scope["type"] = "http"
+        mock_scope["method"] = "GET"
+        from fastapi import Request
+        mock_request = Request(mock_scope)
+        
+        # Authenticate
+        from app.api.dependencies import get_current_user
+        user = get_current_user(mock_request, db)
+        user_id_str = str(user.id)
+        
+    except Exception as e:
+        logger.warning(f"WS authentication failed: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        # Ensure DB is closed even on auth failure
+        db.close()
+        return
 
-            # Run listener in background
-            listener_task = asyncio.create_task(redis_listener())
-            
-            try:
-                while True:
-                    # Keep main loop alive to detect client disconnect
-                    data = await websocket.receive_text()
-                    if data == "ping":
-                        await websocket.send_text("pong")
-            finally:
-                # Clean up Redis listener when client disconnects
-                listener_task.cancel()
-                await pubsub.unsubscribe(f"workspace:{workspace_id}")
-                await r.close()
+    # 🟢 CRITICAL: Close the DB connection NOW.
+    # We are done with the DB. We don't need it for the long-running loop.
+    db.close() 
 
+    # 2. Accept connection (Zero DB usage from here on)
+    await websocket.accept()
+    
+    # We register using the ID string we saved, not the DB object
+    await manager.connect('workspace', workspace_id, websocket)
+    await manager.connect('user', user_id_str, websocket)
+    
+    logger.info(f"WS Connected: User {user_id_str} -> Workspace {workspace_id} (Client {client_id})")
+
+    # 3. Keep-alive loop
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         logger.info(f"WS Disconnected: {client_id}")
     except Exception as e:
         logger.error(f"WS Error {client_id}: {e}", exc_info=True)
     finally:
-        # Guaranteed cleanup
-        manager.disconnect(workspace_id, websocket)
+        # 4. Cleanup
+        if user_id_str:
+            manager.disconnect('workspace', workspace_id, websocket)
+            manager.disconnect('user', user_id_str, websocket)
         
-@router.delete("/{workspace_id}", status_code=204)
-def delete_workspace(
+# --- ENDPOINT 1: Request the Code ---
+# ... existing imports ...
+# Ensure you have HTTPException imported with status_code 429
+# from fastapi import HTTPException, status
+
+@router.post("/{workspace_id}/request-delete-otp", status_code=200)
+async def request_delete_otp(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Deletes a workspace and all associated data.
-    Only the owner of the workspace can perform this action.
+    Step 1: Verify ownership, check rate limit, generate OTP, and send email.
     """
-    try:
-        ws_uuid = uuid.UUID(workspace_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+    # --- 1. NEW: RATE LIMIT CHECK (Prevent Spam) ---
+    OTP_DURATION_MINUTES = 10
+    COOLDOWN_SECONDS = 60
 
-    # 1. Optimization: Lean Query + Security in ONE step
-    # We query for the workspace AND check ownership at the same time.
-    # This prevents us from even loading the object if the user isn't the owner.
+    if current_user.delete_confirmation_expiry:
+        time_until_expiry = (current_user.delete_confirmation_expiry - datetime.utcnow()).total_seconds()
+
+        # If expiry > 9 minutes left => sent within last 60 seconds
+        if time_until_expiry > (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS):
+            retry_after = int(time_until_expiry - (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS))
+            raise HTTPException(
+                status_code=429,
+                detail=f"Please wait {retry_after} seconds before requesting a new code."
+            )
+
+
+    ws_uuid = uuid.UUID(workspace_id)
+    
+    # 2. Find Workspace (Ensure it's not already deleted)
+    workspace = db.query(Workspace).filter(
+        Workspace.id == ws_uuid,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False
+    ).first()
+
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found or access denied.")
+
+    # 3. Generate 6-digit OTP
+    otp = f"{random.randint(100000, 999999)}"
+    
+    # 4. Save to User Model
+    current_user.delete_confirmation_otp = otp
+    # IMPORTANT: Keep this consistent with the OTP_DURATION_MINUTES above
+    current_user.delete_confirmation_expiry = datetime.utcnow() + timedelta(minutes=OTP_DURATION_MINUTES)
+    db.commit()
+
+    # 5. Send Email (Async)
+    await send_delete_otp_email(current_user.email, otp, workspace.name)
+    
+    return {"message": "OTP sent to your email."}
+
+
+# --- ENDPOINT 2: Confirm and Delete ---
+@router.delete("/{workspace_id}/confirm", status_code=204)
+async def confirm_delete_workspace(
+    workspace_id: str,
+    payload: DeleteConfirmation,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # --- 1. VERIFY OTP (Updated to use NEW columns) ---
+    # We explicitly check delete_confirmation_otp, IGNORING the password otp_code
+    if not current_user.delete_confirmation_otp or current_user.delete_confirmation_otp != payload.otp:
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+        
+    if not current_user.delete_confirmation_expiry or datetime.utcnow() > current_user.delete_confirmation_expiry:
+        raise HTTPException(status_code=400, detail="Verification code has expired.")
+
+    # 2. Find Workspace (Logic Unchanged)
+    ws_uuid = uuid.UUID(workspace_id)
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id
     ).first()
 
     if not workspace:
-        # 2. Security: Ambiguous Error
-        # If the workspace doesn't exist OR the user isn't the owner, return 404.
-        # This prevents attackers from fishing for valid workspace IDs.
-        raise HTTPException(status_code=404, detail="Workspace not found or access denied.")
+        raise HTTPException(status_code=404, detail="Workspace not found.")
 
-    # 3. Delete
-    # ON DELETE CASCADE in your database models handles the cleanup of
-    # uploads, notifications, and team members automatically.
+    # 3. SOFT DELETE (Logic Unchanged)
+    workspace.is_deleted = True
+    workspace.deleted_at = datetime.utcnow()
+    
+    # --- BROADCAST NOTIFICATIONS (Your Logic - Unchanged) ---
+    for member in workspace.team_members:
+        team_note = Notification(
+            user_id=member.id,
+            workspace_id=workspace.id,
+            message=f"The workspace '{workspace.name}' has been deleted by the owner.",
+            ai_insight="Access to this workspace is no longer available."
+        )
+        db.add(team_note)
+
+    owner_note = Notification(
+        user_id=current_user.id,
+        workspace_id=workspace.id,
+        message=f"You successfully deleted '{workspace.name}'.",
+        ai_insight="You can restore this from the Trash Bin within 30 days."
+    )
+    db.add(owner_note)
+    
+    # 4. CLEANUP (Updated)
+    # Clear the DELETE otp, leaving the password OTP untouched
+    current_user.delete_confirmation_otp = None
+    current_user.delete_confirmation_expiry = None
+    
+    db.commit()
+    
+    return
+
+# --- ENDPOINT 4: Restore Workspace ---
+@router.post("/{workspace_id}/restore", status_code=200)
+def restore_workspace(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Restores a soft-deleted workspace.
+    """
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
+    # Find the workspace (even if it is deleted)
+    workspace = db.query(Workspace).filter(
+        Workspace.id == ws_uuid,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == True # Ensure we are restoring a deleted one
+    ).first()
+
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found in trash.")
+
+    # RESTORE ACTION
+    workspace.is_deleted = False
+    workspace.deleted_at = None
+    
+    db.commit()
+    
+    return {"message": "Workspace restored successfully"}
+
+# --- ENDPOINT 5: Hard Delete (Forever) ---
+@router.delete("/{workspace_id}/permanently", status_code=204)
+def delete_workspace_permanently(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    PERMANENTLY deletes a workspace. This action cannot be undone.
+    """
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
+    # 1. Find the workspace in the trash
+    workspace = db.query(Workspace).filter(
+        Workspace.id == ws_uuid,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == True  # <--- MUST be in trash to delete forever
+    ).first()
+
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found in trash")
+
+    # 2. HARD DELETE (The actual SQL DELETE)
+    # Since you set ondelete="CASCADE" in your models, this will automatically
+    # remove related Notifications, Uploads, and Team Members.
     db.delete(workspace)
     db.commit()
     
-    logger.info(f"🗑️ Deleted workspace {workspace_id} (Owner: {current_user.email})")
-    
-    return Response(status_code=204)
+    return # 204 No Content
 # ===================================================
 #  NEW: Endpoint to get a workspace's alert rules
 # ===================================================

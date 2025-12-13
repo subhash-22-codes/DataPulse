@@ -18,7 +18,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.api import auth, workspaces, notifications, uploads, alerts, chat
 
 # Import all your models so Alembic can see them
-from app.models import user, workspace, data_upload, notification, alert_rule
+from app.models import user, workspace, data_upload, notification, alert_rule, token
 
 # --- Set up logging right at the start ---
 setup_logging()

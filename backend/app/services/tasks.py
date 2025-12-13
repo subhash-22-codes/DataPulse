@@ -180,6 +180,8 @@ def check_alert_rules(
             
             actual_value = col_stats.get(rule.metric)
             
+            logger.info(f"🧐 Rule Check: {rule.column_name} {rule.metric} | Actual: {actual_value} | Threshold: {rule.value} | Op: {rule.condition}")
+            
             # 4. Logic Check: Skip if value is None (NaN) or rule metric missing
             if actual_value is None:
                 continue
@@ -218,6 +220,7 @@ def check_alert_rules(
                     "actual_value": actual_value,
                     "file_name": current_upload.file_path,
                     "upload_time": convert_utc_to_ist_str(current_upload.uploaded_at),
+                    "workspace_id": workspace.id,
                 }
                 
                 # 6. Async Email Dispatch (Optimized)
@@ -309,8 +312,31 @@ def schedule_data_fetches() -> None:
         logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
     finally:
         db.close()
+        
+def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
+    """
+    Router task that determines whether to fetch API or DB data based on workspace config.
+    Triggered by 'Save Configuration' in frontend via workspaces.py.
+    """
+    logger.info(f"🤖 [ROUTER] Routing data fetch for workspace {workspace_id}...")
+    db = SessionLocal()
+    try:
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not ws:
+            logger.warning(f"Workspace {workspace_id} not found.")
+            return
 
-def fetch_api_data(workspace_id: str):
+        if ws.data_source == 'API':
+            # Pass the loop so the WebSocket message can be sent back to the main thread
+            fetch_api_data(str(ws.id), loop)
+        elif ws.data_source == 'DB':
+            fetch_db_data(str(ws.id), loop)
+        else:
+            logger.info(f"Workspace {ws.id} is not configured for remote polling.")
+    finally:
+        db.close()
+
+def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [API FETCHER] Starting API fetch for workspace: {workspace_id}")
     db: Session = SessionLocal()
     try:
@@ -378,7 +404,7 @@ def fetch_api_data(workspace_id: str):
         logger.info("-> [API FETCHER] Handing off to the analyzer task...")
         
         # Note: This uses the synchronous fallback of process_csv_task, which is correct here.
-        process_csv_task(str(new_upload.id)) 
+        process_csv_task(str(new_upload.id), loop)
 
     except requests.Timeout:
         logger.error(f"❌ [API FETCHER] Timeout connecting to {workspace_data.api_url}")
@@ -387,7 +413,7 @@ def fetch_api_data(workspace_id: str):
     finally:
         db.close()
 
-def fetch_db_data(workspace_id: str):
+def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
     db: Session = SessionLocal()
     try:
@@ -452,7 +478,7 @@ def fetch_db_data(workspace_id: str):
 
         logger.info("-> [DB FETCHER] Handing off to the analyzer task...")
         # Call the analyzer (synchronous fallback is correct here)
-        process_csv_task(str(new_upload.id))
+        process_csv_task(str(new_upload.id), loop)
 
     except Exception as e:
         logger.error(f"❌ [DB FETCHER] An error occurred: {e}", exc_info=True)
@@ -487,6 +513,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     db: Session = SessionLocal()
     workspace_id_str = None
     status_message = "job_error"
+    new_notifications_created = False
     
     try:
         # 1. Fetch Metadata (Fast)
@@ -582,6 +609,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                         ai_insight=ai_insight_text
                     )
                     db.add(new_notification)
+                    new_notifications_created = True
                 
                 logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications.")
                 
@@ -619,6 +647,22 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         db.commit()
         logger.info(f"💾 [WORKER] Success. Upload {upload_id} committed.")
         
+        if APP_MODE == "production" and new_notifications_created:
+                # If notifications were created, push a signal to every relevant user
+                for user in users_to_notify:
+                    user_id_str = str(user.id)
+                    
+                    # Call the manager to send a signal to the user's global notification channel
+                    run_async_safely(
+                        manager.push_to_user(
+                            user_id=user_id_str,
+                            message={"type": "NEW_NOTIFICATION_ALERT"}
+                        ),
+                        loop
+                    )
+                logger.info("📡 [WORKER] Pushed NEW_NOTIFICATION_ALERT signal to affected users.")
+            # ------------------------------------------------------------------
+
         status_message = "job_complete"
         return {"status": "success"}
 

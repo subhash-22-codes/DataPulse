@@ -79,6 +79,8 @@ class Workspace(Base):
     db_name = Column(String(100), nullable=True)
     db_query = Column(Text, nullable=True)
     # ----------------------------------------------
+    is_deleted = Column(Boolean, default=False, nullable=False, server_default='false')
+    deleted_at = Column(DateTime, nullable=True)
 
     # (relationships are unchanged)
     owner = relationship("User", back_populates="workspaces")
