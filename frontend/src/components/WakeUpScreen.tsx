@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, ShieldCheck, Zap, Globe, Lock, Activity, Terminal, AlertTriangle, RefreshCw, XCircle, CheckCircle2 } from 'lucide-react';
+import { Server, ShieldCheck, Zap, Globe, Lock, Activity, Terminal, AlertTriangle, RefreshCw, XCircle, CheckCircle2, Cpu } from 'lucide-react';
 
 // -----------------------------------------------------------------------
 // THE SQUAD
@@ -9,20 +9,22 @@ const TEAM = [
     name: "Subhash Yaganti",
     role: "Developer",
     image: "/images/Subhash.jpg", 
-    status: "Root Access"
+    status: "Root Access",
+    linkedin: "https://www.linkedin.com/in/subhash-yaganti-a8b3b626a/" 
   },
   {
     name: "Siri Mahalaxmi Vemula",
     role: "Developer",
     image: "images/Siri.jpg", 
-    status: "System Admin"
+    status: "System Admin",
+    linkedin: "https://www.linkedin.com/in/vemula-siri-mahalaxmi-b4b624319/" 
   }
 ];
 
 interface WakeUpScreenProps {
     onRetry?: () => void;
-    isSystemReady?: boolean; // <--- NEW PROP: Triggers the 100% animation
-    onAnimationComplete?: () => void; // <--- NEW PROP: Tells App.tsx to unmount this
+    isSystemReady?: boolean; 
+    onAnimationComplete?: () => void; 
 }
 
 export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: WakeUpScreenProps) => {
@@ -35,26 +37,20 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
 
   const messages = [
     { text: "INITIALIZING DATAPULSE CLOUD...", icon: Globe },
-    { text: "WAKING UP DYNO INSTANCE...", icon: Zap },
+    { text: "PROVISIONING INSTANCE CONTAINER...", icon: Server },
     { text: "ESTABLISHING SECURE HANDSHAKE...", icon: Lock },
     { text: "INJECTING ENVIRONMENT VARIABLES...", icon: Terminal },
     { text: "VERIFYING ENCRYPTED CREDENTIALS...", icon: ShieldCheck },
-    { text: "ALLOCATING RAM RESOURCES...", icon: Server },
+    { text: "OPTIMIZING MEMORY ALLOCATION...", icon: Cpu },
+    { text: "STARTING UP BACKEND SERVICES...", icon: Zap },
   ];
 
-  // -----------------------------------------------------------------------
-  // 🟢 NEW: HANDLE SUCCESS ANIMATION
-  // -----------------------------------------------------------------------
   useEffect(() => {
     if (isSystemReady) {
-      // 1. Clear any error/warning states
       setIsError(false);
       setLongWait(false);
-      
-      // 2. Force bar to 100%
       setProgress(100);
 
-      // 3. Wait for the user to see the 100% (800ms) then unmount
       const exitTimer = setTimeout(() => {
         if (onAnimationComplete) onAnimationComplete();
       }, 800);
@@ -67,12 +63,9 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
   useEffect(() => {
     setSessionId(`SES-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
 
-    // Progress Logic
     const timer = setInterval(() => {
       setProgress((old) => {
-        // If system is ready, don't interfere with the 100% set above
         if (isSystemReady) return 100;
-        
         if (old >= 99) return 99;
         const remaining = 99 - old;
         const jump = Math.random() * (remaining * 0.15);
@@ -89,7 +82,6 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
     const teamTimer = setTimeout(() => setShowTeam(true), 1500);
     const longWaitTimer = setTimeout(() => setLongWait(true), 15000); 
     
-    // Failure Timer (180s)
     const failureTimer = setTimeout(() => {
       if (!isSystemReady) {
           setIsError(true);
@@ -104,7 +96,7 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
       clearTimeout(teamTimer);
       clearTimeout(failureTimer);
     };
-  }, [isSystemReady]); // Add dependency
+  }, [isSystemReady]);
 
   const handleRetry = () => {
     setIsError(false);
@@ -114,10 +106,9 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
     window.location.reload();
   };
 
-  // Icon Logic
   let CurrentIcon = messages[messageIndex].icon;
   if (isError) CurrentIcon = AlertTriangle;
-  if (isSystemReady) CurrentIcon = CheckCircle2; // Show checkmark on success
+  if (isSystemReady) CurrentIcon = CheckCircle2;
 
   return (
     <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center p-4 z-[9999] text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-hidden">
@@ -139,7 +130,7 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
             {isError ? (
                <span className="text-red-500 font-bold animate-pulse"> OFFLINE</span>
             ) : (
-               <span className={`animate-pulse ${isSystemReady ? 'text-cyan-400' : 'text-emerald-500'}`}> ONLINE</span>
+               <span className={`animate-pulse ${isSystemReady ? 'text-cyan-400' : 'text-amber-400'}`}> BOOTING</span>
             )}
           </span>
           <span className="opacity-70">{sessionId}</span>
@@ -150,7 +141,6 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
             LATENCY: <span className={isError ? "text-red-500" : "text-zinc-400"}>{isError ? "TIMEOUT" : "48ms"}</span> 
             <Activity className={`w-3 h-3 ${isError ? "text-red-500" : "text-cyan-500"}`} />
           </span>
-          
         </div>
       </div>
 
@@ -207,59 +197,87 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
               <span>{isSystemReady ? "Launch Sequence" : "Loading Modules"}</span>
               <span className={isSystemReady ? "text-emerald-500 font-bold" : "text-zinc-400"}>{Math.floor(progress)}%</span>
             </div>
-            <p className="text-[10px] sm:text-[11px] md:text-xs lg:text-sm text-zinc-600 max-w-[260px] sm:max-w-[300px] md:max-w-none mx-auto leading-relaxed tracking-wide font-mono text-center">Initialize · Authenticate · Launch</p>
-
+           
           </div>
         )}
 
-        {/* Cold Start Notice */}
-        <div className={`mt-8 transition-all duration-700 ease-in-out ${longWait && !isError && !isSystemReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-           <div className="bg-zinc-900/80 border border-yellow-500/20 rounded-lg p-3 max-w-[280px] mx-auto backdrop-blur-md shadow-lg">
-               <div className="flex items-start gap-3">
-                 <div className="mt-0.5"><Server className="w-3 h-3 text-yellow-500" /></div>
-                 <div className="text-left">
-                   <p className="text-[10px] font-bold text-yellow-500/90 uppercase tracking-wider mb-0.5">Cold Boot Detected</p>
-                   <p className="text-[9px] text-zinc-500 leading-relaxed">Server is waking up. ~45s remaining.</p>
-                 </div>
-               </div>
+          <div
+            className={`mt-4 transition-all duration-300 ease-out ${
+              longWait && !isError && !isSystemReady
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-2 pointer-events-none"
+            }`}
+          >
+            <div
+              className="
+                mx-auto
+                flex items-center gap-2
+                text-[10px] leading-relaxed text-zinc-500
+                max-w-[260px]
+
+                sm:text-[11px]
+                sm:max-w-[320px]
+
+                md:max-w-none
+                md:px-3 md:py-2
+                md:rounded-md
+                md:border md:border-zinc-800/60
+                md:bg-zinc-900/40
+              "
+            >
+              <Server className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />
+
+              <span>
+                Server is waking up from idle state. Initial load may take up to ~45 seconds.
+              </span>
             </div>
-        </div>
+          </div>
+
       </div>
 
-      {/* TEAM SECTION */}
-      <div className={`absolute bottom-6 md:bottom-8 w-full flex justify-center md:justify-end md:pr-8 transition-all duration-1000 ease-out ${showTeam ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-    <div className="flex flex-col gap-3 items-center md:items-end">
-        <div className="text-[8px] font-mono text-zinc-600 uppercase tracking-[0.2em] mb-1">
-            Engineering Team
-        </div>
-        
-        {TEAM.map((member, idx) => (
-            <div 
-                key={idx} 
-                style={{ transitionDelay: `${idx * 150}ms` }} 
-                // 1. Changed justify-between to justify-end (Fixes the gap)
-                // 2. Kept min-w-[200px] so bubbles are uniform size, but text stays close to image
-                className="flex items-center gap-3 bg-zinc-900/60 border border-zinc-800/50 p-1.5 pl-3 md:pl-4 pr-2 rounded-full backdrop-blur-sm hover:border-zinc-700 transition-colors group min-w-[180px] md:min-w-[200px] justify-end shadow-lg shadow-black/20"
-            >
-                <div className="text-right flex flex-col items-end">
-                    <div className="text-[10px] text-zinc-300 font-medium leading-none group-hover:text-cyan-400 transition-colors">
-                        {member.name}
-                    </div>
-                    <div className="text-[8px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
-                        {member.role}
-                        {/* Status Dot */}
-                        <span className={`w-1.5 h-1.5 rounded-full inline-block ${isError ? 'bg-zinc-600' : 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]'}`}></span>
-                    </div>
+      {/* ----------------------------------------------------------------------- */}
+      {/* PROFESSIONAL FOOTER - NO GIMMICKS */}
+      {/* ----------------------------------------------------------------------- */}
+      <div 
+        className={`absolute bottom-8 left-0 w-full flex flex-col items-center justify-center gap-3 transition-all duration-1000 ease-out z-30 ${showTeam ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+      >
+          {/* Label */}
+          <div className="text-[9px] font-mono text-zinc-600 uppercase tracking-[0.2em]">
+            Engineered by
+          </div>
+
+          {/* Team Row */}
+          <div className="flex items-center gap-8">
+            {TEAM.map((member, idx) => (
+              <a 
+                key={idx}
+                href={member.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                // No background hover, just simple opacity change. No grayscale.
+                className="flex items-center gap-3 opacity-60 hover:opacity-100 transition-opacity duration-300 cursor-pointer"
+                title={`Visit ${member.name}'s LinkedIn`}
+              >
+                  {/* Avatar - Full color, simple border */}
+                  <img 
+                      src={member.image} 
+                      alt={member.name} 
+                      className="w-8 h-8 rounded-full object-cover border border-zinc-800"
+                  />
+                
+                <div className="flex flex-col text-left">
+                   <span className="text-[10px] font-medium text-zinc-300 leading-none">
+                     {member.name}
+                   </span>
+                   <span className="text-[9px] text-zinc-600 font-mono mt-1">
+                     {member.role}
+                   </span>
                 </div>
-                <img 
-                    src={member.image} 
-                    alt={member.name} 
-                    className="w-8 h-8 rounded-full border border-zinc-700 object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
-                />
-            </div>
-        ))}
-    </div>
-</div>
+              </a>
+            ))}
+          </div>
+      </div>
+
     </div>
   );
 };
