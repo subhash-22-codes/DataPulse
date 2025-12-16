@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {  Mail, Lock, Eye, EyeOff, ArrowLeft, Check,  KeyRound, Shield, RefreshCw } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; 
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, Check, KeyRound, Shield, RefreshCw, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 type Step = 'email' | 'verify' | 'reset' | 'success';
@@ -23,10 +23,7 @@ const ForgotPassword: React.FC = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
-
-  // --- CHANGE 3: Get the functions from the useAuth hook ---
   const { sendPasswordReset, resetPassword } = useAuth();
-
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
 
@@ -50,14 +47,12 @@ const ForgotPassword: React.FC = () => {
   }, [currentStep]);
 
   const handleOtpChange = (index: number, value: string) => {
-    // Only allow digits
     if (!/^\d*$/.test(value)) return;
 
     const newOtp = [...resetCode];
-    newOtp[index] = value.slice(-1); // Only take the last character
+    newOtp[index] = value.slice(-1); 
     setResetCode(newOtp);
 
-    // Auto-focus next input
     if (value && index < 5) {
       otpRefs.current[index + 1]?.focus();
     }
@@ -65,7 +60,6 @@ const ForgotPassword: React.FC = () => {
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Backspace' && !resetCode[index] && index > 0) {
-      // Focus previous input on backspace if current is empty
       otpRefs.current[index - 1]?.focus();
     }
   };
@@ -77,68 +71,47 @@ const ForgotPassword: React.FC = () => {
     if (pastedData.length === 6) {
       const newOtp = pastedData.split('');
       setResetCode(newOtp);
-      // Focus the last input
       otpRefs.current[5]?.focus();
     }
   };
 
- // --- THIS IS THE NEW, UNIFIED FUNCTION WITH THE DELAY YOU WANTED ---
-   // --- THIS IS THE NEW, UNIFIED FUNCTION for sending the code ---
- const handleSendCode = async (isResend = false) => {
-    // This clean if/else block fixes the linter error
-    if (isResend) {
-      setIsResending(true);
-    } else {
-      setIsLoading(true);
-    }
+  // --- LOGIC: Sending Code with 3-Second Delay ---
+  const handleSendCode = async (isResend = false) => {
+    if (isResend) setIsResending(true);
+    else setIsLoading(true);
     
     try {
-      // Step 1: Call the API from our central AuthContext.
-      // This happens instantly in the background.
       await sendPasswordReset(email);
       
-      // --- THIS IS THE FIX YOU ASKED FOR: The 3-second artificial delay ---
-      // We will wait for 3 seconds AFTER the API call has been sent.
+      // Artificial Delay
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Step 2: Now, after the wait, show the success message.
       toast.success(
         "Request received! If an account with that email exists, a reset code is on its way.",
         { duration: 5000 }
       );
-
       
-      // Step 3: And move to the next step in the UI.
       setCurrentStep('verify');
       if (isResend) {
-        setResetCode(['', '', '', '', '', '']); // Clear OTP on resend
+        setResetCode(['', '', '', '', '', '']); 
       }
     } catch (error) {
       console.log(error);
-      // The error toast is now handled globally and professionally by your AuthContext!
-      // We don't need to do anything here.
     } finally {
-      // Step 4: Turn off the loading spinner AFTER everything is done.
-      if (isResend) {
-        setIsResending(false);
-      } else {
-        setIsLoading(false);
-      }
+      if (isResend) setIsResending(false);
+      else setIsLoading(false);
     }
   };
 
-  // --- Wrapper for the main form submission ---
   const handleSendResetCode = (e: React.FormEvent) => {
     e.preventDefault();
     handleSendCode(false);
   };
   
-  // --- Wrapper for the resend button ---
   const handleResendCode = () => {
     handleSendCode(true);
   };
 
-  // --- The new, cleaned-up verify function ---
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const otpString = resetCode.join('');
@@ -155,51 +128,39 @@ const ForgotPassword: React.FC = () => {
       toast.success('Password reset successfully!');
     } catch (error) {
       console.log(error);
-      // AuthContext handles the error toast
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getStepProgress = () => {
+  const getStepTitle = () => {
     switch (currentStep) {
-      case 'email': return 1;
-      case 'verify': return 2;
-      case 'reset': return 2;
-      case 'success': return 3;
-      default: return 1;
+      case 'email': return 'Reset Password';
+      case 'verify': return 'Verify & Set Password';
+      case 'success': return 'Password Updated';
+      default: return 'Reset Password';
     }
   };
 
-  const renderProgressBar = () => (
-    <div className="flex items-center justify-center space-x-2 py-2">
-      <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors duration-300 ${
-        getStepProgress() >= 1 ? 'bg-blue-600' : 'bg-slate-200'
-      }`}></div>
-      <div className={`w-6 sm:w-8 h-0.5 sm:h-1 rounded-full transition-colors duration-300 ${
-        getStepProgress() >= 2 ? 'bg-blue-600' : 'bg-slate-200'
-      }`}></div>
-      <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors duration-300 ${
-        getStepProgress() >= 2 ? 'bg-blue-600' : 'bg-slate-200'
-      }`}></div>
-      <div className={`w-6 sm:w-8 h-0.5 sm:h-1 rounded-full transition-colors duration-300 ${
-        getStepProgress() >= 3 ? 'bg-blue-600' : 'bg-slate-200'
-      }`}></div>
-      <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors duration-300 ${
-        getStepProgress() >= 3 ? 'bg-blue-600' : 'bg-slate-200'
-      }`}></div>
-    </div>
-  );
+  const getStepDescription = () => {
+    switch (currentStep) {
+      case 'email': return 'Enter your email to receive a reset code.';
+      case 'verify': return 'Enter the code and set your new password.';
+      case 'success': return 'Your password has been successfully updated.';
+      default: return 'Reset your password.';
+    }
+  };
+
+  // --- RENDER HELPERS ---
 
   const renderEmailStep = () => (
-    <form onSubmit={handleSendResetCode} className="space-y-4 sm:space-y-5">
-
-      <div className="space-y-2">
-        <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
-          Email address
+    <form onSubmit={handleSendResetCode} className="space-y-4">
+      <div className="space-y-1">
+        <label htmlFor="email" className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+          Email Address
         </label>
-        <div className="relative group">
-          <Mail className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors duration-200" />
+        <div className="relative">
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             id="email"
             name="email"
@@ -207,47 +168,46 @@ const ForgotPassword: React.FC = () => {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="pl-10 sm:pl-12 pr-3 sm:pr-4 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
-            placeholder="Enter your email address"
+            className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+            placeholder="name@example.com"
           />
         </div>
-        <p className="text-xs sm:text-sm text-slate-500 mt-2">
-          We'll send a password reset code to this email address.
+        <p className="text-xs text-slate-500 pt-1">
+          We'll send a 6-digit code to this address.
         </p>
       </div>
 
       <button
         type="submit"
         disabled={isLoading}
-        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 sm:py-3.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25 hover:shadow-blue-500/30 hover:shadow-xl text-sm sm:text-base min-h-[44px] touch-target-44"
+        className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm"
       >
         {isLoading ? (
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white/30 border-t-white mr-2 sm:mr-3"></div>
-            <span className="text-sm sm:text-base">Sending reset code...</span>
-          </div>
+          <>
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white mr-2"></div>
+            Sending Code...
+          </>
         ) : (
-          <div className="flex items-center justify-center">
-            <KeyRound className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            Send reset code
-          </div>
+          'Send Reset Code'
         )}
       </button>
     </form>
   );
 
   const renderVerifyStep = () => (
-    <form onSubmit={handleVerifyCode} className="space-y-4 sm:space-y-5">
-
-      <div className="bg-blue-50/80 border border-blue-200/80 text-blue-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm font-medium">
-        We've sent a 6-digit reset code to <span className="font-semibold">{email}</span>
+    <form onSubmit={handleVerifyCode} className="space-y-5">
+      
+      {/* Email Badge */}
+      <div className="bg-blue-50 border border-blue-100 text-blue-800 px-3 py-2 rounded-md flex items-center gap-2">
+         <Mail className="h-4 w-4 shrink-0" />
+         <span className="text-xs font-medium truncate">Code sent to <b>{email}</b></span>
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="resetCode" className="block text-sm font-semibold text-slate-700">
-          Reset code
+        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide text-center">
+          Verification Code
         </label>
-        <div className="flex justify-center space-x-2 sm:space-x-3">
+        <div className="flex justify-between gap-1">
           {resetCode.map((digit, index) => (
             <input
               key={index}
@@ -259,38 +219,33 @@ const ForgotPassword: React.FC = () => {
               onChange={(e) => handleOtpChange(index, e.target.value)}
               onKeyDown={(e) => handleOtpKeyDown(index, e)}
               onPaste={handleOtpPaste}
-              className="w-10 h-10 sm:w-12 sm:h-12 text-center text-lg sm:text-xl font-mono font-bold border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900"
-              placeholder="0"
+              className="w-full aspect-square text-center text-lg font-bold rounded-md border border-slate-300 text-slate-900 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+              placeholder="•"
             />
           ))}
         </div>
-        <div className="flex justify-between items-center">
-          <p className="text-xs sm:text-sm text-slate-500">
-            Enter the 6-digit code from your email
-          </p>
-          <button
+        
+        {/* Resend Link */}
+        <div className="text-center pt-1">
+            <button
             type="button"
             onClick={handleResendCode}
             disabled={isResending}
-            className={`text-xs sm:text-sm font-medium ${
-              isResending ? 'text-gray-500' : 'text-blue-600 hover:text-blue-700'
-            } transition-colors duration-200 disabled:opacity-60 touch-target-44 flex items-center`}
-          >
-            <RefreshCw
-              className={`h-3 w-3 mr-1 ${isResending ? 'animate-spin text-gray-500' : ''}`}
-            />
-            {isResending ? 'Resending…' : 'Resend'}
-          </button>
+            className="inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+            <RefreshCw className={`h-3 w-3 mr-1.5 ${isResending ? 'animate-spin' : ''}`} />
+            {isResending ? 'Resending...' : 'Resend Code'}
+            </button>
         </div>
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-2">
-          <label htmlFor="newPassword" className="block text-sm font-semibold text-slate-700">
-            New password
+        <div className="space-y-1">
+          <label htmlFor="newPassword" className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+            New Password
           </label>
-          <div className="relative group">
-            <Lock className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors duration-200" />
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               id="newPassword"
               name="newPassword"
@@ -298,25 +253,25 @@ const ForgotPassword: React.FC = () => {
               required
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="pl-10 sm:pl-12 pr-10 sm:pr-12 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
-              placeholder="Enter new password"
+              className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+              placeholder="••••••••"
             />
             <button
               type="button"
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-slate-600 transition-colors duration-200 touch-target-44"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
             >
-              {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700">
-            Confirm new password
+        <div className="space-y-1">
+          <label htmlFor="confirmPassword" className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+            Confirm Password
           </label>
-          <div className="relative group">
-            <Lock className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors duration-200" />
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               id="confirmPassword"
               name="confirmPassword"
@@ -324,333 +279,216 @@ const ForgotPassword: React.FC = () => {
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pl-10 sm:pl-12 pr-10 sm:pr-12 w-full py-3 sm:py-3.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm sm:text-base"
-              placeholder="Confirm new password"
+              className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+              placeholder="••••••••"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-slate-600 transition-colors duration-200 touch-target-44"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
             >
-              {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={isLoading || resetCode.some(digit => !digit)}
-        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 sm:py-3.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25 hover:shadow-blue-500/30 hover:shadow-xl text-sm sm:text-base min-h-[44px] touch-target-44"
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white/30 border-t-white mr-2 sm:mr-3"></div>
-            <span className="text-sm sm:text-base">Resetting password...</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center">
-            <Shield className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            Reset password
-          </div>
-        )}
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setShowConfirm(true)}
-        className="w-full text-slate-600 hover:text-slate-900 font-medium py-2 transition-colors duration-200 text-sm sm:text-base"
-      >
-        Use different email
-      </button>
+      <div className="grid grid-cols-2 gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowConfirm(true)}
+            className="flex justify-center items-center py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-semibold shadow-sm transition-all text-sm"
+          >
+            Change Email
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || resetCode.some(digit => !digit)}
+            className="flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm"
+          >
+            {isLoading ? 'Resetting...' : 'Reset Password'}
+          </button>
+      </div>
 
     </form>
   );
 
   const renderSuccessStep = () => (
-    <div className="text-center space-y-4 sm:space-y-6">
+    <div className="text-center space-y-6">
       {/* Clear localStorage when showing success */}
       {(() => {
         localStorage.removeItem('forgot_password_step');
         localStorage.removeItem('forgot_password_email');
         return null;
       })()}
-      <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center">
-        <Check className="h-8 w-8 sm:h-10 sm:w-10 text-green-600" />
+      
+      <div className="mx-auto w-16 h-16 bg-green-50 rounded-full flex items-center justify-center border border-green-100">
+        <Check className="h-8 w-8 text-green-600" />
       </div>
       
       <div className="space-y-2">
-        <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
-          Password Reset Successful!
-        </h3>
-        <p className="text-slate-600 text-sm sm:text-base">
-          Your password has been updated successfully. You can now sign in with your new password.
+        <p className="text-slate-600 text-sm leading-relaxed">
+          Your password has been updated successfully. You can now use your new credentials to access your account.
         </p>
       </div>
 
       <button
-        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 sm:py-3.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/30 hover:shadow-xl text-sm sm:text-base min-h-[44px] touch-target-44"
+        className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all text-sm"
         onClick={() => {
-          // Clear localStorage before navigating
           localStorage.removeItem('forgot_password_step');
           localStorage.removeItem('forgot_password_email');
           navigate('/login');
         }}
       >
-        Continue to sign in
+        Sign In Now
       </button>
     </div>
   );
 
-  const getStepTitle = () => {
-    switch (currentStep) {
-      case 'email': return 'Reset Password';
-      case 'verify': return 'Verify & Set New Password';
-      case 'success': return 'Password Updated';
-      default: return 'Reset Password';
-    }
-  };
-
-  const getStepDescription = () => {
-    switch (currentStep) {
-      case 'email': return 'Enter your email to receive a reset code';
-      case 'verify': return 'Enter the code and set your new password';
-      case 'success': return 'Your password has been successfully updated';
-      default: return 'Reset your password';
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-white">
-      {/* Mobile Header with Branding - Only visible on mobile */}
-       <div className="lg:hidden px-4 py-4 bg-white">
-        <div className="flex items-center space-x-1">
+    <div className="min-h-screen bg-white flex font-sans text-slate-900 selection:bg-blue-100">
+      
+      {/* LEFT SIDE - FORM (40% Width) */}
+      <div className="w-full lg:w-[40%] flex flex-col justify-center px-6 py-8 sm:px-8 lg:px-12 bg-white z-10 border-r border-slate-100 h-screen overflow-y-auto custom-scrollbar">
+        
+        <div className="w-full max-w-sm mx-auto flex flex-col">
           
-          <img 
-            src="/DPLogo2.png" 
-            alt="DataPulse Logo"
-            className="h-8 w-8 object-contain"
-          />
-
-          <div className="flex flex-col">
-            <h1 className="text-lg font-medium text-slate-900">DataPulse</h1>
+          {/* Back Navigation */}
+          <div className="mb-6 lg:mb-8">
+             <Link 
+                to="/login" 
+                className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wide"
+              >
+                <ArrowLeft className="h-3 w-3 mr-1.5" />
+                Back to login
+              </Link>
           </div>
 
-        </div>
-      </div>
-
-      <div className="flex min-h-screen lg:min-h-screen">
-        {/* Left Side - Reset Form (40% on desktop) */}
-        <div className="w-full lg:w-2/5 flex flex-col">
-          <div className="flex-1 flex flex-col justify-center py-4 px-4 sm:px-6 lg:px-8 xl:px-12 max-w-md lg:max-w-lg xl:max-w-xl mx-auto lg:mx-0 w-full">
-            <div className="w-full space-y-4 sm:space-y-6">
-              {/* Back to Login - Compact on mobile */}
-              <div className="flex justify-start">
-                <Link 
-                  to="/login" 
-                  className="group inline-flex items-center text-sm font-medium text-slate-600 hover:text-slate-900 transition-all duration-200 touch-target-44"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform duration-200" />
-                  <span className="sm:inline">Back to sign in</span>
-                </Link>
-              </div>
-
-              {/* Logo and Header - Hidden on mobile since it's in the header */}
-              <div className="space-y-3 hidden lg:block">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-600 p-3 rounded-xl shadow-lg shadow-blue-500/25">
-                      <KeyRound className="h-7 w-7 text-white" />
-                    </div>
-                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                    </div>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                      {getStepTitle()}
-                    </h1>
-                    <p className="text-slate-600 text-sm sm:text-base">
-                      {getStepDescription()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mobile-optimized header */}
-              <div className="space-y-2 lg:hidden text-center">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                  {getStepTitle()}
-                </h2>
-                <p className="text-slate-600 text-sm">
-                  {getStepDescription()}
-                </p>
-              </div>
-
-              {/* Progress Indicator */}
-              {renderProgressBar()}
-
-              {/* Main Form */}
-              <div className="space-y-4 sm:space-y-6">
-                {currentStep === 'email' && renderEmailStep()}
-                {currentStep === 'verify' && renderVerifyStep()}
-                {currentStep === 'success' && renderSuccessStep()}
-
-                {currentStep !== 'success' && (
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 border border-blue-100/50">
-                    <h3 className="font-semibold text-slate-900 flex items-center text-sm sm:text-base">
-                      <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 mr-2" />
-                      Secure Password Reset
-                    </h3>
-                    <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
-                      <div className="flex items-start text-xs sm:text-sm text-slate-600">
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full mr-2 sm:mr-3 flex-shrink-0 mt-1.5"></div>
-                        <span>Encrypted email verification process</span>
-                      </div>
-                      <div className="flex items-start text-xs sm:text-sm text-slate-600">
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-500 rounded-full mr-2 sm:mr-3 flex-shrink-0 mt-1.5"></div>
-                        <span>Time-limited security codes</span>
-                      </div>
-                      <div className="flex items-start text-xs sm:text-sm text-slate-600">
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-indigo-500 rounded-full mr-2 sm:mr-3 flex-shrink-0 mt-1.5"></div>
-                        <span>Enterprise-grade password protection</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sign Up Link - Compact on mobile */}
-                <div className="text-center pt-3 sm:pt-4 border-t border-slate-100">
-                  <p className="text-xs sm:text-sm text-slate-600">
-                    Don't have an account?{' '}
-                    <Link 
-                      to="/register" 
-                      className="font-semibold text-blue-600 hover:text-blue-700 transition-colors duration-200"
-                    >
-                      Create one now
-                    </Link>
-                  </p>
-                </div>
-              </div>
-
-              {/* Terms - Compact on mobile */}
-              <div className="text-center pt-2">
-                <p className="text-xs text-slate-500 leading-relaxed px-4 sm:px-0">
-                  Password reset is secure and complies with our{' '}
-                  <a href="#" className="font-medium text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors">
-                    Security Policy
-                  </a>
-                </p>
-              </div>
-            </div>
+          {/* Mobile Header (Hidden on Desktop) */}
+          <div className="lg:hidden flex items-center gap-2 mb-6 font-poppins">
+             <img src="/DPLogo2.png" alt="DataPulse" className="h-6 w-6 object-contain" />
+             <span className="text-lg font-bold text-slate-900">DataPulse</span>
           </div>
 
-          {/* Mobile Footer Features - Only visible on mobile */}
-          <div className="lg:hidden bg-slate-50 px-4 py-6 border-t border-slate-100">
-            <div className="max-w-md mx-auto">
-              <h3 className="text-center font-semibold text-slate-900 mb-4 text-sm">
-                Secure account recovery
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <Shield className="h-5 w-5 mx-auto mb-2 text-blue-600" />
-                  <p className="text-xs font-medium text-slate-700">Encrypted Reset</p>
-                </div>
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <Mail className="h-5 w-5 mx-auto mb-2 text-green-600" />
-                  <p className="text-xs font-medium text-slate-700">Email Verification</p>
-                </div>
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <KeyRound className="h-5 w-5 mx-auto mb-2 text-indigo-600" />
-                  <p className="text-xs font-medium text-slate-700">Secure Codes</p>
-                </div>
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <Lock className="h-5 w-5 mx-auto mb-2 text-purple-600" />
-                  <p className="text-xs font-medium text-slate-700">New Password</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Side - Desktop Branding (60% on desktop, Hidden on mobile) */}
-        <div className="hidden lg:flex lg:w-3/5 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 left-0 w-full h-full">
-              <div className="grid grid-cols-8 gap-4 h-full p-8 rotate-12 transform scale-150">
-                {Array.from({ length: 64 }).map((_, i) => (
-                  <div key={i} className="bg-white/20 rounded-lg animate-pulse" style={{ animationDelay: `${i * 0.1}s` }}></div>
-                ))}
-              </div>
-            </div>
+          <div className="hidden lg:flex items-center gap-2 mb-6 font-poppins">
+             <img src="/DPLogo2.png" alt="DataPulse" className="h-8 w-8 object-contain" />
+             <span className="font-bold text-xl text-slate-900 tracking-tight">DataPulse</span>
           </div>
 
-          <div className="relative z-10 flex flex-col justify-center items-center text-white p-12 xl:p-16">
-            {/* Logo Section */}
-            <div className="text-center mb-8 lg:mb-10 xl:mb-12">
-              <div className="flex justify-center mb-6">
-                <div className="bg-white/20 backdrop-blur-sm p-6 rounded-3xl shadow-2xl">
-                  <KeyRound className="h-16 w-16 text-white" />
-                </div>
-              </div>
-              <h1 className="text-4xl xl:text-5xl font-bold mb-4">
-                Secure Recovery
-              </h1>
-              <p className="text-xl xl:text-2xl text-blue-100 font-light leading-relaxed max-w-md">
-                Your account security is our priority. Reset your password safely.
-              </p>
-            </div>
-
-            {/* Security Features Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 max-w-lg xl:max-w-xl">
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center hover:bg-white/20 transition-all duration-300 group">
-                <Shield className="h-8 w-8 mx-auto mb-3 group-hover:scale-110 transition-transform duration-300" />
-                <h3 className="font-semibold mb-2">Encrypted Process</h3>
-                <p className="text-sm text-blue-100">End-to-end encrypted password reset</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center hover:bg-white/20 transition-all duration-300 group">
-                <Mail className="h-8 w-8 mx-auto mb-3 group-hover:scale-110 transition-transform duration-300" />
-                <h3 className="font-semibold mb-2">Email Verification</h3>
-                <p className="text-sm text-blue-100">Secure code delivery to your inbox</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center hover:bg-white/20 transition-all duration-300 group">
-                <KeyRound className="h-8 w-8 mx-auto mb-3 group-hover:scale-110 transition-transform duration-300" />
-                <h3 className="font-semibold mb-2">Secure Codes</h3>
-                <p className="text-sm text-blue-100">Time-limited verification codes</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center hover:bg-white/20 transition-all duration-300 group">
-                <Lock className="h-8 w-8 mx-auto mb-3 group-hover:scale-110 transition-transform duration-300" />
-                <h3 className="font-semibold mb-2">Password Security</h3>
-                <p className="text-sm text-blue-100">Enterprise-grade password protection</p>
-              </div>
-            </div>
-
-            {/* Additional Visual Element */}
-            <div className="mt-8 lg:mt-10 xl:mt-12 text-center">
-              <div className="flex items-center justify-center space-x-2 text-blue-100">
-                <div className="w-2 h-2 bg-white/40 rounded-full animate-pulse"></div>
-                <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-              </div>
-              <p className="text-sm text-blue-100 mt-3 font-light">
-                Secure • Private • Encrypted
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-80 text-center">
-            <h2 className="text-lg font-semibold mb-4">Are you sure?</h2>
-            <p className="text-slate-600 mb-6 text-sm">
-              Are you sure you want to go back and use a different email? 
+          {/* Main Header */}
+          <div className="mb-6 space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              {getStepTitle()}
+            </h1>
+            <p className="text-slate-500 text-sm">
+              {getStepDescription()}
             </p>
-            <div className="flex justify-between gap-3">
+          </div>
+
+          {/* Steps */}
+          {currentStep === 'email' && renderEmailStep()}
+          {currentStep === 'verify' && renderVerifyStep()}
+          {currentStep === 'success' && renderSuccessStep()}
+
+          {/* Footer Section (Hidden on success step) */}
+          {currentStep !== 'success' && (
+            <div className="mt-8 pt-6 border-t border-slate-100">
+                <div className="bg-slate-50 rounded-md p-4 space-y-3">
+                    <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-blue-600" />
+                        Secure Recovery
+                    </h3>
+                    <div className="space-y-1.5">
+                        {[
+                            "Encrypted verification process",
+                            "Time-limited security codes",
+                            "Secure password hashing"
+                        ].map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                                <Check className="h-3 w-3 text-green-600" />
+                                <span>{item}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* RIGHT SIDE - BRANDING (60% Width) */}
+      <div className="hidden lg:flex lg:w-[60%] bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden items-center justify-center p-16">
+        
+        {/* Subtle Texture */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-soft-light"></div>
+        
+        {/* Content Container */}
+        <div className="relative z-10 w-full max-w-2xl text-white space-y-12">
+           
+           {/* Header Section */}
+           <div className="space-y-6">
+              <div className="inline-flex items-center gap-2.5 rounded-lg bg-blue-500/10 px-4 py-2 border border-blue-400/20 backdrop-blur-sm">
+                 <KeyRound className="h-5 w-5 text-blue-200" />
+                 <span className="font-semibold tracking-wide text-white text-sm">Account Recovery</span>
+              </div>
+              <h2 className="text-4xl xl:text-5xl font-bold leading-tight text-white">
+                 Safe & Secure <br/><span className="text-blue-200">Reset Process.</span>
+              </h2>
+              <p className="text-xl text-blue-100/90 leading-relaxed font-light max-w-xl">
+                We use industry-standard encryption to ensure your account details and new credentials remain private.
+              </p>
+           </div>
+
+           {/* Features Grid */}
+           <div className="grid grid-cols-2 gap-x-8 gap-y-10">
+              {[
+                { icon: Shield, title: "End-to-End Encryption", desc: "Your request is encrypted from start to finish." },
+                { icon: Mail, title: "Email Verification", desc: "We verify you own the email before proceeding." },
+                { icon: KeyRound, title: "Secure Codes", desc: "One-time use codes that expire quickly." },
+                { icon: Lock, title: "Password Protection", desc: "New passwords are salted and hashed securely." }
+              ].map((f, i) => (
+                <div key={i} className="flex flex-col gap-2">
+                   <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-white/10">
+                        <f.icon className="h-5 w-5 text-blue-200" />
+                      </div>
+                      <h3 className="font-semibold text-white text-base">{f.title}</h3>
+                   </div>
+                   <p className="text-sm text-blue-100/70 leading-relaxed pl-12">{f.desc}</p>
+                </div>
+              ))}
+           </div>
+
+           {/* Footer Note */}
+           <div className="pt-8 border-t border-white/10 flex justify-between items-center text-xs text-blue-200/60">
+             <p>© 2025 DataPulse. Secure & Reliable.</p>
+             <div className="flex gap-4">
+               <span>v1.0.0</span>
+               <span>System Normal</span>
+             </div>
+           </div>
+
+        </div>
+      </div>
+
+      {/* CONFIRMATION MODAL */}
+      {showConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-50 p-4">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center border border-slate-100 transform transition-all animate-fade-in">
+            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+               <AlertCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">
+              Use different email?
+            </h2>
+            <p className="text-sm text-slate-600 mb-6">
+              Going back will cancel the current reset process and require you to start over.
+            </p>
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 py-2 rounded-lg transition"
+                className="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-sm transition-colors"
               >
                 Cancel
               </button>
@@ -658,8 +496,9 @@ const ForgotPassword: React.FC = () => {
                 onClick={() => {
                   setShowConfirm(false);
                   setCurrentStep('email');
+                  setResetCode(['', '', '', '', '', '']);
                 }}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition"
+                className="flex-1 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-colors"
               >
                 Yes, Skip
               </button>
@@ -667,6 +506,7 @@ const ForgotPassword: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

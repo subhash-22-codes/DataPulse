@@ -127,37 +127,58 @@ const GoogleLoginButton: React.FC = () => {
         type="button"
         onClick={handleCustomButtonClick}
         disabled={isLoading || !isGsiReady || scriptError}
+        title={
+          !isGsiReady
+            ? "Initializing Google Sign-In..."
+            : scriptError
+            ? "Google Sign-In is unavailable"
+            : "Sign in with Google"
+        }
         className="
-            relative w-full flex items-center justify-center gap-3 
-            px-4 py-2.5 
-            bg-white border border-slate-200 rounded-lg shadow-sm 
-            hover:bg-slate-50 hover:border-slate-300 hover:shadow 
-            transition-all duration-200 
-            focus:outline-none focus:ring-slate-200 focus:ring-offset-1 
-            disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none 
-            active:scale-[0.98]
+          relative w-full flex items-center justify-center gap-3
+          px-4 py-2.5
+          rounded-md
+          border border-slate-200
+          bg-white
+          text-sm font-medium text-slate-700
+          shadow-sm
+
+          hover:bg-slate-50
+          transition
+
+          outline-none
+          focus:outline-none
+          focus-visible:ring-2
+          focus-visible:ring-slate-300
+          focus-visible:ring-offset-2
+          focus-visible:ring-offset-white
+
+          active:scale-[0.98]
+
+          disabled:opacity-60
+          disabled:cursor-not-allowed
+          disabled:shadow-none
         "
-        title={!isGsiReady ? "Initializing Google Sign-In..." : scriptError ? "Google Sign-In is unavailable" : "Sign in with Google"}
       >
         {isLoading ? (
-          <Loader2 className="animate-spin h-5 w-5 text-slate-500" />
+          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
         ) : scriptError ? (
           <AlertCircle className="h-5 w-5 text-red-500" />
         ) : (
           <GoogleLogo />
         )}
-        
-        <span className="font-medium text-slate-700 text-sm">
-          {isLoading 
-            ? 'Signing in...' 
-            : !isGsiReady 
-                ? 'Loading...' 
-                : scriptError 
-                    ? 'Unavailable' 
-                    : 'Sign in with Google'
-          }
+
+        <span>
+          {isLoading
+            ? "Signing in..."
+            : !isGsiReady
+            ? "Loading..."
+            : scriptError
+            ? "Unavailable"
+            : "Sign in with Google"}
         </span>
       </button>
+
       
       {/* Hidden Container for the actual Google One Tap Button */}
       <div ref={googleButtonRef} className="hidden" aria-hidden="true" />
