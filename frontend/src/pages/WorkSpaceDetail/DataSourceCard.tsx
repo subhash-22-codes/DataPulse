@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clock, Power, PowerOff, Upload, Server, Settings2 } from "lucide-react"; // Removed generic icons
+import { Clock, Power, Upload, Server, Settings2,  Link } from "lucide-react";
 import { Workspace, DataUpload } from "../../types";
 import { DataSourceModal } from "./DataSourceModal";
 import { FormattedDate } from "../../components/FormattedDate";
@@ -25,7 +25,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
   // Helper: Returns the ILLUSTRATION COMPONENT directly
   const getHeaderInfo = () => {
     if (!workspace.data_source) {
-       // Default state (Empty) -> Use DB Illustration as generic "Data" symbol
+       // Default state (Empty)
        return { Illustration: DataSourceIllustration, label: "Data Source", sub: "Not Configured" };
     }
     
@@ -45,24 +45,25 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
 
   return (
     <>
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full group transition-shadow hover:shadow-md overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
         
         {/* --- HEADER --- */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white gap-4">
+          <div className="flex items-center gap-3">
             
-            <div className="w-12 h-12 flex-shrink-0">
-               <Illustration className="w-full h-full drop-shadow-sm" /> 
+            {/* Standardized Icon Container for Consistency */}
+            <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-md border border-slate-200/60 flex items-center justify-center shadow-sm overflow-hidden p-1">
+               <Illustration className="w-full h-full object-contain" /> 
             </div>
 
             <div className="flex flex-col">
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">{label}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-500 font-medium">{sub}</span>
+              <h2 className="text-sm font-bold text-slate-900 leading-none">{label}</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[11px] text-slate-500 font-medium">{sub}</span>
                 {/* Status Indicator */}
                 {(workspace.data_source === 'API' || workspace.data_source === 'DB') && (
-                    <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${workspace.is_polling_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${workspace.is_polling_active ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
+                    <span className={`flex items-center gap-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${workspace.is_polling_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${workspace.is_polling_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
                         {workspace.is_polling_active ? 'LIVE' : 'PAUSED'}
                     </span>
                 )}
@@ -73,35 +74,34 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
           {isOwner && (
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-gray-200 transition-all group-hover:text-blue-600"
+              className="text-slate-400 hover:text-slate-900 p-1.5 rounded-md hover:bg-slate-100 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
               title="Configure Data Source"
             >
-              <Settings2 className="h-4 w-4" />
+              <Settings2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
         {/* --- CONTENT --- */}
-        <div className="p-5 flex-grow flex flex-col bg-white">
+        <div className="p-5 flex-grow flex flex-col bg-slate-50/30">
           {!workspace.data_source ? (
             
             /* 1. HERO EMPTY STATE */
-            <div className="flex-grow flex flex-col items-center justify-center py-6 text-center opacity-90">
-               {/* Replaced Icon Circle with Illustration */}
-               <div className="w-20 h-20 mb-2">
-                  <DataSourceIllustration className="w-full h-full opacity-90" />
+            <div className="flex-grow flex flex-col items-center justify-center py-6 text-center h-full">
+               <div className="w-24 h-24 mb-3 opacity-90 hover:scale-105 transition-transform duration-500 ease-out">
+                  <DataSourceIllustration className="w-full h-full drop-shadow-sm" />
                </div>
                
-               <h3 className="text-sm font-semibold text-gray-900">Connect Your Data</h3>
-               <p className="text-xs text-gray-500 mt-1 max-w-[220px] mx-auto leading-relaxed">
+               <h3 className="text-sm font-semibold text-slate-900">Connect Your Data</h3>
+               <p className="text-xs text-slate-500 mt-1 max-w-[240px] mx-auto leading-relaxed">
                  Connect a Database, API, or upload a CSV to start monitoring real-time metrics.
                </p>
                {isOwner && (
                  <button 
                    onClick={() => setIsModalOpen(true)}
-                   className="mt-6 flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-md text-xs font-medium hover:bg-black transition-all shadow-sm"
+                   className="mt-5 flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-black transition-all shadow-sm hover:shadow-md active:transform active:scale-95"
                  >
-                   <Upload className="w-3 h-3" />
+                   <Upload className="w-3.5 h-3.5" />
                    Configure Source
                  </button>
                )}
@@ -112,46 +112,46 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
               
               {/* 2. CSV FILE VIEW */}
                {workspace.data_source === 'CSV' && (
-                <div className="flex-grow flex flex-col justify-center">
+                <div className="flex-grow flex flex-col justify-center animate-in fade-in duration-300">
                    {lastUpload && lastUpload.upload_type === 'manual' ? (
-                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 group/file relative">
-                        <div className="flex items-center gap-4">
-                           {/* Replaced FileText Icon with CsvIllustration */}
-                           <div className="w-10 h-10 flex-shrink-0">
+                     <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 group/file relative hover:border-blue-300 transition-colors">
+                        <div className="flex items-start gap-4">
+                           {/* Illustration as Icon */}
+                           <div className="w-10 h-10 flex-shrink-0 bg-slate-50 rounded-lg p-1.5 border border-slate-100">
                               <LatestCsvIllustration className="w-full h-full" />
                            </div>
                            
                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Latest File</p>
-                              <p className="text-sm font-semibold text-gray-900 truncate" title={lastUpload.file_path}>
-                                {lastUpload.file_path.split(/[/\\]/).pop()}
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-2 text-[10px] text-gray-400">
+                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Latest Upload</p>
+                             <p className="text-sm font-semibold text-slate-900 truncate font-mono" title={lastUpload.file_path}>
+                               {lastUpload.file_path.split(/[/\\]/).pop()}
+                             </p>
+                             <div className="flex items-center gap-1.5 mt-2 text-[10px] text-slate-400 font-medium">
                                  <Clock className="w-3 h-3" />
                                  Uploaded <FormattedDate dateString={lastUpload.uploaded_at} />
-                              </div>
+                             </div>
                            </div>
                         </div>
 
                         {isOwner && (
-                            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end">
+                            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                                 <button 
                                     onClick={() => setIsModalOpen(true)}
-                                    className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
                                 >
-                                    <Upload className="w-3 h-3" /> Upload File
+                                    <Upload className="w-3 h-3" /> Upload New Version
                                 </button>
                             </div>
                         )}
                      </div>
                    ) : (
-                      <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
-                          <div className="w-12 h-12 mx-auto mb-2 opacity-50">
+                      <div className="text-center py-8 border border-dashed border-slate-300 rounded-xl bg-slate-50/50">
+                          <div className="w-10 h-10 mx-auto mb-2 opacity-50 grayscale">
                              <CsvIllustration className="w-full h-full" />
                           </div>
-                          <p className="text-xs text-gray-500">No CSV file uploaded yet.</p>
+                          <p className="text-xs font-medium text-slate-500">No CSV file uploaded yet.</p>
                           {isOwner && (
-                            <button onClick={() => setIsModalOpen(true)} className="mt-2 text-xs font-medium text-blue-600 hover:underline">
+                            <button onClick={() => setIsModalOpen(true)} className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-700">
                                 Upload File
                             </button>
                           )}
@@ -162,32 +162,36 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
 
               {/* 3. API VIEW */}
                {workspace.data_source === 'API' && workspace.api_url && (
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                             {/* Keep small icons for labels as they are text-inline */}
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                Endpoint URL
-                            </span>
-                            <p className="text-xs font-mono text-gray-700 break-all leading-relaxed">
+                <div className="flex flex-col h-full animate-in fade-in duration-300">
+                    <div className="space-y-3">
+                        {/* URL Card */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                             <div className="flex items-center gap-1.5 mb-1.5">
+                                <Link className="w-3 h-3 text-slate-400" />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    Endpoint
+                                </span>
+                             </div>
+                            <code className="block text-xs font-mono text-slate-700 bg-slate-50 px-2 py-1.5 rounded border border-slate-100 break-all">
                                 {workspace.api_url}
-                            </p>
+                            </code>
                         </div>
                         
-                        <div className="flex gap-4">
-                            <div className="flex-1 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     <Clock className="w-3 h-3" /> Interval
                                 </span>
-                                <p className="text-sm font-semibold text-gray-900">
+                                <p className="text-sm font-semibold text-slate-900 tabular-nums">
                                     {workspace.polling_interval}
                                 </p>
                             </div>
-                            <div className="flex-1 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                    {workspace.is_polling_active ? <Power className="w-3 h-3" /> : <PowerOff className="w-3 h-3" />} Status
+                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                                    <Power className="w-3 h-3" /> Status
                                 </span>
-                                <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-green-600' : 'text-gray-500'}`}>
+                                <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-emerald-600' : 'text-slate-500'}`}>
                                     {workspace.is_polling_active ? 'Active' : 'Paused'}
                                 </p>
                             </div>
@@ -198,37 +202,47 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
 
               {/* 4. DATABASE VIEW */}
                {workspace.data_source === 'DB' && workspace.db_host && (
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="p-3 bg-gray-50 rounded-md border border-gray-100 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-20 h-20 opacity-10 -mr-4 -mt-4 pointer-events-none">
-                                <DbIllustration className="w-full h-full" />
+                <div className="flex flex-col h-full animate-in fade-in duration-300">
+                    <div className="space-y-3">
+                        {/* Host Card */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-16 h-16 opacity-[0.03] -mr-3 -mt-3 pointer-events-none rotate-12">
+                                <DbIllustration className="w-full h-full text-slate-900" />
                             </div>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                <Server className="w-3 h-3" /> Host Connection
-                            </span>
-                            <p className="text-sm font-mono text-gray-800 font-medium relative z-10">
-                                {workspace.db_host}
-                                <span className="text-gray-400">:{workspace.db_port}</span>
-                            </p>
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <Server className="w-3 h-3 text-slate-400" />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    Host Connection
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono text-slate-700 font-semibold bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                                    {workspace.db_host}
+                                </code>
+                                <span className="text-slate-300 text-xs">:</span>
+                                <code className="text-xs font-mono text-slate-500 bg-slate-50 px-1.5 py-1 rounded border border-slate-100">
+                                    {workspace.db_port}
+                                </code>
+                            </div>
                         </div>
 
-                        <div className="flex gap-4">
-                            <div className="flex-1 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                    <Clock className="w-3 h-3" /> Refresh Rate
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                                    <Clock className="w-3 h-3" /> Rate
                                 </span>
-                                <p className="text-sm font-semibold text-gray-900">
+                                <p className="text-sm font-semibold text-slate-900 tabular-nums">
                                     {workspace.polling_interval}
                                 </p>
                             </div>
-                            <div className="flex-1 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     Status
                                 </span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${workspace.is_polling_active ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                                    <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-gray-900' : 'text-gray-500'}`}>
+                                    <span className={`w-2 h-2 rounded-full ${workspace.is_polling_active ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                    <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-slate-900' : 'text-slate-500'}`}>
                                         {workspace.is_polling_active ? 'Polling' : 'Idle'}
                                     </p>
                                 </div>

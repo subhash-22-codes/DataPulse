@@ -1,8 +1,7 @@
 import React, { Fragment, useState, useEffect } from "react";
-// import { useAuth } from "../../context/AuthContext"; // Removed: Not needed
 import { api } from "../../services/api";
 import { Dialog, Transition, RadioGroup, Switch } from '@headlessui/react';
-import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText, Info, Server, User, Key, BookOpen, Lock } from "lucide-react";
+import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText,User, Key, BookOpen, Lock, Activity, FileSpreadsheet } from "lucide-react";
 import { Workspace } from "../../types";
 import toast from 'react-hot-toast';
 
@@ -30,58 +29,67 @@ interface UpdatePayload {
     db_query?: string;
 }
 
-// --- A reusable sub-component for the polling configuration ---
+// --- Polling Configuration Sub-component ---
 const PollingSection: React.FC<{
     pollingInterval: string;
     setPollingInterval: (val: string) => void;
     isPollingActive: boolean;
     setIsPollingActive: (val: boolean) => void;
 }> = ({ pollingInterval, setPollingInterval, isPollingActive, setIsPollingActive }) => (
-    <div className="space-y-4 pt-5 border-t border-gray-200">
-        <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-900">Polling Frequency</label>
-            <select
-                value={pollingInterval}
-                onChange={e => setPollingInterval(e.target.value)}
-                className="mt-1 block w-full rounded-lg border-gray-300 bg-white shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 hover:border-gray-400 px-4 py-2.5 text-sm"
-            >
-                <option value="every_minute">Every Minute (for testing)</option>
-                <option value="hourly">Every Hour</option>
-                <option value="daily">Every Day</option>
-            </select>
+    <div className="mt-6 pt-5 border-t border-slate-100 space-y-4">
+        <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-slate-400" />
+                Auto-Sync Settings
+            </h4>
         </div>
-        <div className="rounded-lg bg-gray-50 p-4 border border-gray-200">
-            <Switch.Group as="div" className="flex items-start justify-between gap-4">
-                <span className="flex-grow flex flex-col">
-                    <Switch.Label as="span" className="text-sm font-semibold text-gray-900 mb-1" passive>
-                        Enable Automatic Polling
-                    </Switch.Label>
-                    <Switch.Description as="span" className="text-xs leading-relaxed text-gray-600">
-                        Automatically fetch fresh data based on your selected schedule.
-                    </Switch.Description>
-                </span>
+
+        <div className="flex items-start gap-5">
+            <div className="flex-1 space-y-1">
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Frequency</label>
+                <div className="relative">
+                    <select
+                        value={pollingInterval}
+                        onChange={e => setPollingInterval(e.target.value)}
+                        disabled={!isPollingActive}
+                        className="appearance-none w-full rounded-md border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 py-2 pl-3 pr-8 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 transition-all font-medium"
+                    >
+                        <option value="every_minute">Every Minute (Debug)</option>
+                        <option value="hourly">Hourly</option>
+                        <option value="daily">Daily</option>
+                    </select>
+                    {/* Custom Arrow */}
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                        <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="flex-1 flex items-center justify-between bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                <div className="flex flex-col pl-1">
+                    <span className="text-xs font-semibold text-slate-900">Enable Sync</span>
+                    <span className="text-[10px] text-slate-500">Fetch data automatically</span>
+                </div>
                 <Switch
                     checked={isPollingActive}
                     onChange={setIsPollingActive}
                     className={`${
-                        isPollingActive ? 'bg-blue-600' : 'bg-gray-300'
-                    } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-offset-2`}
+                        isPollingActive ? 'bg-blue-600' : 'bg-slate-200'
+                    } relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none`}
                 >
                     <span
                         aria-hidden="true"
                         className={`${
-                            isPollingActive ? 'translate-x-5' : 'translate-x-0'
-                        } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-all duration-200 ease-in-out`}
+                            isPollingActive ? 'translate-x-4' : 'translate-x-0'
+                        } pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out`}
                     />
                 </Switch>
-            </Switch.Group>
+            </div>
         </div>
     </div>
 );
 
-
 export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsOpen, workspace, onUpdate, onUploadStart }) => {
-  // 1. FIX: Removed 'token'. Not using useAuth anymore.
   const [dataSource, setDataSource] = useState(workspace.data_source || "CSV");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
@@ -149,15 +157,12 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
       payload.db_query = dbQuery;
     }
     try {
-      // 2. FIX: Removed headers. Cookies are sent automatically.
       const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, payload);
-      
       onUpdate(res.data);
       if (isPollingActive) {
           onUploadStart(); 
       }
-      
-      toast.success("Configuration saved successfully!");
+      toast.success("Configuration saved successfully!", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
       setIsOpen(false);
     } catch (error) {
       console.error(error);
@@ -173,197 +178,252 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     const formData = new FormData();
     formData.append("file", selectedFile);
     try {
-      // 3. FIX: Removed headers from upload call.
       await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
-          headers: {
-              'Content-Type': 'multipart/form-data',
-          }
+          headers: { 'Content-Type': 'multipart/form-data' }
       });
-      
       onUploadStart();
-      
-      // 4. FIX: Removed headers from update call.
       const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { data_source: 'CSV', is_polling_active: false });
-      
       onUpdate(res.data);
-      toast.success("Upload successful! Processing has started.");
+      toast.success("Upload successful!", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
       setIsOpen(false);
     } catch (error) {
       console.error(error);
-      toast.error("File upload failed. Please try again.");
+      toast.error("File upload failed.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const dataSourceOptions = [
-    { value: "CSV", label: "CSV File", description: "Upload a comma-separated file", icon: FileText },
-    { value: "API", label: "API Connection", description: "Connect to an external REST API", icon: Globe },
-    { value: "DB", label: "Database", description: "Connect to your SQL database", icon: Database }
+    { value: "CSV", label: "CSV Upload", description: "Static file ingestion", icon: FileSpreadsheet },
+    { value: "API", label: "REST API", description: "External JSON endpoint", icon: Globe },
+    { value: "DB", label: "PostgreSQL", description: "Direct SQL connection", icon: Database }
   ];
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={() => !isSaving && setIsOpen(false)}>
+      <Dialog as="div" className="relative z-50 font-sans" onClose={() => !isSaving && setIsOpen(false)}>
+        {/* Backdrop - Lighter blur for performance */}
         <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
-          <div className="fixed inset-0 bg-black/40" />
+          <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-[2px]" />
         </Transition.Child>
+
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
-              <Dialog.Panel className="w-full max-w-2xl transform rounded-xl bg-white shadow-xl overflow-hidden">
-                <div className="relative px-6 py-5 border-b border-gray-200 bg-gray-50">
-                  <button onClick={() => !isSaving && setIsOpen(false)} className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-200 transition-colors"><X className="h-5 w-5 text-gray-500" /></button>
-                  <div className="pr-10">
-                    <Dialog.Title as="h3" className="text-xl font-bold text-gray-900">Configure Data Source</Dialog.Title>
-                    <p className="text-sm text-gray-600 mt-1">Choose your preferred data ingestion method.</p>
+              <Dialog.Panel className="w-full max-w-2xl transform rounded-xl bg-white shadow-xl transition-all overflow-hidden flex flex-col max-h-[90vh] border border-slate-100">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-10">
+                  <div>
+                      <Dialog.Title as="h3" className="text-base font-bold text-slate-900">Configure Data Source</Dialog.Title>
+                      <p className="text-[11px] text-slate-500 font-medium">Select and configure your primary ingestion method.</p>
                   </div>
+                  <button 
+                      onClick={() => !isSaving && setIsOpen(false)} 
+                      className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                  >
+                      <X className="h-4 w-4" />
+                  </button>
                 </div>
 
-                <div className="px-6 py-6 overflow-y-auto scrollbar-hide" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                {/* Content */}
+                <div className="px-6 py-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
                   <div className="space-y-6">
-                    <div>
-                      <RadioGroup value={dataSource} onChange={setDataSource}>
-                        <RadioGroup.Label className="text-sm font-semibold text-gray-900 mb-3 block">Data Source Type</RadioGroup.Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {dataSourceOptions.map((option) => (
-                            <RadioGroup.Option key={option.value} value={option.value} className={({ checked }) => `${checked ? 'bg-blue-50 border-blue-500' : 'bg-white border-gray-200 hover:border-gray-300'} relative flex cursor-pointer rounded-lg border-2 p-4 focus:outline-none`}>
-                              {({ checked }) => (
-                                <div className="flex flex-col w-full">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${checked ? 'bg-blue-500' : 'bg-gray-100'}`}><option.icon className={`h-5 w-5 ${checked ? 'text-white' : 'text-gray-600'}`} /></div>
-                                    {checked && <CheckCircle2 className="h-5 w-5 text-blue-600" />}
-                                  </div>
-                                  <div className="text-left mt-auto">
-                                    <RadioGroup.Label as="p" className="font-semibold text-sm text-gray-900 mb-1">{option.label}</RadioGroup.Label>
-                                    <p className="text-xs text-gray-600 leading-relaxed">{option.description}</p>
-                                  </div>
+                    
+                    {/* Data Source Selector - Thin borders, clean look */}
+                    <RadioGroup value={dataSource} onChange={setDataSource}>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {dataSourceOptions.map((option) => (
+                          <RadioGroup.Option 
+                              key={option.value} 
+                              value={option.value} 
+                              className={({ checked }) => `${checked ? 'ring-1 ring-blue-500 bg-blue-50/20 border-blue-500/30' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'} relative flex flex-col cursor-pointer rounded-lg border p-3 transition-all focus:outline-none select-none`}
+                          >
+                            {({ checked }) => (
+                              <>
+                                <div className={`w-8 h-8 rounded-md flex items-center justify-center mb-2.5 transition-colors ${checked ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                    <option.icon className="h-4 w-4" />
                                 </div>
-                              )}
-                            </RadioGroup.Option>
-                          ))}
-                        </div>
-                      </RadioGroup>
-                    </div>
-
-                    {dataSource === 'CSV' && (
-                      <div className="pt-5 border-t border-gray-200 space-y-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-900 mb-3">Upload CSV File</label>
-                          <div className="mt-2 flex justify-center px-6 pt-6 pb-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 bg-gray-50 transition-colors cursor-pointer">
-                            <div className="text-center space-y-2">
-                              <div className="mx-auto w-12 h-12 bg-white rounded-lg flex items-center justify-center border border-gray-200"><UploadCloud className="h-6 w-6 text-gray-400" /></div>
-                              <div>
-                                <div className="flex text-sm text-gray-600 justify-center items-center gap-1">
-                                  <label htmlFor="file-upload-input" className="relative cursor-pointer font-semibold text-blue-600 hover:text-blue-700 focus-within:outline-none rounded px-1"><span>Choose a file</span><input id="file-upload-input" name="file-upload" type="file" className="sr-only" accept=".csv" onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)} /></label>
-                                  <span>or drag and drop</span>
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">CSV files only</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        {selectedFile && (
-                          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center border border-green-200"><FileText className="h-5 w-5 text-green-600" /></div>
                                 <div>
-                                  <span className="text-sm font-semibold text-green-900 block">{selectedFile.name}</span>
-                                  <span className="text-xs text-green-700">{(selectedFile.size / 1024).toFixed(2)} KB</span>
+                                  <RadioGroup.Label as="p" className={`font-bold text-sm mb-0.5 ${checked ? 'text-blue-900' : 'text-slate-900'}`}>
+                                      {option.label}
+                                  </RadioGroup.Label>
+                                  <p className={`text-[10px] ${checked ? 'text-blue-700' : 'text-slate-500'}`}>
+                                      {option.description}
+                                  </p>
                                 </div>
-                              </div>
-                              <button onClick={() => setSelectedFile(null)} className="p-1.5 hover:bg-green-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-400"><X className="h-4 w-4 text-green-700" /></button>
-                            </div>
-                          </div>
+                                {checked && <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-blue-600" />}
+                              </>
+                            )}
+                          </RadioGroup.Option>
+                        ))}
+                      </div>
+                    </RadioGroup>
+
+                    {/* DYNAMIC FORMS - Zero lag transitions */}
+                    <div className="animate-in fade-in duration-200">
+                        {dataSource === 'CSV' && (
+                        <div>
+                            {!selectedFile ? (
+                                <div className="relative mt-1 flex justify-center px-6 pt-8 pb-8 border border-dashed border-slate-300 rounded-lg hover:border-blue-400 hover:bg-slate-50/30 transition-all cursor-pointer group">
+                                    <div className="text-center space-y-2">
+                                        <div className="mx-auto w-10 h-10 bg-slate-50 group-hover:bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                                            <UploadCloud className="h-5 w-5 text-slate-400 group-hover:text-blue-500" />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="file-upload-input" className="relative cursor-pointer text-sm font-semibold text-blue-600 hover:text-blue-700 focus-within:outline-none">
+                                                <span>Click to upload</span>
+                                                <input id="file-upload-input" name="file-upload" type="file" className="sr-only" accept=".csv" onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)} />
+                                            </label>
+                                            <p className="text-xs text-slate-500">or drag and drop CSV (Max 10MB)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-9 h-9 bg-emerald-50 rounded-md flex items-center justify-center border border-emerald-100">
+                                            <FileText className="h-4 w-4 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900 truncate max-w-[200px]">{selectedFile.name}</p>
+                                            <p className="text-[10px] text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSelectedFile(null)} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-400 hover:text-red-500 transition-colors">
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         )}
-                      </div>
-                    )}
 
-                    {dataSource === 'API' && (
-                      <div className="pt-5 border-t border-gray-200 space-y-5">
-                        {workspace.is_polling_active && workspace.data_source === 'API' && <div className="p-4 rounded-lg flex items-start space-x-3 border border-blue-200 bg-blue-50"><div className="w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0"><Info className="h-5 w-5 text-white" /></div><div className="text-sm text-left flex-1"><p className="font-semibold text-blue-900 mb-1">Active Polling Detected</p><p className="text-blue-800 leading-relaxed">Polling is currently active. To modify settings, disable the toggle, save, then reopen this modal.</p></div></div>}
-                        
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold text-gray-900">API Endpoint URL</label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Globe className="h-5 w-5 text-gray-400" /></div>
-                            <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 hover:border-gray-400 text-sm" placeholder="https://api.example.com/v1/data"/>
-                          </div>
-                        </div>
-
-                        {/* --- NEW: Authentication Section --- */}
-                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-4">
-                            <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                                <Lock className="h-4 w-4 text-gray-500" /> Authentication (Optional)
-                            </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-semibold text-gray-700">Header Name</label>
+                        {dataSource === 'API' && (
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Endpoint URL</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Globe className="h-3.5 w-3.5 text-slate-400" /></div>
                                     <input 
-                                        type="text" 
-                                        value={apiHeaderName} 
-                                        onChange={e => setApiHeaderName(e.target.value)} 
-                                        className="w-full px-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm text-sm" 
-                                        placeholder="Authorization"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-semibold text-gray-700">Header Value</label>
-                                    <input 
-                                        type="password" 
-                                        value={apiHeaderValue} 
-                                        onChange={e => setApiHeaderValue(e.target.value)} 
-                                        className="w-full px-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm text-sm" 
-                                        placeholder="Bearer sk_..."
+                                        type="url" 
+                                        value={apiUrl} 
+                                        onChange={e => setApiUrl(e.target.value)} 
+                                        className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm font-mono text-slate-700 placeholder:text-slate-400 transition-all" 
+                                        placeholder="https://api.example.com/v1/data"
                                     />
                                 </div>
                             </div>
-                        </div>
-                        {/* ----------------------------------- */}
 
-                        <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
-                      </div>
-                    )}
+                            <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-100 space-y-3">
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Lock className="h-3 w-3" /> Auth Headers (Optional)
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="block text-[10px] font-semibold text-slate-500">Key</label>
+                                        <input 
+                                            type="text" 
+                                            value={apiHeaderName} 
+                                            onChange={e => setApiHeaderName(e.target.value)} 
+                                            className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" 
+                                            placeholder="Authorization"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="block text-[10px] font-semibold text-slate-500">Value</label>
+                                        <input 
+                                            type="password" 
+                                            value={apiHeaderValue} 
+                                            onChange={e => setApiHeaderValue(e.target.value)} 
+                                            className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-mono" 
+                                            placeholder="Bearer token..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
-                    {dataSource === 'DB' && (
-                      <div className="pt-5 border-t border-gray-200 space-y-5">
-                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-4">Connection Details</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2"><label className="block text-xs font-semibold text-gray-700">Host</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Server className="h-4 w-4 text-gray-400" /></div><input type="text" value={dbHost} onChange={e => setDbHost(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm" placeholder="db.example.com"/></div></div>
-                            <div className="space-y-2"><label className="block text-xs font-semibold text-gray-700">Port</label><input type="number" value={dbPort} onChange={e => setDbPort(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm" placeholder="5432"/></div>
-                            <div className="space-y-2"><label className="block text-xs font-semibold text-gray-700">Username</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-4 w-4 text-gray-400" /></div><input type="text" value={dbUser} onChange={e => setDbUser(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm" placeholder="readonly_user"/></div></div>
-                            <div className="space-y-2"><label className="block text-xs font-semibold text-gray-700">Password</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-4 w-4 text-gray-400" /></div><input type="password" value={dbPassword} onChange={e => setDbPassword(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm" placeholder="password"/></div></div>
-                            <div className="sm:col-span-2 space-y-2"><label className="block text-xs font-semibold text-gray-700">Database Name</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Database className="h-4 w-4 text-gray-400" /></div><input type="text" value={dbName} onChange={e => setDbName(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border-gray-300 bg-white shadow-sm" placeholder="production_db"/></div></div>
-                          </div>
+                            <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
                         </div>
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold text-gray-900">SQL Query</label>
-                          <div className="relative">
-                            <div className="absolute left-0 top-3 pl-3 pointer-events-none"><BookOpen className="h-4 w-4 text-gray-400" /></div>
-                            <textarea value={dbQuery} onChange={e => setDbQuery(e.target.value)} rows={5} className="w-full pl-10 pr-3 py-2.5 rounded-lg border-gray-300 bg-white shadow-sm font-mono text-sm leading-relaxed" placeholder="SELECT * FROM my_table WHERE created_at > NOW() - INTERVAL '1 day';"/>
-                          </div>
-                        </div>
-                        <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
-                      </div>
-                    )}
+                        )}
 
+                        {dataSource === 'DB' && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                <div className="sm:col-span-8 space-y-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Host</label>
+                                    <input type="text" value={dbHost} onChange={e => setDbHost(e.target.value)} className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm text-sm font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="db.example.com"/>
+                                </div>
+                                <div className="sm:col-span-4 space-y-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Port</label>
+                                    <input type="number" value={dbPort} onChange={e => setDbPort(Number(e.target.value))} className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm text-sm font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="5432"/>
+                                </div>
+                                <div className="sm:col-span-6 space-y-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">User</label>
+                                    <div className="relative">
+                                        <User className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                                        <input type="text" value={dbUser} onChange={e => setDbUser(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="postgres"/>
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-6 space-y-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Password</label>
+                                    <div className="relative">
+                                        <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                                        <input type="password" value={dbPassword} onChange={e => setDbPassword(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="••••••••"/>
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-12 space-y-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Database Name</label>
+                                    <div className="relative">
+                                        <Database className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                                        <input type="text" value={dbName} onChange={e => setDbName(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded-md border border-slate-200 bg-white shadow-sm text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="production_db"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-slate-400"/> SQL Query</label>
+                                <textarea value={dbQuery} onChange={e => setDbQuery(e.target.value)} rows={4} className="w-full px-3 py-3 rounded-lg border border-slate-200 bg-slate-900 text-slate-200 shadow-sm font-mono text-xs leading-relaxed focus:ring-2 focus:ring-blue-500/50 resize-y" placeholder="SELECT * FROM my_table LIMIT 100;"/>
+                            </div>
+                            <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
+                        </div>
+                        )}
+                    </div>
                   </div>
                 </div>
                 
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
-                  <button type="button" className="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-lg hover:bg-gray-100" onClick={() => setIsOpen(false)} disabled={isSaving}>Cancel</button>
+                {/* Footer */}
+                <div className="px-6 py-4 bg-white border-t border-slate-100 flex justify-end gap-3 z-10">
+                  <button 
+                    type="button" 
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:text-slate-800 transition-colors" 
+                    onClick={() => !isSaving && setIsOpen(false)} 
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </button>
                   {dataSource === 'CSV' ? (
-                      <button type="button" className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg disabled:opacity-50 flex items-center gap-2" onClick={handleCsvUpload} disabled={isSaving || !selectedFile}>
-                          {isSaving ? <><Loader2 className="animate-spin h-5 w-5"/><span>Uploading...</span></> : 'Save & Upload'}
+                      <button 
+                        type="button" 
+                        className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md disabled:opacity-50 flex items-center gap-2 shadow-sm transition-transform active:scale-95" 
+                        onClick={handleCsvUpload} 
+                        disabled={isSaving || !selectedFile}
+                      >
+                          {isSaving ? <Loader2 className="animate-spin h-3.5 w-3.5"/> : <UploadCloud className="h-3.5 w-3.5"/>}
+                          {isSaving ? 'Uploading...' : 'Upload & Process'}
                       </button>
                   ) : (
-                      <button type="button" className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg disabled:opacity-50 flex items-center gap-2" onClick={handleSaveConfiguration} disabled={isSaving}>
-                          {isSaving ? <><Loader2 className="animate-spin h-5 w-5"/><span>Saving...</span></> : 'Save Configuration'}
+                      <button 
+                        type="button" 
+                        className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md disabled:opacity-50 flex items-center gap-2 shadow-sm transition-transform active:scale-95" 
+                        onClick={handleSaveConfiguration} 
+                        disabled={isSaving}
+                      >
+                          {isSaving ? <Loader2 className="animate-spin h-3.5 w-3.5"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}
+                          {isSaving ? 'Saving...' : 'Save Configuration'}
                       </button>
                   )}
                 </div>
+
               </Dialog.Panel>
             </Transition.Child>
           </div>

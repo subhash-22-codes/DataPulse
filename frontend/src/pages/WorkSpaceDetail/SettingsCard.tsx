@@ -2,7 +2,7 @@ import React, { Fragment, useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { Workspace, DataUpload, AlertRule } from '../../types';
 import { Dialog, Transition } from '@headlessui/react';
-import { Loader2, X, CheckCircle2, Info, Trash2 } from 'lucide-react'; 
+import { Loader2, X, CheckCircle2, Trash2, ShieldAlert, ArrowRight, AlertTriangle } from 'lucide-react'; 
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -39,7 +39,6 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
   const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => {
-    // Defined inside useEffect to fix dependency warning
     const fetchImpactCounts = async () => {
       try {
         const [uploadsRes, alertsRes] = await Promise.all([
@@ -54,7 +53,6 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
     };
 
     if (!isModalOpen) {
-      // Reset state when modal closes
       const timer = setTimeout(() => {
         setStep('confirm_name');
         setConfirmationText('');
@@ -71,7 +69,6 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
 
   if (!isOwner) return null;
 
-  // --- HANDLERS ---
   const handleRequestOTP = async () => {
     setInputError(false);
     setErrorMessage('');
@@ -85,7 +82,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
     setIsLoading(true);
     try {
       await api.post(`/workspaces/${workspace.id}/request-delete-otp`);
-      toast.success("Verification code sent to email");
+      toast.success("Verification code sent to email", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
       setStep('verify_otp');
     } catch (error) {
       const err = error as AxiosErrorType;
@@ -108,18 +105,13 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
 
     setIsLoading(true);
     try {
-      await api.delete(`/workspaces/${workspace.id}/confirm`, {
-        data: { otp: otp } 
-      });
-      
+      await api.delete(`/workspaces/${workspace.id}/confirm`, { data: { otp: otp } });
       setStep('success');
-      
       setTimeout(() => {
         setIsModalOpen(false);
         navigate('/home');
-        toast.success("Workspace moved to Trash");
+        toast.success("Workspace moved to Trash", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
       }, 2000);
-
     } catch (error) {
       const err = error as AxiosErrorType;
       console.error(err);
@@ -133,61 +125,66 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
 
   return (
     <>
-      <div className="w-full max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-        {/* Header Section */}
-        <div className="border-b border-gray-200 pb-5 mb-8">
-          <h2 className="text-2xl font-semibold leading-tight text-gray-900">General Settings</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your workspace configuration and danger zone actions.
+      <div className="w-full max-w-7xl mx-auto font-sans animate-in fade-in duration-300">
+        
+        <div className="border-b border-slate-200 pb-5 mb-8">
+          <h2 className="text-lg font-bold leading-tight text-slate-900">General Settings</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage your workspace configuration and administrative actions.
           </p>
         </div>
 
-        {/* Minimal Danger Zone Card */}
-        <div className="overflow-hidden rounded-xl border border-red-100 bg-white shadow-sm transition-shadow hover:shadow-md">
-          <div className="px-6 py-6 sm:p-10">
-            <div className="flex flex-col sm:flex-row items-start justify-between gap-8">
-              <div className="flex-1 max-w-2xl">
-                <h3 className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2">
-                  <Trash2 className="h-5 w-5 text-gray-400" />
-                  Delete Workspace
-                </h3>
-                <div className="mt-3 text-sm leading-relaxed text-gray-500">
-                  <p>
-                    Move <span className="font-semibold text-gray-900">{workspace.name}</span> to the trash. 
-                    Resources will be inaccessible immediately but can be restored within <span className="font-medium text-gray-900">30 days</span>. 
-                    After that, the data is permanently deleted.
-                  </p>
-                </div>
+        {/* Danger Zone Card */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+            {/* MOBILE LAYOUT FIX: 
+               Used `flex-col-reverse` on mobile so content is below image, 
+               but shifted to `flex-row` on desktop (`sm:`).
+            */}
+            <div className="px-6 py-6 sm:p-8 flex flex-col-reverse sm:flex-row gap-6 sm:gap-8 items-center sm:items-start">
                 
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(true)}
-                    className="inline-flex items-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-                  >
-                    Move to trash
-                  </button>
+                {/* Left Content */}
+                <div className="flex-1 w-full text-center sm:text-left">
+                    <h3 className="text-base font-bold text-slate-900 flex items-center justify-center sm:justify-start gap-2">
+                        Delete Workspace
+                    </h3>
+                    <div className="mt-2 text-sm text-slate-500 leading-relaxed max-w-2xl mx-auto sm:mx-0">
+                        <p className="mb-3">
+                            Permanently delete <span className="font-semibold text-slate-900">{workspace.name}</span> and all of its resources ({uploadCount} datasets, {alertCount} alerts).
+                        </p>
+                        <p className="text-xs bg-slate-50 text-slate-600 p-2.5 rounded-md border border-slate-100 inline-block text-left">
+                            <span className="font-semibold">Note:</span> Deleted workspaces are recoverable for 30 days before permanent removal.
+                        </p>
+                    </div>
+                    
+                    <div className="mt-6">
+                        <button
+                            type="button"
+                            onClick={() => setIsModalOpen(true)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-red-600 border border-slate-200 shadow-sm hover:bg-red-50 hover:border-red-100 hover:text-red-700 transition-all active:scale-95 w-full sm:w-auto justify-center"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            Delete this workspace
+                        </button>
+                    </div>
                 </div>
-              </div>
-              
-              {/* Illustration */}
-              <div className="flex-shrink-0 self-center sm:self-start">
-                <img 
-                  src="/images/Delete.png" 
-                  alt="Delete workspace illustration" 
-                  className="h-28 w-auto object-contain"
-                />
-              </div>
+
+                {/* Right Illustration - Visible on Mobile & Desktop */}
+                <div className="flex-shrink-0 opacity-90 hover:opacity-100 transition-opacity">
+                    <img 
+                        src="/images/Delete.png" 
+                        alt="Delete workspace" 
+                        // Mobile: h-24, Desktop: h-32. Contained neatly.
+                        className="h-24 sm:h-32 w-auto object-contain pointer-events-none select-none" 
+                    />
+                </div>
             </div>
-          </div>
         </div>
       </div>
 
-      {/* --- PRODUCTION LEVEL MODAL --- */}
+      {/* --- CONFIRMATION MODAL --- */}
       <Transition appear show={isModalOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={() => !isLoading && setIsModalOpen(false)}>
+        <Dialog as="div" className="relative z-50 font-sans" onClose={() => !isLoading && setIsModalOpen(false)}>
           
-          {/* Backdrop with Blur */}
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -197,119 +194,120 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" />
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px]" />
           </Transition.Child>
 
           <div className="fixed inset-0 z-10 overflow-y-auto">
-            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
               <Transition.Child
                 as={Fragment}
                 enter="ease-out duration-300"
-                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
                 leave="ease-in duration-200"
-                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-lg border border-gray-100">
+                <Dialog.Panel className="w-full max-w-[480px] transform overflow-hidden rounded-xl bg-white text-left align-middle shadow-2xl transition-all border border-slate-100">
                   
                   {/* SUCCESS STATE */}
                   {step === 'success' ? (
-                    <div className="flex flex-col items-center justify-center py-16 px-4">
-                      <div className="rounded-full bg-green-50 p-3 mb-6">
-                        <CheckCircle2 className="h-10 w-10 text-green-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Moved to Trash</h3>
-                      <p className="text-sm text-gray-500 mt-2">You can restore this from Settings for 30 days.</p>
+                    <div className="flex flex-col items-center justify-center py-12 px-8 bg-white animate-in zoom-in duration-300">
+                       <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mb-4 border border-green-100">
+                          <CheckCircle2 className="h-7 w-7 text-green-600" />
+                       </div>
+                       <h3 className="text-lg font-bold text-slate-900">Workspace Deleted</h3>
+                       <p className="text-sm text-slate-500 mt-2 text-center">
+                         Resources moved to trash. Redirecting...
+                       </p>
+                       <div className="mt-6 w-full max-w-[200px] bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 animate-[progress_2s_ease-in-out]"></div>
+                       </div>
                     </div>
                   ) : (
                     /* FORM STATE */
                     <>
                       {/* Modal Header */}
-                      <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white">
-                        <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
-                          {step === 'confirm_name' ? 'Move to Trash' : 'Security Verification'}
-                        </Dialog.Title>
+                      <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                                {step === 'confirm_name' ? <ShieldAlert className="h-5 w-5 text-slate-500" /> : <ShieldAlert className="h-5 w-5 text-slate-500" />}
+                            </div>
+                            <div>
+                                <Dialog.Title as="h3" className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                                {step === 'confirm_name' ? 'Confirm Deletion' : 'Security Check'}
+                                </Dialog.Title>
+                            </div>
+                        </div>
                         <button
                           type="button"
-                          className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none transition-colors"
+                          className="rounded-md p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none"
                           onClick={() => !isLoading && setIsModalOpen(false)}
                         >
-                          <span className="sr-only">Close</span>
-                          <X className="h-5 w-5" />
+                          <X className="h-4 w-4" />
                         </button>
                       </div>
 
                       {/* Modal Body */}
-                      <div className="px-6 py-6 sm:py-8">
+                      <div className="px-6 py-6 bg-white">
                         {step === 'confirm_name' ? (
-                          <div className="space-y-6">
-                            {/* Warning Box */}
-                            <div className="rounded-lg bg-amber-50 p-4 border border-amber-100">
-                              <div className="flex">
-                                <div className="flex-shrink-0">
-                                  <Info className="h-5 w-5 text-amber-600" aria-hidden="true" />
-                                </div>
-                                <div className="ml-3">
-                                  <h3 className="text-sm font-medium text-amber-800">30-Day Recovery Period</h3>
-                                  <div className="mt-1 text-sm text-amber-700/80">
-                                    <p>
-                                      The workspace <strong>{workspace.name}</strong> (containing {uploadCount} uploads and {alertCount} alerts) will be disabled immediately. 
-                                      You have 30 days to restore it before it is permanently deleted.
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
+                          <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div className="bg-red-50/50 border border-red-100 p-3 rounded-lg flex gap-3">
+                                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+                                <p className="text-xs text-red-800 leading-relaxed font-medium">
+                                    Unexpected bad things will happen if you don't read this! This action cannot be undone immediately.
+                                </p>
                             </div>
 
                             {/* Input Group */}
                             <div>
-                              <label htmlFor="confirm-name" className="block text-sm font-medium leading-6 text-gray-900 mb-2">
-                                Type <span className="font-mono text-gray-600 bg-gray-100 px-1 py-0.5 rounded text-xs select-all">{workspace.name}</span> to confirm
+                              <label htmlFor="confirm-name" className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
+                                Type <span className="normal-case text-slate-900 select-all">{workspace.name}</span> to confirm
                               </label>
                               <div className="relative">
                                 <input
                                   type="text"
-                                  name="confirm-name"
                                   id="confirm-name"
                                   value={confirmationText}
                                   onChange={(e) => {
                                     setConfirmationText(e.target.value);
                                     setInputError(false);
                                   }}
-                                  // Added pr-10 to prevent text from overlapping the green check icon
-                                  className={`block w-full rounded-lg border py-3 pl-4 pr-10 text-gray-900 shadow-sm placeholder:text-gray-400 focus:ring-0 sm:text-sm sm:leading-6 transition-colors ${
+                                  className={`block w-full rounded-lg border py-2.5 pl-4 pr-10 text-slate-900 text-sm shadow-sm placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-slate-100 ${
                                     inputError 
-                                      ? 'border-red-300 focus:border-red-500 bg-red-50/10' 
-                                      : 'border-gray-200 focus:border-gray-900'
+                                      ? 'border-red-300 focus:border-red-500' 
+                                      : 'border-slate-300 focus:border-slate-500'
                                   }`}
                                   placeholder={workspace.name}
                                   autoComplete="off"
+                                  autoFocus
                                 />
                                 
-                                {/* GREEN TICK MARK IMPLEMENTATION */}
+                                {/* Live Verification Icon */}
                                 {confirmationText === workspace.name && (
-                                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none animate-in fade-in zoom-in duration-200">
-                                    <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
+                                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none animate-in zoom-in duration-200">
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                                   </div>
                                 )}
                               </div>
                               {inputError && (
-                                <p className="mt-2 text-sm text-red-600 animate-pulse">
-                                  {errorMessage}
+                                <p className="mt-2 text-xs font-medium text-red-600 animate-pulse">
+                                    {errorMessage}
                                 </p>
                               )}
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-6">
+                          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                              <div>
-                                <label className="block text-sm font-medium leading-6 text-gray-900 mb-2">
-                                  Enter 6-digit verification code
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+                                  Verification Code
                                 </label>
-                                <p className="text-sm text-gray-500 mb-4">
-                                  For security, we sent a one-time password to your email address associated with this account.
-                                </p>
+                                <div className="mb-4">
+                                    <p className="text-sm text-slate-600 leading-relaxed">
+                                        Enter the 6-digit code sent to your email to verify your identity.
+                                    </p>
+                                </div>
                                 <input
                                   type="text"
                                   maxLength={6}
@@ -318,15 +316,16 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                                     setOtp(e.target.value.replace(/\D/g, ''));
                                     setInputError(false);
                                   }}
-                                  className={`block w-full rounded-lg border py-3 px-4 text-center text-lg tracking-[0.5em] font-mono text-gray-900 shadow-sm focus:ring-0 sm:leading-6 transition-colors ${
+                                  className={`block w-full rounded-lg border py-3 px-4 text-center text-xl tracking-[0.5em] font-mono font-medium text-slate-900 shadow-sm transition-all focus:ring-4 focus:ring-slate-100 ${
                                     inputError 
-                                      ? 'border-red-300 focus:border-red-500 bg-red-50/10' 
-                                      : 'border-gray-200 focus:border-gray-900'
+                                      ? 'border-red-300 focus:border-red-500' 
+                                      : 'border-slate-300 focus:border-slate-900'
                                   }`}
                                   placeholder="000000"
+                                  autoFocus
                                 />
                                 {inputError && (
-                                  <p className="mt-2 text-sm text-center text-red-600">
+                                  <p className="mt-2 text-xs font-semibold text-center text-red-600">
                                     {errorMessage}
                                   </p>
                                 )}
@@ -336,36 +335,37 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                       </div>
 
                       {/* Modal Footer */}
-                      <div className="bg-gray-50/50 px-6 py-4 sm:flex sm:flex-row-reverse sm:px-6 border-t border-gray-100">
+                      <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                        <button
+                          type="button"
+                          className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
+                          onClick={() => !isLoading && setIsModalOpen(false)}
+                          disabled={isLoading}
+                        >
+                          Cancel
+                        </button>
+                        
                         {step === 'confirm_name' ? (
                           <button
                             type="button"
                             onClick={handleRequestOTP}
-                            disabled={isLoading || confirmationText === ''}
-                            className="inline-flex w-full justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed transition-all focus:outline-none"
+                            disabled={isLoading || confirmationText !== workspace.name}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all active:scale-95"
                           >
-                            {isLoading && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-                            I understand, continue
+                            {isLoading && <Loader2 className="animate-spin h-3.5 w-3.5" />}
+                            Verify Identity <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={handleFinalDelete}
                             disabled={isLoading || otp.length !== 6}
-                            className="inline-flex w-full justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed transition-all focus:outline-none"
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all active:scale-95"
                           >
-                            {isLoading && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-                            Confirm Move to Trash
+                            {isLoading ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            Delete Workspace
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto transition-all focus:outline-none"
-                          onClick={() => !isLoading && setIsModalOpen(false)}
-                          disabled={isLoading}
-                        >
-                          Cancel
-                        </button>
                       </div>
                     </>
                   )}

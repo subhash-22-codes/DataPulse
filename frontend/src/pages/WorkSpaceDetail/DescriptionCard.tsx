@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import { api } from "../../services/api";
-import { Edit3, Loader2, Check, X } from "lucide-react";
+import { Edit3, Loader2, Check, Info } from "lucide-react";
 import { Workspace } from "../../types";
 import ReactMarkdown from "react-markdown";
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
 import { FormattedDate } from "../../components/FormattedDate";
 import NatrajPaperIllustration from "../../components/website-ui/Illustrations/NatrajPaperIllustration";
-import AboutWorkspaceIllustration from "../../components/website-ui/Illustrations/AboutWorkspaceIllustration";
 
 
 interface DescriptionCardProps {
@@ -33,7 +32,9 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
       const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { description });
       onUpdate(res.data);
       setIsEditing(false);
-      toast.success("Description updated!");
+      toast.success("Description updated!", {
+        style: { fontSize: '13px', background: '#334155', color: '#fff' }
+      });
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
@@ -52,129 +53,178 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
   const isOverLimit = description.length > MAX_DESC_LENGTH;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full group transition-shadow hover:shadow-md overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden relative font-sans group">
       
       {/* --- HEADER --- */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+      <div className="px-5 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          
-          {/* Logo / Icon Area */}
-          <AboutWorkspaceIllustration className="w-10 h-10" />
+          {/* Consistent Icon Style */}
+          <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-md border border-slate-200/60 flex items-center justify-center shadow-sm">
+             <Info className="h-4 w-4" />
+          </div>
 
           <div className="flex flex-col">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">About Workspace</h2>
+            <h2 className="text-sm font-bold text-slate-900 leading-none">About Workspace</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">Project context & goals</p>
           </div>
         </div>
 
         {isOwner && !isEditing && (
           <button 
             onClick={() => setIsEditing(true)} 
-            className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-gray-200 transition-all"
+            className="text-slate-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Edit Description"
           >
-            <Edit3 className="h-4 w-4" />
+            <Edit3 className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
       {/* --- CONTENT --- */}
-      <div className="p-5 flex-grow flex flex-col bg-white">
+      <div className="p-5 flex-grow flex flex-col bg-slate-50/30">
         {isEditing ? (
-          <div className="flex-grow flex flex-col gap-4 animate-in fade-in duration-200">
+          <div className="flex-grow flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-200">
             <div className="relative flex-grow">
-              <textarea 
-                value={description} 
-                onChange={(e) => setDescription(e.target.value)} 
-                className={`w-full h-full min-h-[160px] p-3 text-sm leading-relaxed rounded-md border bg-white focus:ring-2 focus:ring-offset-1 resize-none outline-none transition-all
-                  ${isOverLimit 
-                    ? 'border-red-300 focus:border-red-500 focus:ring-red-100' 
-                    : 'border-gray-300 focus:border-gray-900 focus:ring-gray-100'
-                  }`}
-                placeholder="Write a brief description..."
-                autoFocus
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={`
+                  w-full min-h-[160px] sm:min-h-[180px]
+                  resize-none rounded-md border bg-white
+                  px-3 py-2.5 text-sm leading-relaxed
+                  text-slate-700 placeholder:text-slate-400
+                  shadow-sm transition outline-none custom-scrollbar
+                  ${isOverLimit
+                    ? 'border-red-400 focus:border-red-500'
+                    : 'border-slate-200 hover:border-slate-300 focus:border-slate-400'
+                  }
+                `}
+                placeholder="What is this workspace used for?"
               />
-              <span className={`absolute bottom-3 right-3 text-[10px] font-medium px-2 py-0.5 rounded border ${
-                isOverLimit 
-                  ? 'bg-red-50 text-red-600 border-red-100' 
-                  : 'bg-gray-50 text-gray-500 border-gray-100'
-              }`}>
-                {description.length}/{MAX_DESC_LENGTH}
-              </span>
+
+
+              <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                 {isOverLimit && <span className="text-[10px] font-medium text-red-600 animate-pulse">Limit exceeded</span>}
+                 <span className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border backdrop-blur-sm ${
+                    isOverLimit 
+                      ? 'bg-red-50 text-red-600 border-red-100' 
+                      : 'bg-slate-50/80 text-slate-500 border-slate-200'
+                  }`}>
+                    {description.length} / {MAX_DESC_LENGTH}
+                  </span>
+              </div>
             </div>
             
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-2 pt-2">
                <button 
                  onClick={handleCancel} 
-                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
                >
-                 <X className="w-3 h-3" /> Cancel
+                 Cancel
                </button>
                <button 
                  onClick={handleSave} 
                  disabled={isSaving || isOverLimit} 
-                 className="flex items-center gap-1.5 bg-gray-900 hover:bg-black text-white px-4 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                 className="flex items-center gap-1.5 bg-slate-900 hover:bg-black text-white px-4 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-md active:transform active:scale-95"
                >
                  {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : <Check className="h-3 w-3" />}
-                 Save
+                 Save Changes
                </button>
             </div>
           </div>
         ) : (
-          <div className="flex-grow flex flex-col">
+          <div className="flex-grow flex flex-col h-full">
             {workspace.description ? (
               <div className="flex-grow">
-                {/* FIX APPLIED HERE: 
-                  Added 'break-words' and 'w-full' to force long strings to wrap.
-                */}
-                <div className="prose prose-sm prose-gray max-w-none break-words w-full">
+                <div className="prose prose-sm prose-slate max-w-none break-words w-full">
                   <ReactMarkdown components={{
-                      p: ({ children }) => <p className="text-gray-600 mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                      strong: ({ children }) => <span className="font-semibold text-gray-900">{children}</span>,
-                      ul: ({ children }) => <ul className="list-disc pl-4 space-y-1 text-gray-600">{children}</ul>,
-                      a: ({ children, href }) => <a href={href} className="text-blue-600 hover:underline decoration-blue-200 underline-offset-2">{children}</a>
+                      p: ({ children }) => <p className="text-slate-600 mb-2 last:mb-0 leading-relaxed text-sm">{children}</p>,
+                      strong: ({ children }) => <span className="font-semibold text-slate-800">{children}</span>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 space-y-1 text-slate-600 text-sm marker:text-slate-300">{children}</ul>,
+                      a: ({ children, href }) => <a href={href} className="text-blue-600 hover:text-blue-700 font-medium hover:underline decoration-blue-200 underline-offset-2 transition-colors">{children}</a>,
+                      h1: ({children}) => <h1 className="text-base font-bold text-slate-900 mb-2">{children}</h1>,
+                      h2: ({children}) => <h2 className="text-sm font-bold text-slate-900 mb-1">{children}</h2>,
+                      blockquote: ({children}) => <blockquote className="border-l-2 border-slate-200 pl-3 italic text-slate-500">{children}</blockquote>
                     }}>
                     {workspace.description}
                   </ReactMarkdown>
                 </div>
               </div>
             ) : (
-              /* Custom Empty State with Illustration */
-              <div className="flex-grow flex flex-col items-center justify-center py-8 text-center">
-                 <div className="mb-4 opacity-100"> 
-                    <NatrajPaperIllustration className="w-24 h-24 text-gray-400" />
-                 </div>
-                 <h3 className="text-sm font-semibold text-gray-900">No Description</h3>
-                 <p className="text-xs text-gray-500 mt-1 max-w-[200px] mx-auto leading-relaxed">
-                   {isOwner ? "Add a short bio to help others understand this workspace." : "This workspace doesn't have a description yet."}
-                 </p>
-                 {isOwner && (
-                   <button 
-                     onClick={() => setIsEditing(true)}
-                     className="mt-4 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline underline-offset-2"
-                   >
-                     Write Description
-                   </button>
-                 )}
+              /* Custom Empty State */
+              <div className="flex-grow flex flex-col items-center justify-center px-4 py-6 text-center h-full">
+  
+              {/* Illustration */}
+              <div className="mb-4 opacity-70 transition-opacity duration-300 hover:opacity-90">
+                <NatrajPaperIllustration
+                  className="w-16 h-16 sm:w-20 sm:h-20 text-slate-300"
+                  aria-hidden
+                />
               </div>
+
+              {/* Title */}
+              <h3 className="text-sm font-semibold text-slate-900">
+                No Description
+              </h3>
+
+              {/* Description */}
+              <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-slate-500">
+                {isOwner
+                  ? "Add a short description to provide context for your workspace."
+                  : "This workspace does not have a description yet."}
+              </p>
+
+              {/* Action */}
+              {isOwner && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="
+                    mt-4
+                    inline-flex items-center justify-center
+                    rounded-md
+                    border border-slate-200
+                    bg-white
+                    px-3 py-1.5
+                    text-xs font-medium text-slate-700
+                    hover:bg-slate-50
+                    hover:text-slate-900
+                    transition-colors
+                    focus:outline-none
+                    focus-visible:ring-2
+                    focus-visible:ring-slate-400/40
+                  "
+                >
+                  Add Description
+                </button>
+              )}
+            </div>
+
             )}
 
             {/* Footer Meta */}
-            {workspace.description && workspace.description_last_updated_at && (
-              <div className="mt-6 pt-3 border-t border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                   <FormattedDate dateString={workspace.description_last_updated_at} />
+            {(workspace.description || workspace.description_last_updated_at) && (
+              <div className="mt-auto pt-4 border-t border-slate-200/60 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                   {workspace.description_last_updated_at && (
+                     <>
+                       <span>Last updated</span>
+                       <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+                       <FormattedDate dateString={workspace.description_last_updated_at} />
+                     </>
+                   )}
                 </div>
                 
                 <AnimatePresence>
                   {showSuccess && (
-                    <motion.span
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="text-[10px] font-medium text-green-600 flex items-center gap-1"
+                      className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full"
                     >
-                      <Check className="w-3 h-3" /> Saved
-                    </motion.span>
+                      <div className="bg-emerald-500 rounded-full p-0.5"><Check className="w-2 h-2 text-white" /></div>
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Saved</span>
+                    </motion.div>
                   )}
                 </AnimatePresence>
               </div>

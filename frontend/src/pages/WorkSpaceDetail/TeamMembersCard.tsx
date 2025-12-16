@@ -1,12 +1,10 @@
 import React, { useState } from "react";
 import { api } from "../../services/api";
-import { Edit3, Loader2, X, Plus, Mail, Trash2 } from "lucide-react";
+import { Edit3, Loader2,  Plus, Mail, Trash2, Users, UserPlus, ShieldAlert } from "lucide-react";
 import { Workspace } from "../../types";
 import toast from 'react-hot-toast';
 import { AxiosError } from "axios";
 import { motion, AnimatePresence } from "framer-motion";
-
-
 
 interface TeamMembersCardProps {
   workspace: Workspace;
@@ -35,7 +33,9 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
       onUpdate(res.data);
       setTeamEmails(res.data.team_members?.map(m => m.email) || []);
       setIsEditing(false);
-      toast.success("Team updated successfully!");
+      toast.success("Team updated successfully!", {
+        style: { fontSize: '13px', background: '#334155', color: '#fff' }
+      });
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         toast.error(err.response?.data?.detail || "An error occurred.");
@@ -78,139 +78,164 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full group transition-shadow hover:shadow-md overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
       
       {/* --- HEADER --- */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white gap-4">
           <div className="flex items-center gap-3">
-
-           <div className="w-10 h-10 flex items-center justify-center">
-            <img
-              src="/images/Users2.png"
-              alt="Team"
-              className="w-full h-full object-contain select-none"
-            />
-          </div>
+             {/* Consistent Icon Container */}
+            <div className="flex-shrink-0 w-8 h-8 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100/50 flex items-center justify-center shadow-sm">
+                <Users className="h-4 w-4" />
+            </div>
+            
             {/* Text Content */}
             <div className="flex flex-col">
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Team Access</h2>
-              <p className="text-[10px] text-gray-500 font-medium">
-                {teamEmails.length} / 2 Members
-              </p>
+              <h2 className="text-sm font-bold text-slate-900 leading-none">Team Access</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${teamEmails.length >= 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                  <p className="text-[11px] text-slate-500 font-medium tabular-nums">
+                    {teamEmails.length} / 2 Members
+                  </p>
+              </div>
             </div>
-
           </div>
-     
-
 
         {isOwner && !isEditing && (
           <button 
             onClick={() => setIsEditing(true)} 
-            className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-gray-200 transition-all"
+            className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-md hover:bg-indigo-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Manage Team"
           >
-            <Edit3 className="h-4 w-4" />
+            <Edit3 className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
       {/* --- CONTENT --- */}
-      <div className="p-5 flex-grow flex flex-col bg-white">
+      <div className="p-5 flex-grow flex flex-col bg-slate-50/30">
         {isEditing ? (
-          <div className="flex-grow flex flex-col gap-5 animate-in fade-in duration-200">
+          <div className="flex-grow flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
             
             {/* Input Area */}
-            <div className="space-y-3">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                    Invite Member
-                </label>
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Invite Member
+                    </label>
+                    {teamEmails.length >= 2 && (
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                            <ShieldAlert className="w-3 h-3" /> Max Limit Reached
+                        </span>
+                    )}
+                </div>
+                
                 <div className="flex gap-2">
                     <div className="relative flex-grow">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input 
-                            type="email" 
-                            value={newEmail} 
-                            onChange={(e) => setNewEmail(e.target.value)} 
-                            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-200 focus:border-gray-900 outline-none transition-all placeholder:text-gray-400" 
-                            placeholder="colleague@company.com" 
-                            onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()} 
-                            disabled={teamEmails.length >= 2}
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          placeholder="colleague@gmail.com"
+                          onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
+                          disabled={teamEmails.length >= 2}
+                          autoFocus
+                          className={`
+                            w-full
+                            rounded-md
+                            border
+                            bg-white
+                            px-3 py-2
+                            pl-9
+                            text-sm
+                            text-slate-700
+                            placeholder:text-slate-400
+                            shadow-sm
+                            transition
+                            outline-none
+
+                            border-slate-200
+                            hover:border-slate-300
+                            focus:border-slate-400
+
+                            disabled:bg-slate-50
+                            disabled:text-slate-400
+                            disabled:cursor-not-allowed
+                          `}
                         />
+
                     </div>
                     <button 
                         onClick={handleAddEmail} 
                         type="button" 
                         disabled={teamEmails.length >= 2 || !newEmail.trim()}
-                        className="bg-gray-900 text-white px-3 py-2 rounded-md hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:transform active:scale-95"
                     >
                         <Plus className="h-4 w-4" />
                     </button>
                 </div>
-                {teamEmails.length >= 2 && (
-                    <p className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded inline-block">
-                        Maximum team size reached.
-                    </p>
-                )}
             </div>
 
             {/* List Area */}
-            <div className="space-y-3">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+            <div className="flex-grow flex flex-col space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                     Pending List
                 </label>
-                <div className="space-y-2">
+                <div className="bg-white rounded-lg border border-slate-200 shadow-sm min-h-[100px] p-1">
                     {teamEmails.length > 0 ? (
+                        <div className="space-y-1">
                         <AnimatePresence>
                             {teamEmails.map((email) => (
                                 <motion.div 
                                     key={email}
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="group flex items-center justify-between bg-gray-50 border border-gray-100 p-2.5 rounded-md hover:border-gray-300 transition-all"
+                                    initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                                    exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                                    className="group flex items-center justify-between bg-white hover:bg-slate-50 p-2 rounded-md border border-transparent hover:border-slate-100 transition-all"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        {/* 🎨 Updated: DiceBear Avatar */}
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <img 
-                                          src={getAvatarUrl(email)} 
-                                          alt="Avatar" 
-                                          className="w-7 h-7 rounded-full bg-white border border-gray-200"
+                                            src={getAvatarUrl(email)} 
+                                            alt="Avatar" 
+                                            className="w-6 h-6 rounded-full bg-slate-50 border border-slate-200"
                                         />
-                                        <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] sm:max-w-[200px]">
+                                        <span className="text-xs font-medium text-slate-700 truncate">
                                             {email}
                                         </span>
                                     </div>
                                     <button 
                                         onClick={() => handleRemoveEmail(email)} 
-                                        className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors"
+                                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                 </motion.div>
                             ))}
                         </AnimatePresence>
+                        </div>
                     ) : (
-                        <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded-md">
-                            <p className="text-xs text-gray-400">List is empty</p>
+                        <div className="flex flex-col items-center justify-center h-[100px] text-center">
+                            <UserPlus className="h-5 w-5 text-slate-200 mb-1" />
+                            <p className="text-[10px] text-slate-400">No members added yet</p>
                         </div>
                     )}
                 </div>
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 mt-auto pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/50">
                 <button 
                     onClick={handleCancel} 
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
                 >
-                    <X className="w-3 h-3" /> Cancel
+                    Cancel
                 </button>
                 <button 
                     onClick={handleSave} 
                     disabled={isSaving} 
-                    className="flex items-center gap-1.5 bg-gray-900 hover:bg-black text-white px-4 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1.5 bg-slate-900 hover:bg-black text-white px-4 py-1.5 text-xs font-semibold rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
-                    {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : <Loader2 className="h-3 w-3 opacity-0" />} 
+                    {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : <Loader2 className="h-3 w-3 opacity-0 hidden" />} 
                     {isSaving ? "Saving..." : "Save Changes"}
                 </button>
             </div>
@@ -218,26 +243,27 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
         ) : (
           <div className="flex-grow flex flex-col h-full">
             {(workspace.team_members && workspace.team_members.length > 0) ? (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                  {workspace.team_members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-100 group/item">
+                    <div key={member.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200/60 rounded-lg hover:border-indigo-200 hover:shadow-sm hover:bg-indigo-50/30 transition-all group/item">
                         
-                        {/* 🎨 Updated: DiceBear Avatar in View Mode */}
-                        <div className="relative">
+                        {/* Avatar */}
+                        <div className="relative flex-shrink-0">
                             <img 
                               src={getAvatarUrl(member.email)} 
                               alt={member.email} 
-                              className="w-9 h-9 rounded-full bg-white border border-gray-200 object-cover shadow-sm group-hover/item:scale-105 transition-transform"
+                              className="w-10 h-10 rounded-full bg-white border border-slate-200 object-cover shadow-sm group-hover/item:scale-105 transition-transform"
                             />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
                         </div>
                         
                         <div className="flex flex-col min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
+                            <p className="text-xs font-bold text-slate-900 truncate">
                                 {member.name || member.email.split('@')[0]}
                             </p>
-                            <div className="flex items-center gap-1.5">
-                                <Mail className="w-3 h-3 text-gray-400" />
-                                <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <Mail className="w-3 h-3 text-slate-400" />
+                                <p className="text-[11px] text-slate-500 truncate font-medium">{member.email}</p>
                             </div>
                         </div>
                     </div>
@@ -245,27 +271,62 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
               </div>
             ) : (
               /* Custom Empty State */
-              <div className="flex-grow flex flex-col items-center justify-center py-6 text-center opacity-90">
-                <div className="mb-4 opacity-100 flex items-center justify-center">
+              <div className="flex-grow flex flex-col items-center justify-center px-4 py-6 text-center h-full">
+  
+                {/* Illustration */}
+                <div className="mb-4 flex items-center justify-center">
                   <img
                     src="/images/Teamwork.png"
-                    alt="Team Workspace"
-                    className="w-24 h-24 object-contain select-none"
+                    alt="Team workspace illustration"
+                    className="
+                      w-16 h-16 sm:w-20 sm:h-20
+                      object-contain
+                      select-none
+                      opacity-80
+                      transition-all duration-300
+                      group-hover:opacity-100
+                    "
+                    draggable={false}
                   />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">Solo Workspace</h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-[200px] mx-auto leading-relaxed">
-                   {isOwner ? "Invite your team to collaborate on projects." : "No other members have been added yet."}
+
+                {/* Title */}
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Solo Workspace
+                </h3>
+
+                {/* Description */}
+                <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-slate-500">
+                  {isOwner
+                    ? "Invite teammates to collaborate and manage projects together."
+                    : "No additional members have been added to this workspace."}
                 </p>
+
+                {/* Action */}
                 {isOwner && (
-                    <button 
-                        onClick={() => setIsEditing(true)}
-                        className="mt-4 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline underline-offset-2"
-                    >
-                        Add Member
-                    </button>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="
+                      mt-4
+                      inline-flex items-center justify-center
+                      rounded-md
+                      border border-slate-200
+                      bg-white
+                      px-3 py-1.5
+                      text-xs font-medium text-slate-700
+                      hover:bg-slate-50
+                      hover:text-slate-900
+                      transition-colors
+                      focus:outline-none
+                      focus-visible:ring-2
+                      focus-visible:ring-slate-400/40
+                    "
+                  >
+                    Add Member
+                  </button>
                 )}
               </div>
+
             )}
           </div>
         )}

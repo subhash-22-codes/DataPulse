@@ -1,14 +1,13 @@
 import React, { useEffect, useState, Fragment, useCallback } from "react";
-import { useAuth } from "../../context/AuthContext"; 
+import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,  ResponsiveContainer, ReferenceLine } from 'recharts';
-import { AlertTriangle, Loader2, Globe, FileText, TrendingUp, LineChart as LineChartIcon, Trash2, ShieldQuestion, Database, ArrowUpRight, ArrowDownRight, Server, Clock,  LayoutList } from "lucide-react";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AlertTriangle, Loader2, Globe, FileText, TrendingUp, LineChart as LineChartIcon, Trash2, ShieldQuestion, Database, ArrowUpRight, ArrowDownRight, Server, Clock, LayoutList } from "lucide-react";
 import { Workspace, DataUpload, TrendDataPoint, SummaryStats } from "../../types";
 import { Tab, Dialog, Transition } from '@headlessui/react';
 import toast from 'react-hot-toast';
 import { AnimatedNumber } from '../../components/AnimatedNumber';
 import { FormattedDate } from "../../components/FormattedDate";
-
 
 // --- HELPER FUNCTIONS ---
 function classNames(...classes: string[]) {
@@ -23,36 +22,29 @@ const formatChartData = (summaryStats: SummaryStats | null | undefined) => {
   })).filter(item => item.mean !== undefined);
 };
 
-// UI UPDATE: Cleaner, modern tooltip with shadow and border radius
+// UI UPDATE: Production-grade tooltip with tabular alignment
 const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white p-3 border border-gray-100 rounded-xl shadow-xl ring-1 ring-black/5">
-        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+      <div className="bg-white/95 backdrop-blur-sm p-3 border border-slate-200/60 rounded-lg shadow-xl text-xs">
+        <p className="font-semibold text-slate-500 uppercase tracking-wider mb-2 text-[10px]">
           {label}
         </p>
-
         <div className="flex items-center gap-2">
           <span
             className="w-2 h-2 rounded-full"
             style={{ backgroundColor: payload[0].color }}
           ></span>
-
-          <p className="text-sm font-semibold text-gray-900">
-            {payload[0].name}:{" "}
-            <span className="font-mono">
-              {payload[0].value.toLocaleString()}
-            </span>
+          <p className="font-medium text-slate-700 tabular-nums">
+            <span className="text-slate-400 mr-1">{payload[0].name}:</span> 
+            {payload[0].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </p>
         </div>
       </div>
     );
   }
-
   return null;
 };
-
-
 
 // --- TYPE DEFINITIONS ---
 interface DataHistoryCardProps {
@@ -71,7 +63,6 @@ interface CustomTooltipProps {
   }[];
 }
 
-
 // ====================================================================
 //  Sub-Components
 // ====================================================================
@@ -85,63 +76,63 @@ const MasterList: React.FC<{
   setUploadToDelete: (u: DataUpload) => void;
   isOwner: boolean;
 }> = ({ uploads, type, selectedUpload, setSelectedUpload, setViewMode, setUploadToDelete, isOwner }) => (
-    <div className="flex flex-col h-full max-h-[600px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+    <div className="flex flex-col h-full overflow-y-auto pr-1 custom-scrollbar space-y-0.5">
       {uploads.map(upload => {
         const isSelected = selectedUpload?.id === upload.id;
         return (
-            <div key={upload.id} className="group relative flex items-center">
-            <button 
-                onClick={() => { setSelectedUpload(upload); setViewMode('snapshot'); }} 
-                className={`w-full text-left p-3.5 rounded-xl transition-all duration-200 border relative overflow-hidden ${
-                    isSelected 
-                    ? 'bg-blue-50/60 border-blue-200 ring-1 ring-blue-100 z-10' 
-                    : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200 text-gray-600'
+            <div key={upload.id} className="group relative px-1">
+            <button
+                onClick={() => { setSelectedUpload(upload); setViewMode('snapshot'); }}
+                className={`w-full text-left p-2.5 rounded-md transition-all duration-200 border ${
+                    isSelected
+                    ? 'bg-white border-slate-200 shadow-sm z-10'
+                    : 'bg-transparent border-transparent hover:bg-slate-100/50 text-slate-600'
                 }`}
             >
                 <div className="flex justify-between items-start gap-3">
                     <div className="flex items-start gap-3 min-w-0">
-                        <div className={`mt-0.5 p-1.5 rounded-lg flex-shrink-0 ${isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                            {upload.upload_type === 'manual' && <FileText className="h-4 w-4" />}
-                            {upload.upload_type === 'api_poll' && <Globe className="h-4 w-4" />}
-                            {upload.upload_type === 'db_query' && <Server className="h-4 w-4" />}
+                        <div className={`mt-0.5 p-1.5 rounded-md flex-shrink-0 transition-colors ${isSelected ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:text-slate-500'}`}>
+                            {upload.upload_type === 'manual' && <FileText className="h-3.5 w-3.5" />}
+                            {upload.upload_type === 'api_poll' && <Globe className="h-3.5 w-3.5" />}
+                            {upload.upload_type === 'db_query' && <Server className="h-3.5 w-3.5" />}
                         </div>
-                        <div className="min-w-0">
-                            <p className={`font-semibold text-sm truncate block max-w-[180px] ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+                        <div className="min-w-0 flex-1">
+                            <p className={`font-medium text-xs truncate block ${isSelected ? 'text-slate-900' : 'text-slate-600'}`}>
                                 {upload.file_path.split(/[/\\]/).pop()}
                             </p>
-                            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                                <FormattedDate dateString={upload.uploaded_at} />
-                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <p className="text-[10px] font-medium text-slate-400 tabular-nums">
+                                    <FormattedDate dateString={upload.uploaded_at} />
+                                </p>
+                                {upload.schema_changed_from_previous && (
+                                    <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-600 border border-amber-100/50">
+                                        Schema Change
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                {upload.schema_changed_from_previous && (
-                    <div className="mt-3 flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-medium uppercase tracking-wide">
-                            <AlertTriangle className="h-3 w-3" /> Schema Change
-                        </span>
-                    </div>
-                )}
             </button>
             
             {isOwner && (
-                <button 
-                    onClick={(e) => { e.stopPropagation(); setUploadToDelete(upload); }} 
-                    className={`absolute right-2 top-3 p-2 rounded-lg transition-all duration-200 ${
-                        isSelected ? 'opacity-100 hover:bg-red-50 hover:text-red-600 text-gray-400' : 'opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500'
+                <button
+                    onClick={(e) => { e.stopPropagation(); setUploadToDelete(upload); }}
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-all duration-200 ${
+                        isSelected 
+                        ? 'opacity-0 hover:opacity-100 text-slate-400 hover:bg-red-50 hover:text-red-600' 
+                        : 'opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-slate-100'
                     }`}
-                    title="Delete this upload"
                 >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                 </button>
             )}
             </div>
       )})}
       {uploads.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50">
-            <LayoutList className="h-8 w-8 text-gray-300 mb-2" />
-            <p className="text-sm font-medium text-gray-500">{`No ${type} history`}</p>
+        <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50/50 mx-2 mt-2">
+            <LayoutList className="h-5 w-5 text-slate-300 mb-2" />
+            <p className="text-xs font-medium text-slate-500">{`No ${type} history`}</p>
         </div>
       )}
     </div>
@@ -159,84 +150,101 @@ const DetailView: React.FC<{
     const canConfigureTrends = isOwner || isTeamMember;
 
     if (!selectedUpload) return (
-        <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 ring-1 ring-gray-100">
-                <FileText className="h-8 w-8 text-blue-100" />
+        <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <Database className="h-6 w-6 text-slate-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">Select a Dataset</h3>
-            <p className="text-gray-500 text-sm mt-1 max-w-xs">Choose an upload from the sidebar to view its comprehensive analysis.</p>
+            <h3 className="text-sm font-semibold text-slate-900">Select a Dataset</h3>
+            <p className="text-slate-500 text-sm mt-1">Select an item from the sidebar to view details.</p>
         </div>
     );
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* Top Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="relative overflow-hidden bg-white rounded-xl p-5 border border-gray-100 shadow-sm group hover:shadow-md transition-shadow">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Database className="h-16 w-16 text-blue-600" /></div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Rows</p>
-            <div className="text-3xl font-bold text-gray-900 mt-2"><AnimatedNumber value={rowCount} /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Rows</p>
+                <LayoutList className="h-3.5 w-3.5 text-slate-300" />
+            </div>
+            <div className="text-2xl font-semibold text-slate-900 tabular-nums tracking-tight"><AnimatedNumber value={rowCount} /></div>
           </div>
           
-          <div className="relative overflow-hidden bg-white rounded-xl p-5 border border-gray-100 shadow-sm group hover:shadow-md transition-shadow">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><LayoutList className="h-16 w-16 text-emerald-600" /></div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Columns</p>
-            <div className="text-3xl font-bold text-gray-900 mt-2"><AnimatedNumber value={colCount} /></div>
+          <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex flex-col justify-between h-full">
+             <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Columns</p>
+                <Database className="h-3.5 w-3.5 text-slate-300" />
+            </div>
+            <div className="text-2xl font-semibold text-slate-900 tabular-nums tracking-tight"><AnimatedNumber value={colCount} /></div>
           </div>
 
-          <div className={`relative overflow-hidden rounded-xl p-5 border shadow-sm transition-all ${selectedUpload.schema_changed_from_previous ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-100'}`}>
-             <div className="flex items-center justify-between relative z-10">
-                <div>
-                    <p className={`text-xs font-bold uppercase tracking-wider ${selectedUpload.schema_changed_from_previous ? 'text-amber-600' : 'text-gray-400'}`}>Schema Health</p>
-                    <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-2xl font-bold ${selectedUpload.schema_changed_from_previous ? 'text-amber-700' : 'text-gray-900'}`}>
-                            {selectedUpload.schema_changed_from_previous ? 'Changed' : 'Stable'}
-                        </span>
-                    </div>
-                </div>
-                <div className={`p-2 rounded-lg ${selectedUpload.schema_changed_from_previous ? 'bg-amber-100 text-amber-600' : 'bg-gray-50 text-gray-400'}`}>
-                    {selectedUpload.schema_changed_from_previous ? <AlertTriangle className="h-6 w-6" /> : <ShieldQuestion className="h-6 w-6" />}
-                </div>
-             </div>
+          <div className={`rounded-lg p-4 border shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex flex-col justify-between h-full ${selectedUpload.schema_changed_from_previous ? 'bg-amber-50/30 border-amber-200' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center justify-between mb-3">
+                 <p className={`text-[10px] font-bold uppercase tracking-widest ${selectedUpload.schema_changed_from_previous ? 'text-amber-700/70' : 'text-slate-400'}`}>Schema Status</p>
+                 {selectedUpload.schema_changed_from_previous ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> : <ShieldQuestion className="h-3.5 w-3.5 text-slate-300" />}
+              </div>
+              <div className={`text-xl font-semibold tracking-tight ${selectedUpload.schema_changed_from_previous ? 'text-amber-700' : 'text-slate-900'}`}>
+                    {selectedUpload.schema_changed_from_previous ? 'Changed' : 'Stable'}
+              </div>
           </div>
         </div>
 
         {/* Schema Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/30 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                <Database className="h-4 w-4 text-gray-400" />
+        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white">
+            <h3 className="text-xs font-semibold text-slate-900 flex items-center gap-2 uppercase tracking-wide">
                 Schema Definition
             </h3>
-            <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded-md">{selectedUpload.file_path.split(/[/\\]/).pop()}</span>
+            <span className="text-[10px] text-slate-500 font-mono bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">{selectedUpload.file_path.split(/[/\\]/).pop()}</span>
           </div>
-          <div className="overflow-x-auto max-h-[300px] custom-scrollbar">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+          <div className="overflow-x-auto max-h-[300px] custom-scrollbar bg-slate-50/30">
+            <table className="min-w-full divide-y divide-slate-100">
+              <thead className="bg-slate-50/80 backdrop-blur-sm sticky top-0 z-10">
                 <tr>
-                  <th scope="col" className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Column Name</th>
-                  <th scope="col" className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Data Type</th>
-                  {canConfigureTrends && <th scope="col" className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>}
+                  <th scope="col" className="px-4 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Column</th>
+                  <th scope="col" className="px-4 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                  {canConfigureTrends && <th scope="col" className="px-4 py-2 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-50">
+              <tbody className="bg-white divide-y divide-slate-50">
                 {selectedUpload.schema_info && Object.entries(selectedUpload.schema_info).map(([col, type]) => (
-                  <tr key={col} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-5 py-3 whitespace-nowrap text-sm font-medium text-gray-700">{col}</td>
-                    <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-500">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 font-mono border border-gray-200">
+                  <tr key={col} className="hover:bg-slate-50/80 transition-colors group">
+                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-slate-700">{col}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200/60 font-mono">
                         {String(type)}
                       </span>
                     </td>
                     {canConfigureTrends && (
-                      <td className="px-5 py-3 whitespace-nowrap text-sm text-right">
+                      <td className="px-2 sm:px-4 py-2 text-right align-middle">
                         {(String(type).includes('int') || String(type).includes('float')) && (
-                          <button 
-                            onClick={() => handleTrackColumn(col)} 
-                            className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all"
+                          <button
+                            onClick={() => handleTrackColumn(col)}
+                            className="
+                              inline-flex items-center gap-1.5
+                              rounded-md
+                              px-2 py-1 sm:px-2.5 sm:py-1
+                              text-[10px] sm:text-[11px]
+                              font-medium
+                              text-slate-600
+                              hover:text-blue-600
+                              focus:text-blue-600
+                              bg-transparent
+                              hover:bg-blue-50
+                              focus:bg-blue-50
+                              transition-colors
+                              focus:outline-none
+                              focus-visible:ring-2
+                              focus-visible:ring-blue-500/40
+                            "
+                            aria-label="Track trend for column"
                           >
-                            Track Trend
-                            <LineChartIcon className="h-3 w-3" />
+                            {/* Icon first for visual clarity */}
+                            <LineChartIcon className="h-3 w-3 shrink-0" />
+
+                            {/* Hide text on very small screens */}
+                            <span className="hidden sm:inline">Track Trend</span>
                           </button>
                         )}
                       </td>
@@ -250,16 +258,28 @@ const DetailView: React.FC<{
 
         {/* Summary Chart */}
         {chartData.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-6">Statistical Averages</h3>
-            <div className="w-full h-80">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-6">
+                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Statistical Averages</h3>
+            </div>
+            <div className="w-full h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} dy={10} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} cursor={{fill: '#f9fafb'}} />
-                  <Bar dataKey="mean" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={50} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    dy={10} 
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
+                  <Bar dataKey="mean" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -270,13 +290,15 @@ const DetailView: React.FC<{
 };
 
 const TrendView: React.FC<{ trackedColumn: string | null; trendData: TrendDataPoint[]; isTrendLoading: boolean; }> = ({ trackedColumn, trendData, isTrendLoading }) => {
-  if (isTrendLoading) return <div className="flex justify-center items-center h-96"><Loader2 className="animate-spin h-8 w-8 text-blue-500" /></div>;
+  if (isTrendLoading) return <div className="flex justify-center items-center h-96"><Loader2 className="animate-spin h-6 w-6 text-slate-400" /></div>;
   
   if (!trendData || trendData.length < 2) return (
-    <div className="h-96 flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-        <TrendingUp className="h-10 w-10 text-gray-300 mb-3" />
-        <h3 className="text-gray-900 font-medium">Insufficient Data</h3>
-        <p className="text-gray-500 text-sm mt-1">Need at least two uploads to visualize trends.</p>
+    <div className="h-96 flex flex-col items-center justify-center text-center p-8">
+        <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+             <TrendingUp className="h-5 w-5 text-slate-300" />
+        </div>
+        <h3 className="text-slate-900 font-medium text-sm">Insufficient Data</h3>
+        <p className="text-slate-500 text-xs mt-1">Need at least two uploads to visualize trends.</p>
     </div>
   );
 
@@ -290,50 +312,64 @@ const TrendView: React.FC<{ trackedColumn: string | null; trendData: TrendDataPo
   const isPositive = overallChange >= 0;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <span className="bg-blue-100 p-1.5 rounded-lg text-blue-600"><LineChartIcon className="h-5 w-5" /></span>
-            Trend Analysis: <span className="text-blue-600">{trackedColumn}</span>
-        </h3>
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                Trend Analysis
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">Tracking column: <span className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{trackedColumn}</span></p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Initial Value</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{firstValue?.toLocaleString() ?? 'N/A'}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Initial Value</p>
+            <p className="text-xl font-semibold text-slate-900 mt-1 tabular-nums tracking-tight">{firstValue?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? 'N/A'}</p>
         </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Current Value</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{lastValue?.toLocaleString() ?? 'N/A'}</p>
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Value</p>
+            <p className="text-xl font-semibold text-slate-900 mt-1 tabular-nums tracking-tight">{lastValue?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? 'N/A'}</p>
         </div>
-        <div className={`p-5 rounded-xl border shadow-sm ${isPositive ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+        <div className={`p-4 rounded-lg border shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${isPositive ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
           <div className="flex items-center justify-between">
-            <p className={`text-xs font-bold uppercase ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>Net Change</p>
-            {isPositive ? <ArrowUpRight className="h-5 w-5 text-emerald-600" /> : <ArrowDownRight className="h-5 w-5 text-rose-600" />}
+            <p className={`text-[10px] font-bold uppercase tracking-widest ${isPositive ? 'text-emerald-700/70' : 'text-rose-700/70'}`}>Net Change</p>
+            {isPositive ? <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" /> : <ArrowDownRight className="h-3.5 w-3.5 text-rose-600" />}
           </div>
-          <p className={`text-2xl font-bold mt-1 ${isPositive ? 'text-emerald-700' : 'text-rose-700'}`}>
+          <p className={`text-xl font-bold mt-1 tracking-tight tabular-nums ${isPositive ? 'text-emerald-700' : 'text-rose-700'}`}>
             {overallChange > 0 ? '+' : ''}{overallChange.toFixed(2)}%
           </p>
         </div>
       </div>
 
-      <div className="w-full h-96 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+      <div className="w-full h-80 bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} dy={10} minTickGap={30} />
-            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+          <LineChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+            <XAxis 
+                dataKey="date" 
+                tick={{ fontSize: 10, fill: '#64748b' }} 
+                axisLine={false} 
+                tickLine={false} 
+                dy={10} 
+                minTickGap={30} 
+            />
+            <YAxis 
+                tick={{ fontSize: 10, fill: '#64748b' }} 
+                axisLine={false} 
+                tickLine={false} 
+                domain={['auto', 'auto']} 
+            />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={averageValue} stroke="#9ca3af" strokeDasharray="3 3" label={{ value: 'Avg', position: 'insideRight', fill: '#9ca3af', fontSize: 10 }} />
+            <ReferenceLine y={averageValue} stroke="#cbd5e1" strokeDasharray="3 3" label={{ value: 'Avg', position: 'insideRight', fill: '#94a3b8', fontSize: 10 }} />
             <Line 
                 type="monotone" 
                 dataKey="value" 
                 name={trackedColumn || ''} 
                 stroke="#3b82f6" 
-                strokeWidth={3} 
-                dot={{ r: 4, fill: 'white', strokeWidth: 2 }} 
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }} 
+                strokeWidth={2} 
+                dot={{ r: 3, fill: 'white', strokeWidth: 1.5, stroke: '#3b82f6' }} 
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#2563eb' }} 
                 connectNulls={false} 
             />
           </LineChart>
@@ -348,7 +384,6 @@ const TrendView: React.FC<{ trackedColumn: string | null; trendData: TrendDataPo
 // ====================================================================
 export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isProcessing, isOwner, onUploadsUpdate }) => {
   // 1. Logic preserved
-
   const { user } = useAuth();
   
   // 3. CALCULATE PERMISSION INTERNALLY
@@ -405,17 +440,17 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
     setViewMode('trend');
     
     // 2. Only attempt to SAVE to DB if they are Owner
-    // Team Members (who would get a 403) skip this block
     if (isOwner) {
         try {
             await api.put(`/workspaces/${workspace.id}`, { tracked_column: columnName });
         } catch (error){
             console.error(error);
-            // Even if save fails, we don't alert the user aggressively since they can still see the graph
         }
     } else {
-        // Optional: Let them know it's a temporary view
-        toast.success(`Viewing trend: ${columnName}`);
+        toast.success(`Viewing trend: ${columnName}`, {
+            style: { border: '1px solid #e2e8f0', padding: '12px', color: '#334155', fontSize: '13px' },
+            iconTheme: { primary: '#3b82f6', secondary: '#fff' },
+        });
     }
   };
   
@@ -438,55 +473,50 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
 
     try {
       await api.delete(`/uploads/${closingUpload.id}`);
-      toast.success("Upload deleted successfully!");
+      toast.success("Data source removed", {
+         style: { background: '#1e293b', color: '#fff', fontSize: '13px' }
+      });
     } catch (error) {
       console.error(error);
-      toast.error("Failed to delete upload.");
+      toast.error("Failed to delete upload");
       fetchAllUploads();
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm lg:col-span-3 relative overflow-hidden transition-all hover:shadow-md">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm lg:col-span-3 relative overflow-hidden h-full flex flex-col font-sans">
       
       {/* Loading Overlay */}
       {isProcessing && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col justify-center items-center z-50 rounded-2xl animate-in fade-in duration-300">
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-200">
-              <Loader2 className="animate-spin h-8 w-8 text-white" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-gray-900">Syncing Data...</p>
-              <p className="text-sm text-gray-500 mt-1">Refining your workspace insights</p>
-            </div>
-          </div>
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex flex-col justify-center items-center z-50 rounded-xl transition-all duration-300">
+            <Loader2 className="animate-spin h-6 w-6 text-blue-600 mb-2" />
+            <p className="text-xs font-semibold text-slate-700 tracking-wide">Syncing Data...</p>
         </div>
       )}
 
       {/* Header */}
-      <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50/50 to-white">
-        <div className="flex items-center gap-4">
-          <div className="flex-shrink-0 w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center ring-4 ring-purple-50">
-            <TrendingUp className="h-6 w-6" />
+      <div className="px-5 py-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 rounded-md border border-blue-100/50 flex items-center justify-center shadow-sm">
+            <TrendingUp className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Data Intelligence</h2>
-            <p className="text-sm text-gray-500 font-medium">History, Trends & Schema Validation</p>
+            <h2 className="text-sm font-bold text-slate-900 leading-none">Data Intelligence</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">History, Trends & Validation</p>
           </div>
         </div>
         
         {trackedColumn && (
-            <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl">
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
                 <button 
                     onClick={() => setViewMode('snapshot')} 
-                    className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all ${viewMode === 'snapshot' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`px-3 py-1 text-[11px] font-semibold rounded-[6px] transition-all duration-200 ${viewMode === 'snapshot' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                     Snapshot
                 </button>
                 <button 
                     onClick={() => setViewMode('trend')} 
-                    className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all ${viewMode === 'trend' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`px-3 py-1 text-[11px] font-semibold rounded-[6px] transition-all duration-200 ${viewMode === 'trend' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                     Trends
                 </button>
@@ -495,46 +525,48 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
       </div>
 
       {/* Content Area */}
-      <div className="p-6 min-h-[500px]">
+      <div className="flex-1 min-h-[500px] bg-slate-50/50 relative">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full py-20">
-            <Loader2 className="animate-spin h-10 w-10 text-blue-500 mb-4" />
-            <p className="text-gray-500 font-medium">Loading history...</p>
+            <Loader2 className="animate-spin h-6 w-6 text-slate-400 mb-3" />
+            <p className="text-slate-400 text-xs font-medium">Loading history...</p>
           </div>
         ) : (!manualUploads.length && !scheduledFetches.length) ? (
-          <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 ring-8 ring-gray-50/50">
-                <Database className="h-10 w-10 text-gray-300" />
+          <div className="flex flex-col items-center justify-center h-full py-20 text-center px-4">
+            <div className="w-12 h-12 bg-white border border-slate-200/60 rounded-xl flex items-center justify-center mb-4 shadow-sm">
+                <Database className="h-5 w-5 text-slate-300" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">No Data Found</h3>
-            <p className="text-gray-500 max-w-sm mx-auto mt-2">Upload a file or configure a connection to start visualizing your data history.</p>
+            <h3 className="text-sm font-semibold text-slate-900">No Data History</h3>
+            <p className="text-slate-500 text-xs mt-1 max-w-[280px] mx-auto leading-relaxed">Upload a file or configure a connection to start visualizing your data.</p>
           </div>
         ) : (
-          <div className="flex flex-col lg:flex-row gap-8 h-full">
+          <div className="flex flex-col lg:flex-row h-full">
             {/* Sidebar Navigation */}
-            <div className="lg:w-80 flex-shrink-0 flex flex-col gap-4">
-              <Tab.Group onChange={(index) => {
-                const list = index === 0 ? manualUploads : scheduledFetches;
-                setSelectedUpload(list[0] || null);
-                setViewMode('snapshot');
-              }}>
-                <Tab.List className="flex p-1 space-x-1 bg-gray-100 rounded-xl">
-                  <Tab className={({ selected }) => classNames('w-full rounded-lg py-2.5 text-sm font-semibold leading-5 transition-all outline-none focus:ring-0', selected ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-                    <div className="flex items-center justify-center gap-2"><FileText className="h-4 w-4"/>Manual</div>
-                  </Tab>
-                  <Tab className={({ selected }) => classNames('w-full rounded-lg py-2.5 text-sm font-semibold leading-5 transition-all outline-none focus:ring-0', selected ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-                    <div className="flex items-center justify-center gap-2"><Clock className="h-4 w-4"/>Auto</div>
-                  </Tab>
-                </Tab.List>
-                <Tab.Panels className="flex-1 bg-gray-50/50 rounded-2xl border border-gray-200/50 p-3 h-[500px]">
-                  <Tab.Panel className="h-full focus:outline-none"><MasterList uploads={manualUploads} type="manual" selectedUpload={selectedUpload} setSelectedUpload={setSelectedUpload} setViewMode={setViewMode} setUploadToDelete={setUploadToDelete} isOwner={isOwner} /></Tab.Panel>
-                  <Tab.Panel className="h-full focus:outline-none"><MasterList uploads={scheduledFetches} type="scheduled" selectedUpload={selectedUpload} setSelectedUpload={setSelectedUpload} setViewMode={setViewMode} setUploadToDelete={setUploadToDelete} isOwner={isOwner} /></Tab.Panel>
-                </Tab.Panels>
-              </Tab.Group>
+            <div className="lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shrink-0">
+              <div className="p-3 border-b border-slate-100">
+                <Tab.Group onChange={(index) => {
+                    const list = index === 0 ? manualUploads : scheduledFetches;
+                    setSelectedUpload(list[0] || null);
+                    setViewMode('snapshot');
+                }}>
+                    <Tab.List className="flex p-0.5 bg-slate-100 rounded-lg border border-slate-200/50">
+                    <Tab className={({ selected }) => classNames('w-full rounded-[6px] py-1.5 text-[11px] font-semibold leading-5 transition-all outline-none focus:ring-0', selected ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700')}>
+                        <div className="flex items-center justify-center gap-1.5"><FileText className="h-3.5 w-3.5"/>Manual</div>
+                    </Tab>
+                    <Tab className={({ selected }) => classNames('w-full rounded-[6px] py-1.5 text-[11px] font-semibold leading-5 transition-all outline-none focus:ring-0', selected ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700')}>
+                        <div className="flex items-center justify-center gap-1.5"><Clock className="h-3.5 w-3.5"/>Auto</div>
+                    </Tab>
+                    </Tab.List>
+                    <Tab.Panels className="mt-2 flex-1 h-[480px]">
+                        <Tab.Panel className="h-full focus:outline-none"><MasterList uploads={manualUploads} type="manual" selectedUpload={selectedUpload} setSelectedUpload={setSelectedUpload} setViewMode={setViewMode} setUploadToDelete={setUploadToDelete} isOwner={isOwner} /></Tab.Panel>
+                        <Tab.Panel className="h-full focus:outline-none"><MasterList uploads={scheduledFetches} type="scheduled" selectedUpload={selectedUpload} setSelectedUpload={setSelectedUpload} setViewMode={setViewMode} setUploadToDelete={setUploadToDelete} isOwner={isOwner} /></Tab.Panel>
+                    </Tab.Panels>
+                </Tab.Group>
+              </div>
             </div>
 
             {/* Main View Area */}
-            <div className="flex-1 min-w-0 bg-white rounded-2xl">
+            <div className="flex-1 bg-slate-50/30 p-4 lg:p-6 overflow-y-auto custom-scrollbar">
               {viewMode === 'snapshot' ? 
                 <DetailView selectedUpload={selectedUpload} isOwner={isOwner} isTeamMember={isTeamMember} handleTrackColumn={handleTrackColumn} /> : 
                 <TrendView trackedColumn={trackedColumn} trendData={trendData} isTrendLoading={isTrendLoading} />
@@ -548,26 +580,28 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
       <Transition appear show={!!uploadToDelete} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setUploadToDelete(null)}>
           <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0">
-            <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm" />
+            <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm" />
           </Transition.Child>
 
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
               <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
-                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-gray-100">
-                  <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-4 mx-auto">
-                    <ShieldQuestion className="h-6 w-6 text-red-600" />
-                  </div>
-                  <Dialog.Title as="h3" className="text-lg font-bold text-center text-gray-900">Confirm Deletion</Dialog.Title>
-                  <div className="mt-2 text-center">
-                    <p className="text-sm text-gray-500">
-                        Are you sure you want to delete <span className="font-semibold text-gray-700">{uploadToDelete?.file_path.split(/[/\\]/).pop()}</span>?
-                        <br/>This action cannot be undone.
-                    </p>
+                <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-slate-100 ring-1 ring-black/5">
+                  <div className="flex flex-col items-center">
+                    <div className="h-10 w-10 bg-red-50 rounded-full flex items-center justify-center mb-4 ring-1 ring-red-100">
+                        <Trash2 className="h-5 w-5 text-red-600" />
+                    </div>
+                    <Dialog.Title as="h3" className="text-base font-bold text-slate-900">Delete Dataset?</Dialog.Title>
+                    <div className="mt-2 text-center">
+                        <p className="text-sm text-slate-500">
+                            You are about to remove <span className="font-semibold text-slate-900 break-all">{uploadToDelete?.file_path.split(/[/\\]/).pop()}</span>.
+                            <br/>This action cannot be undone.
+                        </p>
+                    </div>
                   </div>
                   <div className="mt-6 flex gap-3">
-                    <button type="button" className="flex-1 justify-center rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors" onClick={() => setUploadToDelete(null)}>Cancel</button>
-                    <button type="button" className="flex-1 justify-center rounded-xl border border-transparent bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors" onClick={handleDeleteUpload}>Delete</button>
+                    <button type="button" className="flex-1 justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors" onClick={() => setUploadToDelete(null)}>Cancel</button>
+                    <button type="button" className="flex-1 justify-center rounded-lg border border-transparent bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition-colors" onClick={handleDeleteUpload}>Delete</button>
                   </div>
                 </Dialog.Panel>
               </Transition.Child>

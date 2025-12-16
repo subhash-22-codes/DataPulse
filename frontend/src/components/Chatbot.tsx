@@ -168,14 +168,14 @@ export const Chatbot: React.FC = () => {
           <div
             className="
               relative h-14 w-14              /* smaller size */
-              bg-white                         /* clean white */
+              bg-white                         
               rounded-full
               flex items-center justify-center
               shadow-[0_4px_12px_rgba(0,0,0,0.12)]
               hover:shadow-[0_6px_16px_rgba(0,0,0,0.18)]
               transition-all duration-300
               hover:scale-[1.06] active:scale-95
-              border border-blue-600/20        /* subtle royal blue border */
+              border    
             "
           >
             <MessageCircle className="h-6 w-6 text-blue-600" /> {/* royal blue icon */}
