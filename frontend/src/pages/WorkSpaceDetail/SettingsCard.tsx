@@ -1,6 +1,6 @@
 import React, { Fragment, useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { Workspace, DataUpload, AlertRule } from '../../types';
+import { Workspace } from '../../types';
 import { Dialog, Transition } from '@headlessui/react';
 import { Loader2, X, CheckCircle2, Trash2, ShieldAlert, ArrowRight, AlertTriangle } from 'lucide-react'; 
 import { useNavigate } from 'react-router-dom';
@@ -38,34 +38,32 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
   const [uploadCount, setUploadCount] = useState(0);
   const [alertCount, setAlertCount] = useState(0);
 
-  useEffect(() => {
-    const fetchImpactCounts = async () => {
-      try {
-        const [uploadsRes, alertsRes] = await Promise.all([
-          api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads`),
-          api.get<AlertRule[]>(`/workspaces/${workspace.id}/alerts`)
-        ]);
-        setUploadCount(uploadsRes.data.length);
-        setAlertCount(alertsRes.data.length);
-      } catch (error) {
-        console.error("Failed to fetch counts", error);
-      }
-    };
+    useEffect(() => {
+      if (!isModalOpen || !workspace?.id) return;
 
-    if (!isModalOpen) {
-      const timer = setTimeout(() => {
-        setStep('confirm_name');
-        setConfirmationText('');
-        setOtp('');
-        setIsLoading(false);
-        setInputError(false);
-        setErrorMessage('');
-      }, 200);
-      return () => clearTimeout(timer);
-    } else {
+      const fetchImpactCounts = async () => {
+        try {
+          const [uploadsRes, alertsRes] = await Promise.all([
+            api.get<{ count: number }>(
+              `/workspaces/${workspace.id}/uploads/count`
+            ),
+            api.get<{ count: number }>(
+              `/workspaces/${workspace.id}/alerts/count`
+            )
+          ]);
+
+          setUploadCount(uploadsRes.data.count);
+          setAlertCount(alertsRes.data.count);
+
+        } catch (error) {
+          console.error("Failed to fetch counts", error);
+        }
+      };
+
       fetchImpactCounts();
-    }
-  }, [isModalOpen, workspace.id]); 
+
+    }, [isModalOpen, workspace?.id]);
+
 
   if (!isOwner) return null;
 
@@ -135,50 +133,91 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
         </div>
 
         {/* Danger Zone Card */}
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
-            {/* MOBILE LAYOUT FIX: 
-               Used `flex-col-reverse` on mobile so content is below image, 
-               but shifted to `flex-row` on desktop (`sm:`).
-            */}
-            <div className="px-6 py-6 sm:p-8 flex flex-col-reverse sm:flex-row gap-6 sm:gap-8 items-center sm:items-start">
-                
-                {/* Left Content */}
-                <div className="flex-1 w-full text-center sm:text-left">
-                    <h3 className="text-base font-bold text-slate-900 flex items-center justify-center sm:justify-start gap-2">
-                        Delete Workspace
-                    </h3>
-                    <div className="mt-2 text-sm text-slate-500 leading-relaxed max-w-2xl mx-auto sm:mx-0">
-                        <p className="mb-3">
-                            Permanently delete <span className="font-semibold text-slate-900">{workspace.name}</span> and all of its resources ({uploadCount} datasets, {alertCount} alerts).
-                        </p>
-                        <p className="text-xs bg-slate-50 text-slate-600 p-2.5 rounded-md border border-slate-100 inline-block text-left">
-                            <span className="font-semibold">Note:</span> Deleted workspaces are recoverable for 30 days before permanent removal.
-                        </p>
-                    </div>
-                    
-                    <div className="mt-6">
-                        <button
-                            type="button"
-                            onClick={() => setIsModalOpen(true)}
-                            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-red-600 border border-slate-200 shadow-sm hover:bg-red-50 hover:border-red-100 hover:text-red-700 transition-all active:scale-95 w-full sm:w-auto justify-center"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            Delete this workspace
-                        </button>
-                    </div>
-                </div>
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          {/* Layout */}
+          <div className="px-6 py-6 sm:p-8 flex flex-col-reverse sm:flex-row gap-6 sm:gap-8 items-center sm:items-start">
 
-                {/* Right Illustration - Visible on Mobile & Desktop */}
-                <div className="flex-shrink-0 opacity-90 hover:opacity-100 transition-opacity">
-                    <img 
-                        src="/images/Delete.png" 
-                        alt="Delete workspace" 
-                        // Mobile: h-24, Desktop: h-32. Contained neatly.
-                        className="h-24 sm:h-32 w-auto object-contain pointer-events-none select-none" 
-                    />
+            {/* Left Content */}
+            <div className="flex-1 w-full text-center sm:text-left">
+              
+              {/* Title */}
+              <h3 className="text-base font-semibold text-slate-900 flex items-center justify-center sm:justify-start gap-2">
+                Delete workspace
+              </h3>
+
+              {/* Description */}
+              <div className="mt-2 max-w-2xl mx-auto sm:mx-0 space-y-2 text-[11px] sm:text-sm leading-relaxed text-slate-500">
+                <p>
+                  This action will schedule{" "}
+                  <span className="font-medium text-slate-800">
+                    {workspace.name}
+                  </span>{" "}
+                  for deletion and immediately disable access.
+                </p>
+
+                <div className="inline-flex items-start gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] sm:text-xs text-slate-600">
+                  <span className="font-medium">Note:</span>
+                  <span>
+                    Deleted workspaces can be recovered for 30 days before permanent removal.
+                  </span>
                 </div>
+              </div>
+
+              {/* Action */}
+              <div className="mt-6 flex justify-center sm:justify-start">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  className="
+                    inline-flex items-center gap-1.5
+                    rounded-md
+                    border border-red-200
+                    bg-white
+
+                    px-2.5 py-1
+                    text-[13px] sm:text-sm
+                    font-medium text-red-600
+
+                    shadow-sm
+                    hover:bg-red-50
+                    hover:border-red-300
+                    hover:text-red-700
+
+                    outline-none
+                    focus:outline-none
+                    focus-visible:ring-2
+                    focus-visible:ring-red-500/30
+                    focus-visible:ring-offset-2
+
+                    disabled:opacity-60
+                    disabled:cursor-not-allowed
+                  "
+                >
+                  <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  Delete workspace
+                </button>
+              </div>
             </div>
+
+            {/* Right Illustration */}
+            <div className="flex-shrink-0 opacity-80 sm:opacity-90">
+              <img
+                src="/images/Delete.png"
+                alt="Delete workspace illustration"
+                className="
+                  h-16 sm:h-24 md:h-28
+                  w-auto
+                  object-contain
+                  pointer-events-none
+                  select-none
+                "
+                draggable={false}
+              />
+            </div>
+
+          </div>
         </div>
+
       </div>
 
       {/* --- CONFIRMATION MODAL --- */}
@@ -212,58 +251,93 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                   
                   {/* SUCCESS STATE */}
                   {step === 'success' ? (
-                    <div className="flex flex-col items-center justify-center py-12 px-8 bg-white animate-in zoom-in duration-300">
-                       <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mb-4 border border-green-100">
-                          <CheckCircle2 className="h-7 w-7 text-green-600" />
-                       </div>
-                       <h3 className="text-lg font-bold text-slate-900">Workspace Deleted</h3>
-                       <p className="text-sm text-slate-500 mt-2 text-center">
-                         Resources moved to trash. Redirecting...
-                       </p>
-                       <div className="mt-6 w-full max-w-[200px] bg-slate-100 h-1 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 animate-[progress_2s_ease-in-out]"></div>
-                       </div>
+                    <div className="flex flex-col items-center justify-center px-6 py-8 bg-white animate-in fade-in duration-200">
+
+                      {/* Icon */}
+                      <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="mt-3 text-sm font-semibold text-slate-900">
+                        Workspace scheduled for deletion
+                      </h3>
+
+                      {/* Subtitle */}
+                      <p className="mt-1 text-xs text-slate-500 text-center max-w-xs">
+                        Access has been disabled. Redirecting…
+                      </p>
+
                     </div>
+
                   ) : (
                     /* FORM STATE */
                     <>
                       {/* Modal Header */}
-                      <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
+                      <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
+                        {/* Left */}
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">
-                                {step === 'confirm_name' ? <ShieldAlert className="h-5 w-5 text-slate-500" /> : <ShieldAlert className="h-5 w-5 text-slate-500" />}
-                            </div>
-                            <div>
-                                <Dialog.Title as="h3" className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                                {step === 'confirm_name' ? 'Confirm Deletion' : 'Security Check'}
-                                </Dialog.Title>
-                            </div>
+                          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 border border-slate-200">
+                            <ShieldAlert className="h-4 w-4 text-slate-500" />
+                          </div>
+
+                          <Dialog.Title
+                            as="h3"
+                            className="text-sm font-semibold text-slate-900"
+                          >
+                            {step === 'confirm_name' ? 'Confirm deletion' : 'Security check'}
+                          </Dialog.Title>
                         </div>
+
+                        {/* Close */}
                         <button
                           type="button"
-                          className="rounded-md p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none"
                           onClick={() => !isLoading && setIsModalOpen(false)}
+                          className="
+                            rounded-md p-1.5
+                            text-slate-400
+                            hover:text-slate-600
+                            hover:bg-slate-100
+                            transition-colors
+                            focus:outline-none
+                            focus-visible:ring-2
+                            focus-visible:ring-slate-300
+                          "
                         >
                           <X className="h-4 w-4" />
                         </button>
                       </div>
 
+
                       {/* Modal Body */}
                       <div className="px-6 py-6 bg-white">
                         {step === 'confirm_name' ? (
-                          <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="bg-red-50/50 border border-red-100 p-3 rounded-lg flex gap-3">
-                                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
-                                <p className="text-xs text-red-800 leading-relaxed font-medium">
-                                    Unexpected bad things will happen if you don't read this! This action cannot be undone immediately.
-                                </p>
+                          <div className="space-y-4">
+                            <div className="flex gap-2.5 rounded-md border border-red-200 bg-red-50 px-3 py-2.5">
+                              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                              <p className="text-[11px] sm:text-xs text-red-700 leading-relaxed">
+                                Deleting this workspace will immediately disable access.
+                                It contains{" "}
+                                <span className="font-medium">{uploadCount}</span> datasets and{" "}
+                                <span className="font-medium">{alertCount}</span> alerts.
+                                This action can be reversed for a limited time.
+                              </p>
                             </div>
-
-                            {/* Input Group */}
+                           {/* Input Group */}
                             <div>
-                              <label htmlFor="confirm-name" className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
-                                Type <span className="normal-case text-slate-900 select-all">{workspace.name}</span> to confirm
+                              {/* Label */}
+                              <label
+                                htmlFor="confirm-name"
+                                className="block mb-2 text-[11px] sm:text-xs font-medium text-slate-500"
+                              >
+                                Type{" "}
+                                <span className="font-medium text-slate-900 select-all">
+                                  {workspace.name}
+                                </span>{" "}
+                                to confirm
                               </label>
+
+                              {/* Input */}
                               <div className="relative">
                                 <input
                                   type="text"
@@ -273,41 +347,58 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                                     setConfirmationText(e.target.value);
                                     setInputError(false);
                                   }}
-                                  className={`block w-full rounded-lg border py-2.5 pl-4 pr-10 text-slate-900 text-sm shadow-sm placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-slate-100 ${
-                                    inputError 
-                                      ? 'border-red-300 focus:border-red-500' 
-                                      : 'border-slate-300 focus:border-slate-500'
-                                  }`}
+                                  className={`
+                                    block w-full
+                                    rounded-md
+                                    border
+                                    px-3 py-2
+                                    pr-9
+                                    text-sm text-slate-900
+                                    placeholder:text-slate-400
+                                    outline-none
+                                    transition-colors
+
+                                    ${inputError
+                                      ? 'border-red-300 focus:border-red-500'
+                                      : 'border-slate-300 focus:border-slate-400'
+                                    }
+                                  `}
                                   placeholder={workspace.name}
                                   autoComplete="off"
                                   autoFocus
                                 />
-                                
-                                {/* Live Verification Icon */}
+
+                                {/* Verification icon (static, no animation) */}
                                 {confirmationText === workspace.name && (
-                                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none animate-in zoom-in duration-200">
-                                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                                   </div>
                                 )}
                               </div>
+
+                              {/* Error */}
                               {inputError && (
-                                <p className="mt-2 text-xs font-medium text-red-600 animate-pulse">
-                                    {errorMessage}
+                                <p className="mt-1.5 text-[11px] sm:text-xs text-red-600">
+                                  {errorMessage}
                                 </p>
                               )}
                             </div>
+
                           </div>
                         ) : (
                           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                              <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-                                  Verification Code
+                                {/* Label */}
+                                <label className="block mb-2 text-[11px] sm:text-xs font-medium text-slate-500">
+                                  Verification code
                                 </label>
-                                <div className="mb-4">
-                                    <p className="text-sm text-slate-600 leading-relaxed">
-                                        Enter the 6-digit code sent to your email to verify your identity.
-                                    </p>
-                                </div>
+
+                                {/* Helper text */}
+                                <p className="mb-3 text-sm text-slate-600 leading-relaxed">
+                                  Enter the 6-digit code sent to your email.
+                                </p>
+
+                                {/* OTP Input */}
                                 <input
                                   type="text"
                                   maxLength={6}
@@ -316,20 +407,36 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                                     setOtp(e.target.value.replace(/\D/g, ''));
                                     setInputError(false);
                                   }}
-                                  className={`block w-full rounded-lg border py-3 px-4 text-center text-xl tracking-[0.5em] font-mono font-medium text-slate-900 shadow-sm transition-all focus:ring-4 focus:ring-slate-100 ${
-                                    inputError 
-                                      ? 'border-red-300 focus:border-red-500' 
-                                      : 'border-slate-300 focus:border-slate-900'
-                                  }`}
+                                  className={`
+                                    block w-full
+                                    rounded-md
+                                    border
+                                    px-3 py-2.5
+                                    text-center
+                                    text-sm sm:text-base
+                                    font-mono
+                                    tracking-[0.3em]
+                                    text-slate-900
+                                    placeholder:text-slate-400
+                                    outline-none
+                                    transition-colors
+
+                                    ${inputError
+                                      ? 'border-red-300 focus:border-red-500'
+                                      : 'border-slate-300 focus:border-slate-400'
+                                    }
+                                  `}
                                   placeholder="000000"
                                   autoFocus
                                 />
+                                {/* Error */}
                                 {inputError && (
-                                  <p className="mt-2 text-xs font-semibold text-center text-red-600">
+                                  <p className="mt-1.5 text-[11px] sm:text-xs text-red-600 text-center">
                                     {errorMessage}
                                   </p>
                                 )}
-                             </div>
+                              </div>
+
                           </div>
                         )}
                       </div>
