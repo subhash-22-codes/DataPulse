@@ -494,6 +494,25 @@ def get_workspace_uploads(
     
     return uploads
 
+@router.get("/{workspace_id}/uploads/count")
+def get_workspace_upload_count(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Security: ensure user has access to workspace
+    workspace = get_workspace(workspace_id, current_user, db)
+
+    # Efficient aggregate query
+    upload_count = db.query(DataUpload).filter(
+        DataUpload.workspace_id == workspace.id
+    ).count()
+
+    return {
+        "count": upload_count
+    }
+
+
 # ===================================================
 # Endpoint for Trend Analysis Data
 # ===================================================
@@ -817,6 +836,25 @@ def get_workspace_alerts(
     ).all()
 
     return rules
+
+@router.get("/{workspace_id}/alerts/count")
+def get_workspace_alert_count(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Security: ensure user has access to workspace
+    workspace = get_workspace(workspace_id, current_user, db)
+
+    # Efficient aggregate query
+    alert_count = db.query(AlertRule).filter(
+        AlertRule.workspace_id == workspace.id
+    ).count()
+
+    return {
+        "count": alert_count
+    }
+
 
 # --- NEW: Trigger Manual Poll (For Render Sleep Fix) ---
 # This allows the frontend to run the poll on demand
