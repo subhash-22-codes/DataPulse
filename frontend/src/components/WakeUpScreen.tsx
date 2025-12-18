@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Server, ShieldCheck, Zap, Globe, Lock, Activity, Terminal, AlertTriangle, RefreshCw, XCircle, CheckCircle2, Cpu } from 'lucide-react';
 
 // -----------------------------------------------------------------------
@@ -61,42 +61,43 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
 
 
   useEffect(() => {
-    setSessionId(`SES-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
+  setSessionId(`SES-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
 
-    const timer = setInterval(() => {
-      setProgress((old) => {
-        if (isSystemReady) return 100;
-        if (old >= 99) return 99;
-        const remaining = 99 - old;
-        const jump = Math.random() * (remaining * 0.15);
-        return Math.min(old + Math.max(jump, 0.2), 99);
-      });
-    }, 800);
+  const timer = setInterval(() => {
+    setProgress((old) => {
+      if (isSystemReady) return 100;
+      if (old >= 99) return 99;
+      const remaining = 99 - old;
+      const jump = Math.random() * (remaining * 0.15);
+      return Math.min(old + Math.max(jump, 0.2), 99);
+    });
+  }, 800);
 
-    const messageTimer = setInterval(() => {
-        if (!isSystemReady) {
-            setMessageIndex((prev) => (prev + 1) % messages.length);
-        }
-    }, 2500);
+  const messageTimer = setInterval(() => {
+    if (!isSystemReady) {
+      setMessageIndex((prev) => (prev + 1) % messages.length);
+    }
+  }, 2500);
 
-    const teamTimer = setTimeout(() => setShowTeam(true), 1500);
-    const longWaitTimer = setTimeout(() => setLongWait(true), 15000); 
-    
-    const failureTimer = setTimeout(() => {
-      if (!isSystemReady) {
-          setIsError(true);
-          setLongWait(false);
-      }
-    }, 180000); 
+  const teamTimer = setTimeout(() => setShowTeam(true), 1500);
+  const longWaitTimer = setTimeout(() => setLongWait(true), 15000);
 
-    return () => {
-      clearInterval(timer);
-      clearInterval(messageTimer);
-      clearTimeout(longWaitTimer);
-      clearTimeout(teamTimer);
-      clearTimeout(failureTimer);
-    };
-  }, [isSystemReady]);
+  const failureTimer = setTimeout(() => {
+    if (!isSystemReady) {
+      setIsError(true);
+      setLongWait(false);
+    }
+  }, 180000);
+
+  return () => {
+    clearInterval(timer);
+    clearInterval(messageTimer);
+    clearTimeout(longWaitTimer);
+    clearTimeout(teamTimer);
+    clearTimeout(failureTimer);
+  };
+}, [isSystemReady, messages.length]);
+
 
   const handleRetry = () => {
     setIsError(false);
@@ -157,7 +158,7 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
           />
           <div className={`mt-4 text-[10px] font-mono tracking-[0.2em] flex items-center gap-2 border px-3 py-1 rounded-full backdrop-blur-md transition-colors duration-300 ${isError ? 'border-red-500/30 bg-red-950/50 text-red-400' : 'border-zinc-800/50 bg-zinc-900/80 text-zinc-500'}`}>
             <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isError ? 'bg-red-500' : 'bg-cyan-500'}`}></span>
-            {isError ? "SYSTEM FAILURE" : (isSystemReady ? "ACCESS GRANTED" : "SYSTEM BOOT v1.1.0")}
+            {isError ? "SYSTEM FAILURE" : (isSystemReady ? "ACCESS GRANTED" : "SYSTEM BOOT v1.0.0")}
           </div>
         </div>
 

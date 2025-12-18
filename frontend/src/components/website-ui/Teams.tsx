@@ -45,112 +45,145 @@ const Team = () => {
         </div>
 
         {/* Team Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 justify-center max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 max-w-4xl mx-auto">
+
           
           {/* === MEMBER 1: SUBHASH === */}
-          <div className="group relative p-8 rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-2xl hover:shadow-blue-900/5 hover:border-blue-100 transition-all duration-300 hover:-translate-y-1 flex flex-col items-center text-center">
-            
-            {/* Profile Image */}
-            <div className="relative mb-6">
-               <div className="absolute inset-0 bg-blue-600/10 rounded-full scale-90 group-hover:scale-110 transition-transform duration-500 blur-xl" />
-               <img
-                 src="/images/Subhash.jpg"
-                 alt="Subhash Yaganti"
-                 className="relative w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg group-hover:border-blue-50 transition-colors"
-                 loading="lazy"
-               />
+          <div className="group relative flex flex-col items-center text-center
+            rounded-2xl sm:rounded-3xl
+            bg-white border border-slate-200 shadow-sm
+            p-5 sm:p-6 lg:p-8
+            transition-all duration-300
+            sm:hover:-translate-y-1 sm:hover:shadow-xl sm:hover:border-blue-100">
+
+            {/* Avatar */}
+            <div className="relative mb-4 sm:mb-6">
+              <div className="absolute inset-0 bg-blue-600/10 rounded-full blur-xl
+                scale-90 sm:group-hover:scale-110 transition-transform duration-500" />
+              <img
+                src="/images/Subhash.jpg"
+                alt="Subhash Yaganti"
+                className="relative rounded-full object-cover border-4 border-white shadow-md
+                  w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28
+                  transition-colors sm:group-hover:border-blue-50"
+                loading="lazy"
+              />
             </div>
 
             {/* Info */}
-            <h3 className="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Subhash Yaganti</h3>
-            <p className="text-blue-600 font-semibold mb-4 text-sm uppercase tracking-wide">Full Stack & Architecture</p>
-            <p className="text-slate-500 text-sm leading-relaxed mb-8 max-w-xs">
-              Designed the core API architecture and selected the high-performance tech stack. Engineered the responsive UI/UX system and orchestrated the full-stack integration for seamless data delivery.
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              Subhash Yaganti
+            </h3>
+
+            <p className="mt-1 text-xs sm:text-sm font-semibold uppercase tracking-wide text-blue-600">
+               Full-Stack Engineering, Backend Systems & Architecture
             </p>
 
-            {/* Social Links */}
-            <div className="flex justify-center items-center gap-4 mt-auto">
-              <a 
+            <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
+               Co-designed the system architecture and engineered backend services,
+              including asynchronous task processing, containerized deployment workflows,
+              and application security. Contributed equally to frontend engineering,
+              UI/UX design, and full-stack integration.
+
+            </p>
+
+            {/* Socials */}
+            <div className="mt-5 flex gap-3">
+              <a
                 href="mailto:subhashyagantisubbu@gmail.com"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all hover:scale-110"
-                aria-label="Email Subhash"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-500 transition"
               >
-                 <SiGmail className="w-5 h-5" />
+                <SiGmail className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
-                href="https://www.linkedin.com/in/subhash-yaganti-a8b3b626a/" 
+              <a
+                href="https://www.linkedin.com/in/subhash-yaganti-a8b3b626a/"
                 target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition"
               >
-                <FaLinkedin className="w-5 h-5" />
+                <FaLinkedin className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
+              <a
                 href="https://github.com/subhash-22-codes"
                 target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
               >
-                <FaGithub className="w-5 h-5" />
+                <FaGithub className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
+              <a
                 href="https://www.instagram.com/subhash__spiody/"
                 target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-pink-50 hover:text-pink-500 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-pink-50 hover:text-pink-500 transition"
               >
-                <FaInstagram className="w-5 h-5" />
+                <FaInstagram className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
             </div>
           </div>
 
           {/* === MEMBER 2: SIRI === */}
-          <div className="group relative p-8 rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-2xl hover:shadow-indigo-900/5 hover:border-indigo-100 transition-all duration-300 hover:-translate-y-1 flex flex-col items-center text-center">
-            
-            {/* Profile Image */}
-            <div className="relative mb-6">
-               <div className="absolute inset-0 bg-indigo-600/10 rounded-full scale-90 group-hover:scale-110 transition-transform duration-500 blur-xl" />
-               <img
-                 src="/images/Siri.jpg"
-                 alt="Siri Mahalaxmi Vemula"
-                 className="relative w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg group-hover:border-indigo-50 transition-colors"
-                 loading="lazy"
-               />
+          <div className="group relative flex flex-col items-center text-center
+            rounded-2xl sm:rounded-3xl
+            bg-white border border-slate-200 shadow-sm
+            p-5 sm:p-6 lg:p-8
+            transition-all duration-300
+            sm:hover:-translate-y-1 sm:hover:shadow-xl sm:hover:border-indigo-100">
+
+            {/* Avatar */}
+            <div className="relative mb-4 sm:mb-6">
+              <div className="absolute inset-0 bg-indigo-600/10 rounded-full blur-xl
+                scale-90 sm:group-hover:scale-110 transition-transform duration-500" />
+              <img
+                src="/images/Siri.jpg"
+                alt="Siri Mahalaxmi Vemula"
+                className="relative rounded-full object-cover border-4 border-white shadow-md
+                  w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28
+                  transition-colors sm:group-hover:border-indigo-50"
+                loading="lazy"
+              />
             </div>
 
             {/* Info */}
-            <h3 className="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Siri Mahalaxmi Vemula</h3>
-            <p className="text-indigo-600 font-semibold mb-4 text-sm uppercase tracking-wide">AI, Data & Backend Engineering</p>
-            <p className="text-slate-500 text-sm leading-relaxed mb-8 max-w-xs">
-              Architected the Gemini AI integration pipeline and optimized critical database schemas. Developed the core backend logic to handle complex data aggregation and intelligent schema analysis.
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              Siri Mahalaxmi Vemula
+            </h3>
+
+            <p className="mt-1 text-xs sm:text-sm font-semibold uppercase tracking-wide text-indigo-600">
+              Backend Engineering, Data Systems & AI Integration
             </p>
 
-            {/* Social Links */}
-            <div className="flex justify-center items-center gap-4 mt-auto">
-              <a 
-                href="https://mail.google.com/mail/?view=cm&fs=1&to=sirimahalaxmivemula@gmail.com"
-                target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all hover:scale-110"
+            <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
+               Co-engineered backend systems with a focus on database design, SQL operations,
+               and data processing pipelines. Led the integration of AI capabilities and
+               contributed equally to backend logic, frontend functionality, and overall
+               system reliability.
+            </p>
+
+            {/* Socials */}
+            <div className="mt-5 flex gap-3">
+              <a
+                href="mailto:sirimahalaxmivemula@gmail.com"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-500 transition"
               >
-                 <SiGmail className="w-5 h-5" />
+                <SiGmail className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
-                href="https://www.linkedin.com/in/vemula-siri-mahalaxmi-b4b624319/" 
+              <a
+                href="https://www.linkedin.com/in/vemula-siri-mahalaxmi-b4b624319/"
                 target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition"
               >
-                <FaLinkedin className="w-5 h-5" />
+                <FaLinkedin className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
+              <a
                 href="https://github.com/armycodes"
                 target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
               >
-                <FaGithub className="w-5 h-5" />
+                <FaGithub className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
-              <a 
+              <a
                 href="#"
-                target="_blank" rel="noreferrer"
-                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-pink-50 hover:text-pink-500 transition-all hover:scale-110"
+                className="p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-pink-50 hover:text-pink-500 transition"
               >
-                <FaInstagram className="w-5 h-5" />
+                <FaInstagram className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
             </div>
           </div>
