@@ -68,10 +68,10 @@ const Login: React.FC = () => {
           {/* Main Header */}
           <div className="mb-6 space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Welcome Back
+              Good to see you again
             </h1>
             <p className="text-slate-500 text-sm">
-              Enter your credentials to access your workspace.
+              Log in to your DataPulse workspace.
             </p>
           </div>
 
