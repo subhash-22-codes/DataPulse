@@ -4,11 +4,12 @@ import asyncio
 import redis
 import requests
 import logging
+import datetime as dt
 from celery import Celery
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import google.generativeai as genai
 import markdown2
 import pytz
@@ -120,7 +121,7 @@ def schedule_data_fetches():
     
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # 1. Optimization: Fetch only necessary columns as tuples
         # This is faster and uses less memory than full ORM objects
@@ -237,7 +238,7 @@ def fetch_api_data(workspace_id: str):
         
         # Efficiently update the last_polled_at timestamp
         db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": datetime.utcnow()}
+            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
         )
         
         db.commit()
@@ -315,7 +316,7 @@ def fetch_db_data(workspace_id: str):
         
         # Efficient update for last_polled_at
         db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": datetime.utcnow()}
+            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
         )
         
         db.commit()

@@ -3,6 +3,7 @@ import uuid
 import random
 from datetime import datetime, timedelta
 import logging
+import datetime as dt
 from datetime import datetime
 from typing import List, Optional
 import asyncio
@@ -33,18 +34,16 @@ from app.core.connection_manager import manager
 
 # --- Setup ---
 logger = logging.getLogger(__name__)
-APP_MODE = os.getenv("APP_MODE", "development") # Default to dev for safety
+APP_MODE = os.getenv("APP_MODE", "development")
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
-# --- SMART SWITCH: Task Dispatcher ---
 if APP_MODE == "production":
     logger.info("🚀 Workspaces running in PRODUCTION mode (BackgroundTasks).")
-    # In PROD, we import the python function directly
     from app.services.tasks import process_csv_task
 else:
     logger.info("🚚 Workspaces running in DEVELOPMENT mode (Celery).")
-    # In DEV, we use Celery. We wrap imports to avoid crashes if libs are missing.
+    # In DEV
     try:
         import redis.asyncio as aioredis
         from app.services.celery_worker import celery_app
@@ -53,10 +52,9 @@ else:
         celery_app = None
 
 
-
-# ==========================
-#  Schemas (Optimized Pydantic V2)
-# ==========================
+# =========
+#  Schemas 
+# =========
 class WorkspaceCreate(BaseModel):
     name: str
 
@@ -78,18 +76,17 @@ class WorkspaceResponse(BaseModel):
     name: str
     description: str | None = None
     data_source: str | None = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     owner_id: uuid.UUID
     owner: OwnerResponse
     team_members: List[UserResponse] = []
     
-    api_url: str | None = None # Returned as string for flexibility
+    api_url: str | None = None 
     polling_interval: str | None = None
     is_polling_active: bool | None = None
     tracked_column: str | None = None
     description_last_updated_at: datetime | None = None
     
-    # Security: Only return the NAME of the header, never the value
     api_header_name: str | None = None
     
     db_type: str | None = None
@@ -108,7 +105,6 @@ class WorkspaceUpdate(BaseModel):
     team_member_emails: List[EmailStr] | None = None
     data_source: str | None = None
     
-    # Validate that the URL is valid (e.g., http://...)
     api_url: HttpUrl | None = None 
     
     polling_interval: str | None = None
@@ -141,7 +137,6 @@ class WorkspaceUpdate(BaseModel):
     
     @field_validator('api_url', mode='before')
     def parse_url_to_str(cls, v):
-        # Allow clearing the URL by sending empty string
         if v == "": return None
         return v
 
@@ -149,7 +144,7 @@ class DataUploadResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     file_path: str
-    uploaded_at: datetime
+    uploaded_at: Optional[datetime] = None
     upload_type: str 
     schema_info: dict | None = None
     analysis_results: dict | None = None
@@ -162,7 +157,7 @@ class TaskResponse(BaseModel):
     message: str
     
 class TrendDataPoint(BaseModel):
-    date: datetime
+    date: Optional[datetime] = None
     value: float | None = None
 
 class TrendResponse(BaseModel):
@@ -174,21 +169,23 @@ class DeleteConfirmation(BaseModel):
 # ==========================
 #  Routes
 # ==========================
-
 @router.post("/", response_model=WorkspaceResponse)
 def create_workspace(
     workspace: WorkspaceCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new workspace for the logged-in user, with a limit of 3."""
-    # 1. Optimization: Use func.count() for a lighter query
-    workspace_count = db.query(func.count(Workspace.id)).filter(
-        Workspace.owner_id == current_user.id
+ 
+    active_workspace_count = db.query(func.count(Workspace.id)).filter(
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False  
     ).scalar()
     
-    if workspace_count >= 3:
-        raise HTTPException(status_code=400, detail="You can create a maximum of 3 workspaces.")
+    if active_workspace_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Active workspace limit reached. Delete or archive an existing workspace to create a new one."
+        )
 
     new_ws = Workspace(name=workspace.name, owner_id=current_user.id)
     db.add(new_ws)
@@ -198,9 +195,6 @@ def create_workspace(
 
 @router.get("/", response_model=List[WorkspaceResponse])
 def list_workspaces(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """List all workspaces belonging to the logged-in user"""
-    # Optimization: Use joinedload to fetch team_members in ONE query (prevents N+1)
-    # Removed .unique() to fix the crash
     workspaces = db.query(Workspace).options(
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
@@ -211,17 +205,14 @@ def list_workspaces(current_user: User = Depends(get_current_user), db: Session 
     
     return workspaces
 
-@router.get("/trash", response_model=List[WorkspaceResponse]) # Ensure response_model matches your schema
+@router.get("/trash", response_model=List[WorkspaceResponse]) 
 def get_trash(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Fetch only the workspaces that have been soft-deleted.
-    """
     return db.query(Workspace).filter(
         Workspace.owner_id == current_user.id,
-        Workspace.is_deleted == True  # <--- Only fetch deleted ones
+        Workspace.is_deleted == True  
     ).all()
 
 
@@ -231,9 +222,6 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
-    
-    # Optimization: Eager load team_members because we check permissions against them.
-    # Removed .unique() to fix the crash
     workspace = db.query(Workspace).options(
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
@@ -245,7 +233,7 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     
-    # Permission Check (Python side is fine here since we eager loaded)
+    # Permission Check 
     is_owner = workspace.owner_id == current_user.id
     
     # Efficient membership check
@@ -282,7 +270,6 @@ async def update_workspace(
     # Extract only the fields that were set by the client
     update_data = workspace_update.model_dump(exclude_unset=True)
     
-    # --- ⭐ NEW: CONFIG CHANGE TRACKING ---
     # Define fields that, if changed, warrant an immediate data fetch/connection test.
     data_source_fields = {
         "data_source",
@@ -300,9 +287,7 @@ async def update_workspace(
     
     # Check if any data source configuration field is present in the update payload
     config_changed = any(field in update_data for field in data_source_fields)
-    # --- END NEW LOGIC ---
 
-    # 3. Optimized "Smart GPS" Logic (Clear incompatible fields)
     if 'data_source' in update_data:
         new_source = update_data['data_source']
         
@@ -320,21 +305,45 @@ async def update_workspace(
             db_workspace.is_polling_active = False
 
     if "description" in update_data:
-        db_workspace.description_last_updated_at = datetime.utcnow()
+        db_workspace.description_last_updated_at = dt.datetime.now(dt.timezone.utc)
 
-    # 4. Optimized Team Member Update (Logic remains the same)
     if "team_member_emails" in update_data:
         emails: list[str] = update_data.pop("team_member_emails")
-        valid_users = db.query(User).filter(User.email.in_(emails)).all()
-        valid_emails = {user.email for user in valid_users}
         
+        # A. Fetch only users who are REGISTERED and VERIFIED
+        valid_users = db.query(User).filter(
+            User.email.in_(emails),
+            User.is_verified == True
+        ).all()
+        
+        verified_emails = {u.email for u in valid_users}
+        
+        # B. Security Check: Find the exact culprit
         for email in emails:
-            if email not in valid_emails:
-                raise HTTPException(status_code=400, detail=f"User '{email}' is not registered.")
+            if email == current_user.email:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="You are the owner of this workspace. You don't need to add yourself to the team."
+                )
+            if email not in verified_emails:
+                user_record = db.query(User).filter(User.email == email).first()
+                if not user_record:
+                    raise HTTPException(
+                        status_code=404, 
+                        detail=f"User '{email}' does not have a DataPulse account."
+                    )
+                else:
+                    # User exists but is_verified is False
+                    raise HTTPException(
+                        status_code=403, 
+                        detail=f"User '{email}' needs to verify their account before joining teams."
+                    )
 
-        new_team_members = [u for u in valid_users if u.id != current_user.id]
-        db_workspace.team_members.clear()
-        db_workspace.team_members.extend(new_team_members)
+        # This prevents duplicate roles and potential bugs in team lists.
+        final_members = [u for u in valid_users if u.id != current_user.id]
+
+        # This keeps your frontend array and backend array in perfect sync.
+        db_workspace.team_members = final_members
 
     # 5. Apply generic updates
     for key, value in update_data.items():
@@ -346,24 +355,17 @@ async def update_workspace(
     db.refresh(db_workspace)
 
     
-    # 6. ✅ CONNECT-ON-DEMAND TRIGGER (FIXED LOGIC)
-    # Trigger fetch ONLY if config changed, and it's an API/DB source with active polling.
-    
+    # 6. CONNECT-ON-DEMAND TRIGGER 
     should_trigger_fetch = (
-        config_changed and # <--- NEW CRITICAL CONDITION
+        config_changed and 
         db_workspace.data_source in ["API", "DB"] and 
         db_workspace.is_polling_active is True 
     )
 
     if should_trigger_fetch:
-        # We assume APP_MODE check matches your logic
         if APP_MODE == "production":
-            # Import inside function to avoid circular dependency
             from app.services.tasks import process_data_fetch_task 
-            
             loop = asyncio.get_event_loop()
-            
-            # Pass the ID and the Loop
             background_tasks.add_task(process_data_fetch_task, str(db_workspace.id), loop)
 
     return db_workspace
@@ -374,11 +376,6 @@ def get_team_workspaces(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    List all workspaces where the current user is a team member.
-    Optimized with joinedload to fetch team data efficiently.
-    """
-    # Removed .unique() to fix the crash
     return db.query(Workspace).options(
         joinedload(Workspace.team_members),
         joinedload(Workspace.owner)
@@ -401,98 +398,100 @@ async def upload_csv_for_workspace(
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID format")
-    
-    # 1. Optimization: Lean Query (Fetch only ID and Owner)
-    # We don't need the full object just to check ID and permissions.
-    workspace = db.query(Workspace.id, Workspace.owner_id).filter(Workspace.id == ws_uuid).first()
-    
+
+    # 1. Fetch full ORM Workspace (not partial columns)
+    workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
-    # 2. Authorization Check
+
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    # 3. Read & Decode (Memory Intensive)
-    # We catch decoding errors to fail gracefully if they upload a binary file by mistake.
+    # 2. Read & decode CSV
     try:
-        file_content_bytes = await file.read()
-        file_content_text = file_content_bytes.decode('utf-8')
+        file_bytes = await file.read()
+        file_text = file_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a valid UTF-8 CSV.")
-    
-    # 4. Create Data Record
+        raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
+
+    # 3. Create DataUpload (DO NOT set uploaded_at)
     new_upload = DataUpload(
         workspace_id=workspace.id,
         file_path=file.filename,
-        file_content=file_content_text,
-        upload_type='manual'
+        file_content=file_text,
+        upload_type="manual"
     )
+
     db.add(new_upload)
-    
-    # 5. Optimization: Direct SQL Update
-    # Much faster than loading the object, modifying it, and flushing it.
-    db.query(Workspace).filter(Workspace.id == ws_uuid).update(
-        {"data_source": "CSV"}
-    )
-    
+    db.flush()  # 🔥 CRITICAL: ensures server_default(uploaded_at) is applied
+
+    # 4. ORM-safe workspace update (no raw SQL update)
+    workspace.data_source = "CSV"
+    workspace.is_polling_active = False
+
     db.commit()
     db.refresh(new_upload)
 
-    task_id_to_return = str(new_upload.id)
-    message = "File upload successful, processing has started."
+    task_id = str(new_upload.id)
 
-    # 6. Task Dispatch
+    # 5. Background task dispatch
     if APP_MODE == "production":
-        logger.info("Running in PROD mode. Adding task to background.")
-        
         loop = asyncio.get_event_loop()
-        
-        # Import locally to ensure no circular dependency issues at module level
         from app.services.tasks import process_csv_task
-        
-        # Pass loop for safe signaling
-        background_tasks.add_task(process_csv_task, str(new_upload.id), loop) 
-
+        background_tasks.add_task(process_csv_task, task_id, loop)
     else:
-        logger.info("Running in DEV mode. Sending task to Celery.")
         if celery_app:
-            task = celery_app.send_task('process_csv_task', args=[str(new_upload.id)])
-            task_id_to_return = task.id
-        else:
-            logger.warning("Celery app not loaded. Task not sent.")
-    
-    return {"task_id": task_id_to_return, "message": message}
+            task = celery_app.send_task("process_csv_task", args=[task_id])
+            task_id = task.id
 
-# --- UPDATED: Endpoint to get a workspace's upload history ---
+    return {
+        "task_id": task_id,
+        "message": "File upload successful, processing started."
+    }
+
+#  Endpoint to get a workspace's upload history ---
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
 def get_workspace_uploads(
     workspace_id: str,
     upload_type: Optional[str] = None,
-    limit: int = 50, # <-- Optimization: Default limit prevents UI lag
+    limit: int = 50, 
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 1. Security Check (Lean)
     workspace = get_workspace(workspace_id, current_user, db)
-
-    # 2. Optimization: Defer 'file_content'
-    # We don't need the raw CSV text for the history list.
-    # This saves massive amounts of RAM and network bandwidth.
+    limit = min(limit, 100)
     query = db.query(DataUpload).options(
         defer(DataUpload.file_content)
     ).filter(
         DataUpload.workspace_id == workspace.id
     )
-
-    # 3. Optional Filtering
     if upload_type:
         query = query.filter(DataUpload.upload_type == upload_type)
-    
-    # 4. Sorting and Limiting
+
     uploads = query.order_by(DataUpload.uploaded_at.desc()).limit(limit).all()
     
     return uploads
+
+@router.get("/{workspace_id}/schema")
+def get_workspace_schema(
+    workspace_id: str, 
+    user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    # 1. Reuse security logic
+    ws = get_workspace(workspace_id, user, db)
+
+    # 2. Fetch ONLY the schema_info from the latest record
+    schema_data = db.query(DataUpload.schema_info).filter(
+        DataUpload.workspace_id == ws.id
+    ).order_by(DataUpload.uploaded_at.desc()).first()
+
+    # 3. Clean Response
+    if not schema_data or not schema_data[0]:
+        return {"schema": {}, "has_data": False}
+
+    return {"schema": schema_data[0], "has_data": True}
+
 
 @router.get("/{workspace_id}/uploads/count")
 def get_workspace_upload_count(
@@ -524,16 +523,10 @@ def get_trend_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Gets the historical trend for a single metric (column) over time.
-    Optimized: Fetches ONLY timestamp and JSON stats, avoiding heavy CSV file content.
-    """
-    # 1. Security Check (Uses our optimized get_workspace)
+    # 1. Security Check (Uses optimized get_workspace)
     workspace = get_workspace(workspace_id, current_user, db)
 
     # 2. Optimized Query: Select ONLY specific columns
-    # This returns a lightweight list of tuples, NOT full objects.
-    # We skip the 'file_content' column entirely, making this query 100x faster.
     results = db.query(
         DataUpload.uploaded_at, 
         DataUpload.analysis_results
@@ -547,38 +540,41 @@ def get_trend_data(
     trend_data = []
     
     # 3. Processing Loop
-    # unpacking the tuple (uploaded_at, analysis_results)
     for uploaded_at, stats in results:
+        # If the date is missing, skip this point entirely. 
+        if uploaded_at is None:
+            continue
+
         value = None
-        
         if stats:
             try:
-                # Safely access nested keys using .get() to avoid KeyErrors
-                # Structure: stats -> summary_stats -> column_name -> mean
                 summary = stats.get("summary_stats", {})
                 col_stats = summary.get(column_name, {})
-                value = col_stats.get("mean")
-            except (AttributeError, TypeError):
-                # Handle cases where stats might be malformed
+                
+                # Extract value
+                raw_value = col_stats.get("mean")
+                
+                # Ensure it's a float, otherwise the frontend might break
+                if raw_value is not None:
+                    value = float(raw_value)
+                    
+            except (AttributeError, TypeError, ValueError):
                 pass
         
-        trend_data.append(TrendDataPoint(date=uploaded_at, value=value))
+        # Only add to the list if we actually found a value. 
+        if value is not None:
+            trend_data.append(TrendDataPoint(date=uploaded_at, value=value))
 
     return TrendResponse(column_name=column_name, data=trend_data)
 # ===================================================
 #  NEW: WebSocket Endpoint for Real-time Updates
 # ===================================================
-# REMOVE 'db: Session = Depends(get_db)' from here 
 @router.websocket("/{workspace_id}/ws/{client_id}")
 async def websocket_endpoint(
     websocket: WebSocket, 
     workspace_id: str, 
     client_id: str
 ):
-    """
-    Handles real-time WebSocket connections with 'Auth & Release' pattern
-    to prevents DB connection leaks.
-    """
     # 1. Manually Open Session
     db = SessionLocal() 
     user_id_str = None
@@ -603,7 +599,7 @@ async def websocket_endpoint(
         db.close()
         return
 
-    # 🟢 CRITICAL: Close the DB connection NOW.
+    # Close the DB connection NOW.
     # We are done with the DB. We don't need it for the long-running loop.
     db.close() 
 
@@ -632,26 +628,21 @@ async def websocket_endpoint(
             manager.disconnect('workspace', workspace_id, websocket)
             manager.disconnect('user', user_id_str, websocket)
         
-# --- ENDPOINT 1: Request the Code ---
-# ... existing imports ...
-# Ensure you have HTTPException imported with status_code 429
-# from fastapi import HTTPException, status
 
+# ----Endpoint: Request Delete OTP Endpoint
 @router.post("/{workspace_id}/request-delete-otp", status_code=200)
 async def request_delete_otp(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Step 1: Verify ownership, check rate limit, generate OTP, and send email.
-    """
+   
     # --- 1. NEW: RATE LIMIT CHECK (Prevent Spam) ---
     OTP_DURATION_MINUTES = 10
     COOLDOWN_SECONDS = 60
 
     if current_user.delete_confirmation_expiry:
-        time_until_expiry = (current_user.delete_confirmation_expiry - datetime.utcnow()).total_seconds()
+        time_until_expiry = (current_user.delete_confirmation_expiry - dt.datetime.now(dt.timezone.utc)).total_seconds()
 
         # If expiry > 9 minutes left => sent within last 60 seconds
         if time_until_expiry > (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS):
@@ -679,8 +670,7 @@ async def request_delete_otp(
     
     # 4. Save to User Model
     current_user.delete_confirmation_otp = otp
-    # IMPORTANT: Keep this consistent with the OTP_DURATION_MINUTES above
-    current_user.delete_confirmation_expiry = datetime.utcnow() + timedelta(minutes=OTP_DURATION_MINUTES)
+    current_user.delete_confirmation_expiry = dt.datetime.now(dt.timezone.utc) + timedelta(minutes=OTP_DURATION_MINUTES)
     db.commit()
 
     # 5. Send Email (Async)
@@ -689,7 +679,7 @@ async def request_delete_otp(
     return {"message": "OTP sent to your email."}
 
 
-# --- ENDPOINT 2: Confirm and Delete ---
+# --- ENDPOINT: Confirm and Delete ---
 @router.delete("/{workspace_id}/confirm", status_code=204)
 async def confirm_delete_workspace(
     workspace_id: str,
@@ -697,15 +687,13 @@ async def confirm_delete_workspace(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # --- 1. VERIFY OTP (Updated to use NEW columns) ---
-    # We explicitly check delete_confirmation_otp, IGNORING the password otp_code
+    
     if not current_user.delete_confirmation_otp or current_user.delete_confirmation_otp != payload.otp:
         raise HTTPException(status_code=400, detail="Invalid verification code.")
         
-    if not current_user.delete_confirmation_expiry or datetime.utcnow() > current_user.delete_confirmation_expiry:
+    if not current_user.delete_confirmation_expiry or dt.datetime.now(dt.timezone.utc) > current_user.delete_confirmation_expiry:
         raise HTTPException(status_code=400, detail="Verification code has expired.")
 
-    # 2. Find Workspace (Logic Unchanged)
     ws_uuid = uuid.UUID(workspace_id)
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
@@ -715,11 +703,11 @@ async def confirm_delete_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found.")
 
-    # 3. SOFT DELETE (Logic Unchanged)
+    # SOFT DELETE 
     workspace.is_deleted = True
-    workspace.deleted_at = datetime.utcnow()
+    workspace.deleted_at = dt.datetime.now(dt.timezone.utc)
     
-    # --- BROADCAST NOTIFICATIONS (Your Logic - Unchanged) ---
+    # --- BROADCAST NOTIFICATIONS ---
     for member in workspace.team_members:
         team_note = Notification(
             user_id=member.id,
@@ -737,8 +725,7 @@ async def confirm_delete_workspace(
     )
     db.add(owner_note)
     
-    # 4. CLEANUP (Updated)
-    # Clear the DELETE otp, leaving the password OTP untouched
+    # Clear the DELETE otp
     current_user.delete_confirmation_otp = None
     current_user.delete_confirmation_expiry = None
     
@@ -746,40 +733,47 @@ async def confirm_delete_workspace(
     
     return
 
-# --- ENDPOINT 4: Restore Workspace ---
 @router.post("/{workspace_id}/restore", status_code=200)
 def restore_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Restores a soft-deleted workspace.
-    """
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
 
-    # Find the workspace (even if it is deleted)
+    # 1. Find the target workspace in trash
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
-        Workspace.is_deleted == True # Ensure we are restoring a deleted one
+        Workspace.is_deleted == True
     ).first()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found in trash.")
 
-    # RESTORE ACTION
+    # 2. QUOTA CHECK: Can they afford to bring this back?
+    active_count = db.query(func.count(Workspace.id)).filter(
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False
+    ).scalar()
+
+    if active_count >= 3:
+        raise HTTPException(
+            status_code=429, 
+            detail="Cannot restore. You already have 3 active workspaces. Delete one permanently to free up a slot."
+        )
+
+    # 3. RESTORE ACTION
     workspace.is_deleted = False
     workspace.deleted_at = None
-    
     db.commit()
     
     return {"message": "Workspace restored successfully"}
 
-# --- ENDPOINT 5: Hard Delete (Forever) ---
+
 @router.delete("/{workspace_id}/permanently", status_code=204)
 def delete_workspace_permanently(
     workspace_id: str,
@@ -794,19 +788,17 @@ def delete_workspace_permanently(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
 
-    # 1. Find the workspace in the trash
+    # Find the workspace in the trash
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
-        Workspace.is_deleted == True  # <--- MUST be in trash to delete forever
+        Workspace.is_deleted == True 
     ).first()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found in trash")
 
-    # 2. HARD DELETE (The actual SQL DELETE)
-    # Since you set ondelete="CASCADE" in your models, this will automatically
-    # remove related Notifications, Uploads, and Team Members.
+    # HARD DELETE
     db.delete(workspace)
     db.commit()
     
@@ -820,17 +812,10 @@ def get_workspace_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Gets the list of all alert rules for a given workspace.
-    Optimized to fetch only necessary columns.
-    """
     # 1. Security Check (Uses our optimized get_workspace)
     workspace = get_workspace(workspace_id, current_user, db)
 
     # 2. Optimized Query: Filter by workspace and active status
-    # Note: If your AlertRuleResponse model matches the DB columns exactly, 
-    # fetching the full object is fine. If it's a subset, you could use db.query(AlertRule.id, ...)
-    # But for typical use cases, this standard query is efficient enough for small lists like alerts.
     rules = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id
     ).all()
@@ -856,8 +841,7 @@ def get_workspace_alert_count(
     }
 
 
-# --- NEW: Trigger Manual Poll (For Render Sleep Fix) ---
-# This allows the frontend to run the poll on demand
+# --- NEW: Trigger Manual Poll ---
 @router.post("/{workspace_id}/trigger-poll")
 async def trigger_manual_poll(
     workspace_id: str,
@@ -865,14 +849,10 @@ async def trigger_manual_poll(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Manually triggers the data polling logic for a specific workspace.
-    Optimized: Removes unused event loop logic and ensures safe local imports.
-    """
+
     logger.info(f"Manual poll triggered for workspace {workspace_id}")
     
     # 1. Security & Existence Check
-    # Uses the optimized get_workspace to ensure user owns/has access
     workspace = get_workspace(workspace_id, current_user, db)
     
     # 2. Validation
@@ -880,13 +860,9 @@ async def trigger_manual_poll(
         return {"message": "Polling is not active for this workspace."}
         
     # 3. Task Dispatch
-    # We use local imports to guarantee no circular dependency conflicts
     if workspace.data_source == 'API' and workspace.api_url:
         from app.services.tasks import fetch_api_data
         
-        # Optimization: BackgroundTasks runs this sync function in a threadpool.
-        # We do NOT need to pass the event loop here because 'fetch_api_data' 
-        # manages its own internal hand-off to 'process_csv_task'.
         background_tasks.add_task(fetch_api_data, str(workspace.id))
         return {"message": "Polling triggered successfully (API)."}
         
