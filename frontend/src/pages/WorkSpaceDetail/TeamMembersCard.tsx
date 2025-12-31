@@ -36,14 +36,35 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
       toast.success("Team updated successfully!", {
         style: { fontSize: '13px', background: '#334155', color: '#fff' }
       });
-    } catch (err: unknown) {
+    }  catch (err: unknown) {
       if (err instanceof AxiosError) {
-        toast.error(err.response?.data?.detail || "An error occurred.");
+        const errorMessage = err.response?.data?.detail || "An error occurred.";
+        // Enhance: If it's a security/verification error, show a more prominent toast
+        if (err.response?.status === 403) {
+          toast.error(errorMessage, {
+            icon: '⚠️',
+            duration: 6000,
+            style: { 
+              background: '#fff',           // Forces white background
+              color: '#b91c1c',             // Bright clear red for text
+              border: '1px solid #fee2e2',  // Soft red border
+              fontSize: '13px',
+              fontWeight: '600',
+              padding: '12px 16px',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', // Soft shadow for depth
+            },
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          });
+        } else {
+          toast.error(errorMessage);
+        }
       } else {
         toast.error("An unexpected error occurred.");
-        console.error(err);
       }
-    } finally {
+    }finally {
       setIsSaving(false);
     }
   };
@@ -136,7 +157,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                           type="email"
                           value={newEmail}
                           onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="colleague@gmail.com"
+                          placeholder="colleague@example.com"
                           onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
                           disabled={teamEmails.length >= 2}
                           autoFocus

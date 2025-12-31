@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, X, Trash2 } from 'lucide-react'; // <--- Added Trash2
+import { LogOut, Trash2, ArrowLeft } from 'lucide-react'; 
 import { Notifications } from './Notifications';
 import { Chatbot } from './Chatbot';
 import { WhatsNewTrigger } from './WhatsNewTrigger';
-import { useNavigate } from 'react-router-dom'; // <--- Added for navigation
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,7 +13,10 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const [showConfirm, setShowConfirm] = useState(false);
-  const navigate = useNavigate(); // <--- Hook for navigation
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isAccountPage = location.pathname === '/account';
 
   const handleLogout = async () => {
     try {
@@ -26,64 +29,82 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-gray-50/30">
+    <div className="min-h-screen flex flex-col font-sans antialiased text-slate-900 relative">
       
-      {/* --- HEADER --- */}
-      <header className="sticky top-0 z-40 w-full bg-white/70 backdrop-blur-md border-b border-gray-200/50 supports-[backdrop-filter]:bg-white/60">
+      {/* --- FOUNDATION ENGINEERING GRID --- */}
+      {/* Restored to match the professional mission control feel */}
+      <div 
+        className="fixed inset-0 z-0 pointer-events-none opacity-[0.35] workspace-background"
+      />
+
+      {/* --- ENTERPRISE HEADER --- */}
+      <header className="sticky top-0 z-50 w-full bg-white/75 backdrop-blur-md border-b border-slate-200/60 shadow-sm">
+        {/* max-w-7xl aligns nav items with Home.tsx content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-14">
             
-            {/* Left: Your Logo */}
-            <div className="flex items-center gap-3">
-              <div className="relative flex items-center justify-center">
-                <img 
-                  src="/DPLogo2.png" 
-                  alt="DataPulse Logo" 
-                  className="h-8 w-8 object-contain" 
-                />
-              </div>
-              <span className="font-poppins font-bold text-xl text-gray-900 tracking-tight">DataPulse</span>
+            {/* Left: Branding & Responsive Logos */}
+            <div className="flex items-center gap-4">
+              {isAccountPage ? (
+                <button 
+                  onClick={() => navigate('/home')}
+                  className="group flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-widest"
+                >
+                  <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                  <span>Back</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2.5 cursor-pointer group" onClick={() => navigate('/home')}>
+                  {/* MOBILE: DPLogo.png */}
+                  <img 
+                    src="/DPLogo.png" 
+                    alt="Logo" 
+                    className="h-7 w-auto object-contain sm:hidden" 
+                  />
+                  {/* DESKTOP: DPLogo2.png */}
+                  <img 
+                    src="/DPLogo2.png" 
+                    alt="Logo" 
+                    className="h-8 w-auto object-contain hidden sm:block" 
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Right: Actions & Profile */}
-            <div className="flex items-center gap-3 sm:gap-5">
-              
-              {/* Action Icons */}
-              <div className="flex items-center gap-2">
-                
-                {/* --- NEW: TRASH ICON --- */}
+            {/* Right: Actions & User Control */}
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => navigate('/trash')}
-                  className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-all duration-200"
-                  title="View Trash"
+                  className="p-2 rounded-md text-slate-400 hover:bg-slate-100/50 hover:text-slate-900 transition-all"
+                  title="Archive"
                 >
-                  <Trash2 className="h-5 w-5" />
+                <Trash2 className="h-4 w-4" />
                 </button>
-                {/* ----------------------- */}
-
-                <WhatsNewTrigger />
                 <Notifications />
+                <WhatsNewTrigger />
               </div>
 
-              <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
+              <div className="h-4 w-px bg-slate-200 hidden sm:block mx-1"></div>
 
-              {/* Profile & Logout */}
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex flex-col items-end">
-                    <span className="text-sm font-semibold text-gray-800 leading-none">
-                        {user?.name || user?.email?.split('@')[0]}
-                    </span>
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
-                        {'User'}
-                    </span>
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate('/account')}
+                  className="group flex items-center gap-2.5 pl-1 pr-1 sm:pr-3 py-1 rounded-full border border-transparent hover:border-slate-200 hover:bg-white transition-all active:scale-95"
+                >
+                  <div className="h-7 w-7 rounded-full bg-slate-900 flex items-center justify-center text-[10px] text-white font-bold ring-2 ring-white shadow-sm overflow-hidden shrink-0">
+                    {user?.name?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <span className="hidden sm:inline text-xs font-bold text-slate-800 tracking-tight">
+                    {user?.name || 'User'}
+                  </span>
+                </button>
                 
                 <button
                   onClick={() => setShowConfirm(true)}
-                  className="p-2 rounded-xl text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
-                  title="Sign Out"
+                  className="p-2 rounded-md text-slate-400 hover:text-red-500 transition-colors"
                 >
-                  <LogOut className="h-5 w-5" />
+                  <LogOut className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -91,47 +112,43 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </header>
 
-      {/* --- MAIN CONTENT --- */}
-      <main className="flex-grow w-full">
-        {children}
+      {/* --- CLEAN CONTENT FRAME --- */}
+      {/* We removed the extra max-width container here because Home.tsx already has one */}
+      <main className="flex-grow w-full relative z-10">
+        <div
+          className={
+            isAccountPage
+              ? 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10'
+              : 'w-full'
+          }
+        >
+          {children}
+        </div>
       </main>
 
-      {/* --- CHATBOT & MODALS --- */}
       <Chatbot />
 
-      {/* Minimal Logout Modal */}
+      {/* --- MODAL --- */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-gray-900/20 backdrop-blur-[2px] transition-opacity" 
-            onClick={() => setShowConfirm(false)}
-          />
-          
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-gray-900">Sign Out</h2>
-                    <button onClick={() => setShowConfirm(false)} className="text-gray-400 hover:text-gray-600">
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-                <p className="text-sm text-gray-500 mb-6">
-                    Are you sure you want to end your session?
-                </p>
-                <div className="flex justify-end gap-3">
-                    <button
-                        onClick={() => setShowConfirm(false)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleLogout}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors"
-                    >
-                        Log Out
-                    </button>
-                </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/20 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[320px] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-2">Sign out?</h2>
+              <p className="text-xs text-slate-500 mb-6"> You’ll be signed out of your account on this device.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="flex-1 px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-50 border border-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex-1 px-4 py-2 rounded-lg text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all"
+                >
+                  Sign Out
+                </button>
+              </div>
             </div>
           </div>
         </div>

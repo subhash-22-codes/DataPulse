@@ -6,13 +6,12 @@ import React, {
     ReactNode,
     useMemo,
     useCallback,
+    useRef
 } from "react";
 import { useNavigate } from "react-router-dom";
-// NOTE: Ensure your AuthContextType (in ../types/auth) includes: 
-// loginSuccess: boolean;
-import { User, AuthContextType } from "../types/auth"; 
+import { User, AuthContextType, AuthPhase } from "../types/auth"; 
 import { authService } from "../services/api";
-import { AxiosError } from "axios";
+import axios,{ AxiosError } from "axios";
 import toast from "react-hot-toast";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,165 +29,206 @@ interface Props {
 export const AuthProvider: React.FC<Props> = ({ children }) => {
     const navigate = useNavigate();
 
+    // --- State Management ---
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    // CRITICAL ADDITION: State to control the temporary success message UI
-    const [loginSuccess, setLoginSuccess] = useState(false); 
+    const [loading, setLoading] = useState(false);
+    const [loginSuccess, setLoginSuccess] = useState(false);
+    const [authPhase, setAuthPhase] = useState<AuthPhase>("checking");
+    
+    // 🛡️ Bounded Retry & Cleanup Refs
+    const retryCount = useRef(0);
+    const retryTimeoutRef = useRef<number | null>(null); 
+    const MAX_RETRIES = 12; 
+    const RETRY_DELAY_MS = 5000; 
+
+    useEffect(() => {
+        return () => {
+            if (retryTimeoutRef.current) {
+                window.clearTimeout(retryTimeoutRef.current);
+            }
+        };
+    }, []);
 
     // --- Helper Functions ---
     const saveAuth = useCallback((userData: User) => {
-        setUser(userData);
+        setUser({ ...userData });
         localStorage.setItem("datapulse_user", JSON.stringify(userData));
-        setLoginSuccess(true); // Set to true on successful login
-    }, [setLoginSuccess]);
+        setLoginSuccess(true); 
+    }, []);
 
     const clearAuth = useCallback(() => {
         setUser(null);
-        setToken(null);
-        setLoginSuccess(false); // CRITICAL FIX: Reset success state on failure/logout
+        setLoginSuccess(false);
         localStorage.removeItem("datapulse_user");
-    }, [setLoginSuccess]);
+        
+        // 🛡️ Reviewer Fix 2: Reset retry counter on logout/clear
+        retryCount.current = 0; 
+        if (retryTimeoutRef.current) {
+            window.clearTimeout(retryTimeoutRef.current);
+        }
+    }, []);
     
     const handleError = useCallback((error: unknown, fallbackMsg: string) => {
         const err = error as AxiosError<{ detail?: string }>;
-
         if (err.response?.status === 429) {
             toast.error("Too many requests. Please try again shortly.");
         } else {
-            // Note: The toast is handled here for errors 
             toast.error(err.response?.data?.detail || fallbackMsg);
         }
-
         if (err.response?.status !== 401) {
             throw err;
         }
     }, []);
 
-
-    // Flicker Fix: Server-First Initialization
-    useEffect(() => {
-        const initAuth = async () => {
-            try {
-                const res = await authService.checkSession();
-                saveAuth(res.user);
-            } catch {
-                clearAuth();
-            } finally {
-                setLoading(false);
+    // --- 🛡️ The Smart Session Engine (React-Safe Version) ---
+    const checkSession = useCallback(async () => {
+        try {
+            const res = await authService.checkSession();
+            if (res && res.user) {
+                saveAuth(res.user); 
             }
-        };
-        initAuth();
+            // ✅ SUCCESS: Decision final.
+            setAuthPhase("resolved");
+            retryCount.current = 0; 
+            return res?.user;
+        } catch (error: unknown) {
+            // 🛡️ 1. Convert the unknown error to an AxiosError safely
+            const isAxiosError = axios.isAxiosError(error);
+            const serverResponse = isAxiosError ? error.response : null;
+
+            // 🚨 CASE A: Server is unreachable (No response from Axios) 
+            // or it's a generic network error
+            if (!serverResponse) {
+                if (retryCount.current < MAX_RETRIES) {
+                    retryCount.current += 1;
+                    console.warn(`📡 Server unreachable. Retry ${retryCount.current}/${MAX_RETRIES}...`);
+                    
+                    retryTimeoutRef.current = window.setTimeout(
+                        () => checkSession(), 
+                        RETRY_DELAY_MS
+                    );
+                } else {
+                    console.error("🛑 Max retries reached or non-axios error occurred.");
+                    setAuthPhase("unreachable");
+                }
+                return null;
+            }
+
+            // ❌ CASE B: Server is awake, but returned an error (e.g., 401 Unauthorized)
+            console.error("Session check failed with response:", serverResponse.status);
+            clearAuth();
+            setAuthPhase("resolved"); 
+            return null;
+        }
     }, [saveAuth, clearAuth]);
 
+    useEffect(() => {
+        checkSession();
+    }, [checkSession]);
 
-    // 🔑 Login function (CENTRALIZED FIX)
+
+    // --- 🔑 Authentication Actions ---
+
     const login = useCallback(async (email: string, password: string) => {
+        setLoading(true);
         try {
             const res = await authService.emailLogin(email, password);
             saveAuth(res.user);
-            return res; // Return success response to the caller (Login.tsx)
+            setAuthPhase("resolved"); 
+            return res;
         } catch (error) {
             handleError(error, "Invalid email or password");
             clearAuth();
-            throw error; // Essential: Re-throw the error so Login.tsx catches it
-        } 
-    }, [saveAuth, handleError, clearAuth]); // 'navigate' removed from deps
+            throw error; 
+        } finally {
+            setLoading(false);
+        }
+    }, [saveAuth, handleError, clearAuth]);
 
-    // 🔑 Google Login (CONSISTENCY FIX)
     const googleLogin = useCallback(async (googleToken: string) => {
+        setLoading(true);
         try {
             const res = await authService.googleLogin(googleToken);
             saveAuth(res.user);
-            // navigate("/home") is removed here for consistency
-            return res; // Return success response to the caller
+            setAuthPhase("resolved");
+            return res;
         } catch (error) {
             handleError(error, "Google login failed");
             clearAuth();
-            throw error; // Re-throw the error
-        } 
-    }, [saveAuth, handleError, clearAuth]); // 'navigate' removed from deps
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [saveAuth, handleError, clearAuth]);
 
-
-    // 🔑 Registration
     const register = useCallback(async (email: string): Promise<boolean> => {
+        setLoading(true);
         try {
             await authService.sendOtp(email);
             return true;
         } catch (error) {
             handleError(error, "Failed to send OTP.");
-            clearAuth();
             return false;
-        } 
-    }, [handleError, clearAuth]);
+        } finally {
+            setLoading(false);
+        }
+    }, [handleError]);
 
-
-    // 🔑 Verify OTP
-    const verifyOtp = useCallback(async (
-        name: string,
-        email: string,
-        otp: string,
-        password: string
-    ) => {
+    const verifyOtp = useCallback(async (name: string, email: string, otp: string, password: string) => {
+        setLoading(true);
         try {
             await authService.verifyOtp(name, email, otp, password);
         } catch (error) {
             handleError(error, "Failed to verify OTP");
             clearAuth();
-        } 
+        } finally {
+            setLoading(false);
+        }
     }, [handleError, clearAuth]);
 
-
-    // 🔑 Password Reset
     const sendPasswordReset = useCallback(async (email: string): Promise<boolean> => {
+        setLoading(true);
         try {
             await authService.sendPasswordReset(email);
             return true;
         } catch (error) {
             handleError(error, "Failed to send reset code");
-            clearAuth();
             return false;
-        } 
-    }, [handleError, clearAuth]);
+        } finally {
+            setLoading(false);
+        }
+    }, [handleError]);
 
-
-    // 🔑 Reset Password
-    const resetPassword = useCallback(async (
-        email: string,
-        otp: string,
-        newPassword: string
-    ) => {
+    const resetPassword = useCallback(async (email: string, otp: string, newPassword: string) => {
+        setLoading(true);
         try {
             await authService.resetPassword(email, otp, newPassword);
         } catch (error) {
             handleError(error, "Failed to reset password");
-            clearAuth();
-        } 
-    }, [handleError, clearAuth]);
+        } finally {
+            setLoading(false);
+        }
+    }, [handleError]);
 
-
-    // 🔑 Optimistic Logout
     const logout = useCallback(async () => {
         clearAuth();
-        setLoading(true);
-        navigate("/login");
+        
+        // 🛡️ Reviewer Fix 3: Explicitly resolve phase on logout
+        setAuthPhase("resolved"); 
 
+        navigate("/login");
         try {
             await authService.logout();
         } catch (err) {
-            console.warn("Logout API failed; session cookies may already be cleared");
-            console.error(err);
-        } finally {
-            setLoading(false);
+            console.error("Logout API failure:", err);
         }
     }, [clearAuth, navigate]);
 
 
-    // 🔑 Final Context Value (useMemo): Now includes loginSuccess
+    // --- 🛡️ 5. Final Context Value ---
     const value: AuthContextType = useMemo(() => ({
         user,
-        token,
-        loginSuccess, // EXPOSED: Success state
+        loginSuccess,
         login,
         googleLogin,
         register,
@@ -196,15 +236,15 @@ export const AuthProvider: React.FC<Props> = ({ children }) => {
         sendPasswordReset,
         resetPassword,
         logout,
+        checkSession, 
         loading,
+        authPhase,
+        isAuthResolved: authPhase === "resolved",
         isAuthenticated: !!user,
     }), [
-        user, 
-        token, 
-        loginSuccess, 
-        loading, 
-        // Functions are stable references
-        login, googleLogin, register, verifyOtp, sendPasswordReset, resetPassword, logout
+        user, loginSuccess, loading, authPhase, 
+        login, googleLogin, register, verifyOtp, 
+        sendPasswordReset, resetPassword, logout, checkSession
     ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

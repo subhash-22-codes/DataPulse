@@ -35,7 +35,7 @@ const GoogleLoginButton: React.FC = () => {
       try {
         await googleLogin(response.credential!);
         navigate(from, { replace: true });
-        toast.success('Successfully authenticated', { 
+        toast.success("Welcome back to DataPulse!", { 
             style: { fontSize: '13px', background: '#334155', color: '#fff' }
         });
       } catch (error: unknown) {

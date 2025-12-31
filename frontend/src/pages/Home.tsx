@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import { useNavigate } from "react-router-dom";
-import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, LayoutGrid, ArrowRight, Clock, Lock, Check } from "lucide-react";
+import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, LayoutGrid, ArrowRight, Clock, Lock, Check, Database, Activity } from "lucide-react";
 import { AxiosError } from "axios";
 import { Workspace } from "../types";
 import { CreateWorkspaceModal } from "../components/CreateWorkspaceModal";
@@ -62,7 +62,7 @@ const WorkspaceCard: React.FC<{
       <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
         <Calendar className="h-3.5 w-3.5 text-gray-400" />
         <span>
-          Created {new Date(ws.created_at).toLocaleDateString()}
+          Created {ws.created_at ? new Date(ws.created_at).toLocaleDateString() : 'Just now'}
         </span>
       </div>
 
@@ -414,51 +414,106 @@ const Home: React.FC = () => {
                                     />
                                 ))
                                 ) : dataReady ? (
-                                <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 px-6 py-12 text-center">
-                                    
-                                    {/* Illustration */}
+                                <div className="col-span-full">
+                                  <div
+                                    className="
+                                      relative overflow-hidden
+                                      rounded-xl border border-gray-200
+                                      bg-white
+                                      shadow-sm
+                                    "
+                                  >
                                     <div
-                                    className="relative mb-5 cursor-pointer"
-                                    onClick={() => setIsCreateModalOpen(true)}
+                                      className="
+                                        grid gap-6
+                                        p-6 sm:p-8
+                                        md:grid-cols-2
+                                        items-center
+                                      "
                                     >
-                                    <img
-                                        src="/images/Workspace1.png"
-                                        alt="Create workspace"
-                                        className="w-28 sm:w-32 md:w-36 object-contain opacity-90"
-                                    />
+                                      {/* LEFT: Context */}
+                                      <div className="text-center md:text-left">
+                                        <h3 className="text-base font-semibold text-gray-900">
+                                          Create your first workspace
+                                        </h3>
 
-                                    <div className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
-                                        <Plus className="h-4 w-4" />
+                                        <p className="mt-2 max-w-md mx-auto md:mx-0 text-sm text-gray-600">
+                                          A workspace is where DataPulse connects to your data, tracks changes,
+                                          and helps you collaborate with your team in one place.
+                                        </p>
+
+                                        {/* Capabilities */}
+                                       <div className="mt-5 space-y-3 text-left max-w-md mx-auto md:mx-0">
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                        <Database className="h-3.5 w-3.5" />
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        Connect CSV files, APIs, or databases
+                                      </p>
                                     </div>
+
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                        <Activity className="h-3.5 w-3.5" />
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        Monitor trends and data changes over time
+                                      </p>
                                     </div>
 
-                                    {/* Copy */}
-                                    <h3 className="text-sm font-semibold text-gray-900">
-                                    No personal workspaces yet
-                                    </h3>
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                        <Users className="h-3.5 w-3.5" />
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        Invite up to 2 teammates per workspace
+                                      </p>
+                                    </div>
+                                  </div>
+                                  
+                                        {/* Limits */}
+                                        <p className="mt-4 text-xs text-gray-400">
+                                          You can create up to{" "}
+                                          <span className="font-medium text-gray-500">
+                                            3 personal workspaces
+                                          </span>.
+                                        </p>
 
-                                    <p className="mt-1 max-w-sm text-sm text-gray-500">
-                                    Create a workspace to start connecting data sources, tracking trends,
-                                    and collaborating with your team.
-                                    </p>
-                                    <p className="mt-3 text-xs text-gray-400">
-                                    You can create up to 3 personal workspaces.
-                                    </p>
+                                        {/* CTA */}
+                                        <div className="mt-6">
+                                          <button
+                                            onClick={() => setIsCreateModalOpen(true)}
+                                            className="
+                                              inline-flex items-center gap-2
+                                              rounded-md bg-blue-600
+                                              px-5 py-2.5
+                                              text-sm font-medium text-white
+                                              transition hover:bg-blue-700
+                                            "
+                                          >
+                                            Create workspace
+                                            <ArrowRight className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      </div>
 
-
-                                    {/* CTA */}
-                                    <button
-                                    onClick={() => setIsCreateModalOpen(true)}
-                                    className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-                                    >
-                                    Create workspace
-                                    <ArrowRight className="h-4 w-4" />
-                                    </button>
+                                      {/* RIGHT: Illustration */}
+                                      <div className="order-first md:order-last flex justify-center md:justify-end">
+                                        <img
+                                          src="/images/Workspace1.png"
+                                          alt="Workspace overview"
+                                          className="w-44 sm:w-52 md:w-56 object-contain opacity-95"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
+
                              ) : null}
                                
                             </div>
-                            </section>
+                        </section>
 
                         <section>
                             {/* Section Header */}
@@ -491,25 +546,40 @@ const Home: React.FC = () => {
                                 ))}
                                 </div>
                             ) : dataReady ? (
-                                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 px-6 py-12 text-center">
-                                
-                                {/* Icon */}
-                                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-                                    <Users className="h-5 w-5" />
-                                </div>
+                               <div className="col-span-full">
+                                <div
+                                  className="
+                                    relative overflow-hidden
+                                    rounded-xl border border-gray-200
+                                    bg-white
+                                    shadow-sm
+                                  "
+                                >
+                                  <div className="flex flex-col items-center justify-center px-6 py-8 sm:py-9 text-center">
+                                    {/* Illustration */}
+                                    <img
+                                      src="/images/Teamspace1.png"
+                                      alt="Shared workspaces"
+                                      className="mb-4 w-36 object-contain opacity-90"
+                                    />
 
-                                {/* Copy */}
-                                <h3 className="text-sm font-semibold text-gray-900">
-                                    No team workspaces yet
-                                </h3>
+                                    {/* Copy */}
+                                    <h3 className="text-sm font-semibold text-gray-900">
+                                      No shared workspaces yet
+                                    </h3>
 
-                                <p className="mt-1 max-w-sm text-sm text-gray-500">
-                                    When someone shares a workspace with you, it will appear here.
-                                </p>
+                                    <p className="mt-1 max-w-sm text-sm text-gray-500">
+                                      Workspaces shared with you by teammates will appear here automatically.
+                                    </p>
+
+                                    <p className="mt-2 text-xs text-gray-400">
+                                      Ask a teammate to invite you to their workspace.
+                                    </p>
+                                  </div>
                                 </div>
+                              </div>
                             ) : null}
                             </section>
-
                     </div>
                 )}
             </div>

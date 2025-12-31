@@ -182,9 +182,6 @@ const handleItemClick = () => {
               alt="DataPulse" 
               className="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             />
-            <span className="font-poppins font-bold text-xl tracking-tight text-slate-900">
-              DataPulse
-            </span>
           </Link>
 
           {/* === DESKTOP NAV === */}

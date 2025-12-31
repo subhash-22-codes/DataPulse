@@ -93,8 +93,6 @@ export default function Footer() {
                   alt="DataPulse" 
                   className="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
                 />
-                
-                <h3 className="text-xl font-bold text-slate-900 tracking-tight">DataPulse</h3>
             </div>
             
             <p className="text-sm leading-relaxed text-slate-500 max-w-xs">

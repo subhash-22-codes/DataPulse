@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, Check, KeyRound, Shield, RefreshCw, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, Check, KeyRound, Shield, RefreshCw, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -26,6 +26,13 @@ const ForgotPassword: React.FC = () => {
   const { sendPasswordReset, resetPassword } = useAuth();
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
+  const passwordRequirements = [
+    { label: '8+ characters', test: (pwd: string) => pwd.length >= 8 },
+    { label: 'Uppercase', test: (pwd: string) => /[A-Z]/.test(pwd) },
+    { label: 'Special char', test: (pwd: string) => /[!@#$%^&*(),.?":{}|<>]/.test(pwd) },
+  ];
+  const isStrong = passwordRequirements.every(req => req.test(newPassword));
+  const isMatching = newPassword === confirmPassword && confirmPassword.length > 0;
 
   // Persist state to localStorage whenever it changes
   useEffect(() => {
@@ -133,6 +140,12 @@ const ForgotPassword: React.FC = () => {
     }
   };
 
+  const handleBackToLogin = () => {
+    localStorage.removeItem('forgot_password_step');
+    localStorage.removeItem('forgot_password_email');
+    navigate('/login');
+  };
+
   const getStepTitle = () => {
     switch (currentStep) {
       case 'email': return 'Reset Password';
@@ -198,10 +211,18 @@ const ForgotPassword: React.FC = () => {
     <form onSubmit={handleVerifyCode} className="space-y-5">
       
       {/* Email Badge */}
-      <div className="bg-blue-50 border border-blue-100 text-blue-800 px-3 py-2 rounded-md flex items-center gap-2">
-         <Mail className="h-4 w-4 shrink-0" />
-         <span className="text-xs font-medium truncate">Code sent to <b>{email}</b></span>
-      </div>
+      <div className="flex flex-col gap-0.5 text-slate-700">
+        <div className="flex items-center gap-1.5 text-xs">
+          <Mail className="h-3.5 w-3.5 text-slate-500" />
+              <span>
+                Code sent to <span className="font-medium">{email}</span>
+              </span>
+        </div>
+    
+            <span className="text-[11px] leading-tight text-slate-500">
+                 Didn’t receive it? Check spam or promotions.
+              </span>
+          </div>
 
       <div className="space-y-2">
         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide text-center">
@@ -248,7 +269,6 @@ const ForgotPassword: React.FC = () => {
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               id="newPassword"
-              name="newPassword"
               type={showNewPassword ? 'text' : 'password'}
               required
               value={newPassword}
@@ -264,6 +284,23 @@ const ForgotPassword: React.FC = () => {
               {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+
+          {/* Smooth Transition Checklist */}
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${newPassword.length > 0 && !isStrong ? 'max-h-10 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {passwordRequirements.map((req, i) => {
+                const met = req.test(newPassword);
+                return (
+                  <div key={i} className="flex items-center gap-1 transition-colors duration-300">
+                    <Check className={`h-3 w-3 transition-colors duration-300 ${met ? 'text-green-600' : 'text-slate-300'}`} />
+                    <span className={`text-[10px] font-medium transition-colors duration-300 ${met ? 'text-green-700' : 'text-slate-500'}`}>
+                      {req.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-1">
@@ -274,12 +311,12 @@ const ForgotPassword: React.FC = () => {
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               id="confirmPassword"
-              name="confirmPassword"
               type={showConfirmPassword ? 'text' : 'password'}
               required
+              disabled={!isStrong}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+              className={`block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors ${!isStrong ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`}
               placeholder="••••••••"
             />
             <button
@@ -290,7 +327,29 @@ const ForgotPassword: React.FC = () => {
               {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+
+          {/* Smooth Transition Status */}
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out 
+            ${isStrong && confirmPassword.length > 0 && !isMatching 
+              ? 'max-h-10 opacity-100 mt-2' 
+              : 'max-h-0 opacity-0'
+            }`}
+          >
+            <div className="flex items-center gap-1 pl-1">
+              {/* We only need the "Passwords do not match yet" logic here now, 
+                because if they DO match, the parent div collapses (max-h-0).
+              */}
+              {!isMatching && (
+                <div className="animate-in slide-in-from-left-1 duration-300">
+                  <p className="text-[10px] text-red-500 font-medium italic">
+                    Passwords do not match yet
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+  
       </div>
 
       <div className="grid grid-cols-2 gap-3 pt-2">
@@ -299,11 +358,11 @@ const ForgotPassword: React.FC = () => {
             onClick={() => setShowConfirm(true)}
             className="flex justify-center items-center py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-semibold shadow-sm transition-all text-sm"
           >
-            Change Email
+            Edit Email
           </button>
           <button
             type="submit"
-            disabled={isLoading || resetCode.some(digit => !digit)}
+            disabled={isLoading || !isStrong || !isMatching || resetCode.some(digit => !digit)}
             className="flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm"
           >
             {isLoading ? 'Resetting...' : 'Reset Password'}
@@ -349,30 +408,17 @@ const ForgotPassword: React.FC = () => {
     <div className="min-h-screen bg-white flex font-sans text-slate-900 selection:bg-blue-100">
       
       {/* LEFT SIDE - FORM (40% Width) */}
-      <div className="w-full lg:w-[40%] flex flex-col justify-center px-6 py-8 sm:px-8 lg:px-12 bg-white z-10 border-r border-slate-100 h-screen overflow-y-auto custom-scrollbar">
-        
+      <div className="w-full lg:w-[40%] flex flex-col px-6 py-8 sm:px-8 lg:px-12 bg-white z-10 border-r border-slate-100 h-screen overflow-y-auto custom-scrollbar">
+      <div className="w-full max-w-sm mx-auto flex flex-col my-auto py-10">
         <div className="w-full max-w-sm mx-auto flex flex-col">
-          
-          {/* Back Navigation */}
-          <div className="mb-6 lg:mb-8">
-             <Link 
-                to="/login" 
-                className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wide"
-              >
-                <ArrowLeft className="h-3 w-3 mr-1.5" />
-                Back to login
-              </Link>
-          </div>
 
           {/* Mobile Header (Hidden on Desktop) */}
-          <div className="lg:hidden flex items-center gap-2 mb-6 font-poppins">
-             <img src="/DPLogo2.png" alt="DataPulse" className="h-6 w-6 object-contain" />
-             <span className="text-lg font-bold text-slate-900">DataPulse</span>
+          <div className="lg:hidden flex items-center gap-2 font-poppins">
+            <img src="/DPLogo2.png" alt="DataPulse" className="h-8 w-auto object-contain" />
           </div>
 
-          <div className="hidden lg:flex items-center gap-2 mb-6 font-poppins">
-             <img src="/DPLogo2.png" alt="DataPulse" className="h-8 w-8 object-contain" />
-             <span className="font-bold text-xl text-slate-900 tracking-tight">DataPulse</span>
+          <div className="hidden lg:flex items-center gap-2 font-poppins">
+            <img src="/DPLogo2.png" alt="DataPulse" className="h-8 w-auto object-contain" />
           </div>
 
           {/* Main Header */}
@@ -390,19 +436,32 @@ const ForgotPassword: React.FC = () => {
           {currentStep === 'verify' && renderVerifyStep()}
           {currentStep === 'success' && renderSuccessStep()}
 
+          {currentStep !== 'success' && (
+            <p className="mt-6 text-center text-sm text-slate-600">
+              Remember your password?{' '}
+              <button 
+                type="button"
+                onClick={handleBackToLogin}
+                className="font-semibold text-blue-600 hover:text-blue-700 transition-colors underline-offset-4 hover:underline"
+              >
+                Sign In
+              </button>
+            </p>
+          )}
+
           {/* Footer Section (Hidden on success step) */}
           {currentStep !== 'success' && (
             <div className="mt-8 pt-6 border-t border-slate-100">
                 <div className="bg-slate-50 rounded-md p-4 space-y-3">
                     <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                         <Shield className="h-3.5 w-3.5 text-blue-600" />
-                        Secure Recovery
+                         Password recovery
                     </h3>
                     <div className="space-y-1.5">
                         {[
-                            "Encrypted verification process",
-                            "Time-limited security codes",
-                            "Secure password hashing"
+                            "Confirm your email address",
+                            "Enter the one-time code we send",
+                            "Create a new password"
                         ].map((item, i) => (
                             <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
                                 <Check className="h-3 w-3 text-green-600" />
@@ -415,6 +474,7 @@ const ForgotPassword: React.FC = () => {
           )}
 
         </div>
+      </div>
       </div>
 
       {/* RIGHT SIDE - BRANDING (60% Width) */}
@@ -430,23 +490,23 @@ const ForgotPassword: React.FC = () => {
            <div className="space-y-6">
               <div className="inline-flex items-center gap-2.5 rounded-lg bg-blue-500/10 px-4 py-2 border border-blue-400/20 backdrop-blur-sm">
                  <KeyRound className="h-5 w-5 text-blue-200" />
-                 <span className="font-semibold tracking-wide text-white text-sm">Account Recovery</span>
+                 <span className="font-semibold tracking-wide text-white text-sm">Password Recovery</span>
               </div>
               <h2 className="text-4xl xl:text-5xl font-bold leading-tight text-white">
-                 Safe & Secure <br/><span className="text-blue-200">Reset Process.</span>
+                Reset your access, <br/><span className="text-blue-200">securely</span>
               </h2>
               <p className="text-xl text-blue-100/90 leading-relaxed font-light max-w-xl">
-                We use industry-standard encryption to ensure your account details and new credentials remain private.
+                Follow a simple verification step to regain access to your account.
               </p>
            </div>
 
            {/* Features Grid */}
            <div className="grid grid-cols-2 gap-x-8 gap-y-10">
               {[
-                { icon: Shield, title: "End-to-End Encryption", desc: "Your request is encrypted from start to finish." },
-                { icon: Mail, title: "Email Verification", desc: "We verify you own the email before proceeding." },
-                { icon: KeyRound, title: "Secure Codes", desc: "One-time use codes that expire quickly." },
-                { icon: Lock, title: "Password Protection", desc: "New passwords are salted and hashed securely." }
+                { icon: Mail, title: "Email confirmation", desc: "We send a verification code to confirm it’s you." },
+                { icon: KeyRound, title: "One-time code", desc: "Use the code to securely reset your password." },
+                { icon: Lock, title: "Set a new password", desc: "Choose a new password to regain access." },
+                { icon: Shield, title: "Account safety", desc: "Your account remains protected throughout the process." }
               ].map((f, i) => (
                 <div key={i} className="flex flex-col gap-2">
                    <div className="flex items-center gap-3">
@@ -462,13 +522,12 @@ const ForgotPassword: React.FC = () => {
 
            {/* Footer Note */}
            <div className="pt-8 border-t border-white/10 flex justify-between items-center text-xs text-blue-200/60">
-             <p>© 2025 DataPulse. Secure & Reliable.</p>
-             <div className="flex gap-4">
-               <span>v1.0.0</span>
-               <span>System Normal</span>
-             </div>
-           </div>
-
+              <p>© 2025 DataPulse</p>
+              <div className="flex gap-4">
+                <span>v1.0.0</span>
+                <span>Account services available</span>
+              </div>
+            </div>
         </div>
       </div>
 
@@ -494,13 +553,14 @@ const ForgotPassword: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  localStorage.removeItem('forgot_password_step');
                   setShowConfirm(false);
                   setCurrentStep('email');
                   setResetCode(['', '', '', '', '', '']);
                 }}
                 className="flex-1 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-colors"
               >
-                Yes, Skip
+                Yes, Edit Email
               </button>
             </div>
           </div>

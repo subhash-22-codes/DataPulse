@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { api } from '../services/api';
 import { Dialog, Transition } from '@headlessui/react';
-import { Loader2, X, LayoutGrid, Sparkles  } from 'lucide-react';
+import { Loader2, X, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Workspace } from '../types';
 import { AxiosError } from "axios";
@@ -18,21 +18,20 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      return toast.error("Workspace name cannot be empty.");
+      return toast.error("Workspace name required.");
     }
     setIsCreating(true);
     try {
       const res = await api.post<Workspace>('/workspaces/', { name });
-      
-      toast.success(`Workspace '${name}' created!`);
+      toast.success(`Created: ${name}`);
       onWorkspaceCreated(res.data);
       setName('');
       setIsOpen(false);
     } catch (error: unknown) {
       if (error instanceof AxiosError) {
-        toast.error(error.response?.data?.detail || "Failed to create workspace.");
+        toast.error(error.response?.data?.detail || "Creation failed.");
       } else {
-        toast.error("Failed to create workspace.");
+        toast.error("An error occurred.");
       }
     } finally {
       setIsCreating(false);
@@ -46,13 +45,13 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
     }
   };
 
-  const suggestions = ['Engineering', 'Q4 Marketing', 'Product Analytics', 'Sales Data'];
+  const suggestions = ['Engineering', 'Marketing', 'Product', 'Sales'];
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
+      <Dialog as="div" className="relative z-[100]" onClose={handleClose}>
         
-        {/* Overlay - No Blur for max performance */}
+        {/* --- BACKDROP: Lighter, Less Heavy --- */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200"
@@ -62,63 +61,60 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-gray-900/50 transition-opacity" />
+          <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-[1px]" />
         </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto z-50">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95 translate-y-4"
-              enterTo="opacity-100 scale-100 translate-y-0"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100 translate-y-0"
-              leaveTo="opacity-0 scale-95 translate-y-4"
+              enter="ease-out duration-200"
+              enterFrom="opacity-0 translate-y-2"
+              enterTo="opacity-100 translate-y-0"
+              leave="ease-in duration-150"
+              leaveFrom="opacity-100 translate-y-0"
+              leaveTo="opacity-0 translate-y-2"
             >
-              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all border border-gray-100">
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-md bg-white text-left align-middle shadow-lg transition-all border border-slate-200">
                 
                 {/* --- HEADER --- */}
-                <div className="px-6 pt-6 pb-4 flex justify-between items-start">
-                    <div className="flex gap-4">
-                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-200 shadow-sm">
-                            <LayoutGrid className="w-5 h-5 text-gray-700" />
-                        </div>
-                        <div>
-                            <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 leading-6">
-                                New Workspace
-                            </Dialog.Title>
-                            <p className="mt-1 text-xs text-gray-500">
-                                Create a dedicated space for your data & team.
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                        onClick={handleClose}
-                        disabled={isCreating}
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
+                <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100">
+                  <Dialog.Title as="h3" className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                    New Workspace
+                  </Dialog.Title>
+                  <button
+                    type="button"
+                    className="text-slate-400 hover:text-slate-900 transition-colors"
+                    onClick={handleClose}
+                    disabled={isCreating}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
 
                 {/* --- BODY --- */}
-                <div className="px-6 py-2">
-                  <div className="space-y-5">
+                <div className="p-6">
+                  <div className="space-y-6">
                     
-                    {/* Input Field */}
+                    {/* Input */}
                     <div>
-                      <label htmlFor="workspace-name" className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                      <label 
+                        htmlFor="workspace-name" 
+                        className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2"
+                      >
                         Name
                       </label>
                       <input
                         type="text"
                         id="workspace-name"
-                        className={`block w-full rounded-xl border-gray-300 py-3 px-4 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400 sm:text-sm transition-all outline-none ${
-                          isCreating ? 'bg-gray-50 opacity-70 cursor-wait' : 'bg-white'
-                        }`}
-                        placeholder="Ex: Engineering Team"
+                        className={`
+                          block w-full rounded-sm border border-slate-200 py-2 px-3 
+                          text-slate-900 text-sm transition-all outline-none 
+                          placeholder:text-slate-300
+                          focus:border-slate-900 focus:ring-0
+                          ${isCreating ? 'bg-slate-50 opacity-60' : 'bg-white'}
+                        `}
+                        placeholder="e.g. Analytics"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && !isCreating && name.trim() && handleCreate()}
@@ -128,34 +124,29 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
                       />
                     </div>
 
-                    {/* Quick Suggestions */}
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        <p className="text-xs font-semibold text-gray-500">Suggestions</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {suggestions.map((suggestion) => (
-                          <button
-                            key={suggestion}
-                            onClick={() => setName(suggestion)}
-                            disabled={isCreating}
-                            type="button"
-                            className="inline-flex items-center rounded-lg bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 hover:border-gray-300 transition-all active:scale-95"
-                          >
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
+                    {/* Suggestions */}
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="text-[10px] font-bold text-slate-300 uppercase mr-1">Suggestions:</span>
+                      {suggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => setName(suggestion)}
+                          disabled={isCreating}
+                          type="button"
+                          className="text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors underline underline-offset-4 decoration-slate-200 hover:decoration-slate-900"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* --- FOOTER --- */}
-                <div className="mt-6 bg-gray-50/50 px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+                {/* --- ACTIONS --- */}
+                <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-end gap-4">
                   <button
                     type="button"
-                    className="inline-flex justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none transition-all"
+                    className="text-[11px] font-bold text-slate-400 hover:text-slate-900 transition-all uppercase tracking-widest"
                     onClick={handleClose}
                     disabled={isCreating}
                   >
@@ -163,21 +154,29 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
                   </button>
                   <button
                     type="button"
-                    className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-70"
+                    className="
+                      inline-flex items-center justify-center gap-2
+                      rounded-sm 
+                      bg-blue-700 
+                      px-5 py-2 
+                      text-[11px] font-bold text-white
+                      uppercase tracking-widest
+                      transition-all
+                      hover:bg-blue-800
+                      active:scale-[0.98]
+                      disabled:opacity-50
+                    "
                     onClick={handleCreate}
                     disabled={isCreating || !name.trim()}
                   >
                     {isCreating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Creating...</span>
-                      </>
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
-                      <>
-                        <span>Create</span>
-                      </>
+                      <Plus className="h-3 w-3" />
                     )}
+                    <span>Create</span>
                   </button>
+
                 </div>
 
               </Dialog.Panel>

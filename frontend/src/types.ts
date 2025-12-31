@@ -74,6 +74,7 @@ export interface AlertRule {
   metric: string;
   condition: string;
   value: number;
+  is_active: boolean;
 }
 
 export interface IllustrationProps {

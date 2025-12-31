@@ -4,7 +4,7 @@ import { Transition } from '@headlessui/react';
 import { MessageCircle, Send, X, Sparkles, RefreshCw, Minimize2, Maximize2, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import RobotIllustration from './website-ui/Illustrations/RobotIllustration';
-
+import axios from 'axios';
 interface Message {
   sender: 'user' | 'ai';
   text: string;
@@ -16,8 +16,8 @@ const conversationStarters = [
   "Explain Smart Alerts",
   "How does API Polling work?",
   "Are there any usage limits?",
-  "How do I create a workspace?",
-  "What is the difference between a Manual Upload and an API Poll?",
+  "Can I link my Google account?",
+  "Who built DataPulse?",
   "How do I set up a Smart Alert?",
   "Explain the Snapshot vs. Trend views.",
 ];
@@ -76,15 +76,24 @@ export const Chatbot: React.FC = () => {
       };
 
       setMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
-      console.log(error);
-      const errorMessage: Message = {
-        sender: 'ai',
-        text: "Sorry, I'm having trouble connecting right now. Please try again later.",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
+        } catch (error: unknown) {
+          let backendError = "Sorry, I'm having trouble connecting right now. Please try again later.";
+
+          if (axios.isAxiosError(error)) {
+            // Access the detailed message we wrote in the FastAPI HTTPException
+            backendError = error.response?.data?.detail || backendError;
+          } else {
+            console.error("Non-Axios error occurred:", error);
+          }
+
+          const errorMessage: Message = {
+            sender: 'ai',
+            text: backendError,
+            timestamp: new Date()
+          };
+
+          setMessages(prev => [...prev, errorMessage]);
+        } finally {
       setIsLoading(false);
     }
   };

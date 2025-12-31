@@ -1,22 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Server, ShieldCheck, Zap, Globe, Lock, Activity, Terminal, AlertTriangle, RefreshCw, XCircle, CheckCircle2, Cpu } from 'lucide-react';
+import { Server, Globe, Lock, ShieldCheck, CheckCircle2, } from 'lucide-react';
 
-// -----------------------------------------------------------------------
-// THE SQUAD
-// -----------------------------------------------------------------------
 const TEAM = [
   {
     name: "Subhash Yaganti",
     role: "Developer",
     image: "/images/Subhash.jpg", 
-    status: "Root Access",
     linkedin: "https://www.linkedin.com/in/subhash-yaganti-a8b3b626a/" 
   },
   {
     name: "Siri Mahalaxmi Vemula",
     role: "Developer",
     image: "images/Siri.jpg", 
-    status: "System Admin",
     linkedin: "https://www.linkedin.com/in/vemula-siri-mahalaxmi-b4b624319/" 
   }
 ];
@@ -31,254 +26,240 @@ export const WakeUpScreen = ({ onRetry, isSystemReady, onAnimationComplete }: Wa
   const [progress, setProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
   const [longWait, setLongWait] = useState(false);
-  const [sessionId, setSessionId] = useState("");
   const [showTeam, setShowTeam] = useState(false);
   const [isError, setIsError] = useState(false);
 
-  const messages = [
-    { text: "INITIALIZING DATAPULSE CLOUD...", icon: Globe },
-    { text: "PROVISIONING INSTANCE CONTAINER...", icon: Server },
-    { text: "ESTABLISHING SECURE HANDSHAKE...", icon: Lock },
-    { text: "INJECTING ENVIRONMENT VARIABLES...", icon: Terminal },
-    { text: "VERIFYING ENCRYPTED CREDENTIALS...", icon: ShieldCheck },
-    { text: "OPTIMIZING MEMORY ALLOCATION...", icon: Cpu },
-    { text: "STARTING UP BACKEND SERVICES...", icon: Zap },
-  ];
+  // End-user friendly messages
+const messages = [
+  { text: "Connecting to the server…", icon: Globe },
+  { text: "Getting things ready…", icon: Server },
+  { text: "Setting up your workspace…", icon: Server },
+  { text: "Checking security…", icon: Lock },
+  { text: "Loading system data…", icon: ShieldCheck },
+  { text: "Starting background services…", icon: Server },
+  { text: "Syncing system configuration…", icon: Server },
+  { text: "Final checks in progress…", icon: ShieldCheck },
+  { text: "Almost there…", icon: Globe },
+  { text: "Finishing setup…", icon: ShieldCheck },
+];
+
+
+
+  const handleRetryAction = () => {
+    setIsError(false);
+    if (onRetry) onRetry();
+    else window.location.reload();
+  };
 
   useEffect(() => {
+    // Fake progress (never reaches 100 unless backend confirms)
+    const progressTimer = setInterval(() => {
+      setProgress((prev) => {
+        if (isSystemReady) return 100;
+
+        // Phase 1: Fast initial feedback
+        if (prev < 60) {
+          return prev + Math.random() * 3 + 1; // ~1–4%
+        }
+
+        // Phase 2: Slow down
+        if (prev < 85) {
+          return prev + Math.random() * 1.2 + 0.4; // ~0.4–1.6%
+        }
+
+        // Phase 3: Very slow (psychological wait zone)
+        if (prev < 95) {
+          return prev + Math.random() * 0.3 + 0.1; // ~0.1–0.4%
+        }
+
+        // Hard cap until backend wakes
+        return 95;
+      });
+    }, 1000); 
+
+
+    // Rotate user-friendly messages
+    const messageTimer = setInterval(() => {
+      if (!isSystemReady && !isError) {
+        setMessageIndex((prev) => {
+          // Stop at the last message (no fake looping)
+          if (prev >= messages.length - 1) return prev;
+          return prev + 1;
+        });
+      }
+    }, 6000); // slower = calmer, more professional
+
+
+    // Reveal team only if system seems healthy
+    const teamTimer = setTimeout(() => {
+      if (!isError) setShowTeam(true);
+    }, 1500);
+
+    // 🔑 SOFT WAIT (UX CONTROL POINT)
+    const softWaitTimer = setTimeout(() => {
+      if (!isSystemReady) setLongWait(true);
+    }, 20000); // 20s → user gets context + control
+
+    // 🔥 HARD FAIL (SYSTEM REALITY)
+    const hardFailTimer = setTimeout(() => {
+      if (!isSystemReady) {
+        setIsError(true);
+        setShowTeam(false);
+      }
+    }, 90000); // 90s → Render cold start max
+
+    return () => {
+      clearInterval(progressTimer);
+      clearInterval(messageTimer);
+      clearTimeout(teamTimer);
+      clearTimeout(softWaitTimer);
+      clearTimeout(hardFailTimer);
+    };
+  }, [isSystemReady, isError, messages.length]);
+
+  // Backend finally woke up
+  useEffect(() => {
     if (isSystemReady) {
-      setIsError(false);
-      setLongWait(false);
       setProgress(100);
-
+      setLongWait(false);
+      setIsError(false);
       const exitTimer = setTimeout(() => {
-        if (onAnimationComplete) onAnimationComplete();
+        onAnimationComplete?.();
       }, 800);
-
       return () => clearTimeout(exitTimer);
     }
   }, [isSystemReady, onAnimationComplete]);
 
-
-  useEffect(() => {
-  setSessionId(`SES-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
-
-  const timer = setInterval(() => {
-    setProgress((old) => {
-      if (isSystemReady) return 100;
-      if (old >= 99) return 99;
-      const remaining = 99 - old;
-      const jump = Math.random() * (remaining * 0.15);
-      return Math.min(old + Math.max(jump, 0.2), 99);
-    });
-  }, 800);
-
-  const messageTimer = setInterval(() => {
-    if (!isSystemReady) {
-      setMessageIndex((prev) => (prev + 1) % messages.length);
-    }
-  }, 2500);
-
-  const teamTimer = setTimeout(() => setShowTeam(true), 1500);
-  const longWaitTimer = setTimeout(() => setLongWait(true), 15000);
-
-  const failureTimer = setTimeout(() => {
-    if (!isSystemReady) {
-      setIsError(true);
-      setLongWait(false);
-    }
-  }, 180000);
-
-  return () => {
-    clearInterval(timer);
-    clearInterval(messageTimer);
-    clearTimeout(longWaitTimer);
-    clearTimeout(teamTimer);
-    clearTimeout(failureTimer);
-  };
-}, [isSystemReady, messages.length]);
-
-
-  const handleRetry = () => {
-    setIsError(false);
-    setProgress(0);
-    setLongWait(false);
-    if (onRetry) onRetry();
-    window.location.reload();
-  };
-
-  let CurrentIcon = messages[messageIndex].icon;
-  if (isError) CurrentIcon = AlertTriangle;
-  if (isSystemReady) CurrentIcon = CheckCircle2;
-
   return (
-    <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center p-4 z-[9999] text-zinc-100 font-sans selection:bg-cyan-500/30 overflow-hidden">
-      
-      {/* Background Grid */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-30">
-        <div className={`absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] ${isError ? 'opacity-10' : ''}`}></div>
-        <div className="absolute inset-0 bg-radial-gradient from-transparent via-zinc-950/60 to-zinc-950"></div>
-      </div>
+  <div className="fixed inset-0 bg-slate-50 flex items-center justify-center p-6 z-[9999] text-slate-900 font-sans">
 
-      {isError && (
-        <div className="absolute inset-0 z-0 bg-red-500/5 animate-pulse pointer-events-none"></div>
-      )}
+    {/* Ultra-subtle grid for depth */}
+    <div className="absolute inset-0 pointer-events-none opacity-[0.025]">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:32px_32px]" />
+    </div>
 
-      {/* HEADER */}
-      <div className="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-start text-[9px] md:text-[10px] font-mono text-zinc-600 z-20">
-        <div className="flex flex-col gap-1">
-          <span className="text-zinc-500">DATAPULSE SYS // 
-            {isError ? (
-               <span className="text-red-500 font-bold animate-pulse"> OFFLINE</span>
-            ) : (
-               <span className={`animate-pulse ${isSystemReady ? 'text-cyan-400' : 'text-amber-400'}`}> BOOTING</span>
-            )}
-          </span>
-          <span className="opacity-70">{sessionId}</span>
-        </div>
-        <div className="text-right flex flex-col gap-1">
-          <span>REGION: <span className="text-zinc-400">US-EAST-1</span></span>
-          <span className="flex items-center justify-end gap-2">
-            LATENCY: <span className={isError ? "text-red-500" : "text-zinc-400"}>{isError ? "TIMEOUT" : "48ms"}</span> 
-            <Activity className={`w-3 h-3 ${isError ? "text-red-500" : "text-cyan-500"}`} />
-          </span>
-        </div>
-      </div>
+    {/* Main Card */}
+    <div className="relative z-10 w-full max-w-md bg-white border border-slate-100 rounded-xl px-8 py-10 shadow-sm">
 
-      {/* CENTER CONTENT */}
-      <div className="z-10 w-full max-w-sm flex flex-col items-center relative mt-[-40px] md:mt-0">
-        
-        {/* LOGO */}
-        <div className="relative mb-8 flex flex-col items-center group">
-          <div className={`absolute inset-0 blur-2xl rounded-full opacity-50 transition-colors duration-500 ${isError ? 'bg-red-500/20' : 'bg-cyan-500/5'}`}></div>
-          <img 
-            src="https://res.cloudinary.com/dggciuh9l/image/upload/v1761320636/profile_pics/fk2abjuswx8kzi01b2dk.png" 
-            alt="DataPulse System" 
-            className={`w-20 h-20 object-contain drop-shadow-2xl relative z-10 transition-all duration-500 ${isError ? 'grayscale contrast-125' : ''}`}
-          />
-          <div className={`mt-4 text-[10px] font-mono tracking-[0.2em] flex items-center gap-2 border px-3 py-1 rounded-full backdrop-blur-md transition-colors duration-300 ${isError ? 'border-red-500/30 bg-red-950/50 text-red-400' : 'border-zinc-800/50 bg-zinc-900/80 text-zinc-500'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isError ? 'bg-red-500' : 'bg-cyan-500'}`}></span>
-            {isError ? "SYSTEM FAILURE" : (isSystemReady ? "ACCESS GRANTED" : "SYSTEM BOOT v1.0.0")}
-          </div>
-        </div>
+      {/* Logo */}
+      <div className="mb-10 relative flex justify-center">
+        <img
+          src="https://res.cloudinary.com/dggciuh9l/image/upload/v1766819631/profile_pics/xnysrluddsvcfkzlatkq.png"
+          alt="DataPulse"
+          className={`w-24 h-24 object-contain ${
+            isError ? "grayscale opacity-40" : "opacity-100"
+          }`}
+        />
 
-        {/* LOADING UI */}
-        {isError ? (
-          <div className="w-full flex flex-col items-center animate-in fade-in zoom-in duration-300">
-             <div className="text-red-500 mb-2"><XCircle size={32} /></div>
-             <h3 className="text-zinc-300 font-medium text-sm tracking-wide mb-1">Connection Timed Out</h3>
-             <p className="text-zinc-500 text-[10px] text-center max-w-[250px] mb-6 leading-relaxed">
-               The server is taking too long to respond. This might be due to a cold start or maintenance.
-             </p>
-             <button 
-               onClick={handleRetry}
-               className="group flex items-center gap-2 px-6 py-2 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-bold uppercase tracking-wider rounded-full transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-             >
-               <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
-               Retry Sequence
-             </button>
-          </div>
-        ) : (
-          <div className="w-full flex flex-col items-center space-y-4 px-6">
-            <div className={`h-5 flex items-center justify-center space-x-2 w-full transition-colors duration-300 ${isSystemReady ? 'text-emerald-400' : 'text-cyan-400/80'}`}>
-              <CurrentIcon className={`w-3.5 h-3.5 ${!isSystemReady && 'animate-spin-slow'}`} />
-              <span className="font-mono text-[11px] tracking-wide uppercase truncate animate-in fade-in slide-in-from-bottom-1 duration-300" key={isSystemReady ? 'done' : messageIndex}>
-                {isSystemReady ? "Connection Established" : messages[messageIndex].text}
-              </span>
-            </div>
-
-            <div className="w-full h-[2px] bg-zinc-800 rounded-full overflow-hidden relative">
-              <div 
-                className={`absolute top-0 left-0 h-full shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all duration-300 ease-out ${isSystemReady ? 'bg-emerald-500 w-full' : 'bg-cyan-500'}`}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-
-            <div className="w-full flex justify-between items-center text-[9px] text-zinc-500 font-mono tracking-wider uppercase">
-              <span>{isSystemReady ? "Launch Sequence" : "Loading Modules"}</span>
-              <span className={isSystemReady ? "text-emerald-500 font-bold" : "text-zinc-400"}>{Math.floor(progress)}%</span>
-            </div>
-           
+        {isSystemReady && (
+          <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1 rounded-full border border-white">
+            <CheckCircle2 size={14} />
           </div>
         )}
+      </div>
 
-          <div
-            className={`mt-4 transition-all duration-300 ease-out ${
-              longWait && !isError && !isSystemReady
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-2 pointer-events-none"
-            }`}
-          >
+      {isError ? (
+        /* ERROR STATE */
+       <div className="space-y-5 text-center">
+        <h2 className="text-sm font-semibold text-slate-900">
+           Starting the service
+        </h2>
+        <p className="text-sm text-slate-500 leading-relaxed">
+          The service is taking longer than usual to respond.  
+          This can happen during the first load.
+        </p>
+        <button
+          onClick={handleRetryAction}
+          className="mt-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium rounded-md transition"
+        >
+          Try again
+        </button>
+      </div>
+      ) : (
+        /* LOADING STATE */
+        <div className="space-y-6">
+
+          {/* Status */}
+          <div className="flex justify-between text-[11px] text-slate-400 font-medium">
+            <span>{isSystemReady ? "Connected" : "Connecting…"}</span>
+            <span>{Math.floor(progress)}%</span>
+          </div>
+
+          {/* Progress */}
+          <div className="h-[2px] bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="
-                mx-auto
-                flex items-center gap-2
-                text-[10px] leading-relaxed text-zinc-500
-                max-w-[260px]
+              className={`h-full transition-all duration-700 ease-out ${
+                isSystemReady ? "bg-emerald-500" : "bg-blue-600"
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
 
-                sm:text-[11px]
-                sm:max-w-[320px]
+          {/* Message */}
+          <p className="text-[11px] text-slate-400 text-center">
+            {isSystemReady ? "Preparing dashboard…" : messages[messageIndex].text}
+          </p>
+            <div className="mt-4 min-h-[28px] flex items-center justify-center">
+              <p
+                className={`
+                  text-[11px] text-slate-400 leading-relaxed
+                  transition-opacity duration-300
+                  ${longWait && !isSystemReady ? 'opacity-100' : 'opacity-0'}
+                `}
+              >
+                Initial connection may take slightly longer than usual.
+              </p>
+            </div>
 
-                md:max-w-none
-                md:px-3 md:py-2
-                md:rounded-md
-                md:border md:border-zinc-800/60
-                md:bg-zinc-900/40
-              "
-            >
-              <Server className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />
+        </div>
+      )}
+    </div>
 
-              <span>
-                Server is waking up from idle state. Initial load may take up to ~45 seconds.
+    {/* Team (Muted, Static) */}
+    <footer
+      className={`
+        absolute bottom-10
+        flex flex-col items-center gap-4
+        transition-all duration-500 ease-out
+        ${
+          showTeam && !isError
+            ? "opacity-30 translate-y-0"
+            : "opacity-0 translate-y-4 pointer-events-none"
+        }
+      `}
+    >
+      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest">
+        Built by
+      </span>
+
+      <div className="flex gap-8">
+        {TEAM.map((member, i) => (
+          <a
+            key={i}
+            href={member.linkedin}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2"
+          >
+            <img
+              src={member.image}
+              alt={member.name}
+              className="w-7 h-7 rounded-full object-cover grayscale border border-slate-100"
+            />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-medium text-slate-600">
+                {member.name}
+              </span>
+              <span className="text-[9px] text-slate-400">
+                {member.role}
               </span>
             </div>
-          </div>
-
+          </a>
+        ))}
       </div>
+    </footer>
 
-      {/* ----------------------------------------------------------------------- */}
-      {/* PROFESSIONAL FOOTER - NO GIMMICKS */}
-      {/* ----------------------------------------------------------------------- */}
-      <div 
-        className={`absolute bottom-8 left-0 w-full flex flex-col items-center justify-center gap-3 transition-all duration-1000 ease-out z-30 ${showTeam ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-      >
-          {/* Label */}
-          <div className="text-[9px] font-mono text-zinc-600 uppercase tracking-[0.2em]">
-            Engineered by
-          </div>
+  </div>
+);
 
-          {/* Team Row */}
-          <div className="flex items-center gap-8">
-            {TEAM.map((member, idx) => (
-              <a 
-                key={idx}
-                href={member.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                // No background hover, just simple opacity change. No grayscale.
-                className="flex items-center gap-3 opacity-60 hover:opacity-100 transition-opacity duration-300 cursor-pointer"
-                title={`Visit ${member.name}'s LinkedIn`}
-              >
-                  {/* Avatar - Full color, simple border */}
-                  <img 
-                      src={member.image} 
-                      alt={member.name} 
-                      className="w-8 h-8 rounded-full object-cover border border-zinc-800"
-                  />
-                
-                <div className="flex flex-col text-left">
-                   <span className="text-[10px] font-medium text-zinc-300 leading-none">
-                     {member.name}
-                   </span>
-                   <span className="text-[9px] text-zinc-600 font-mono mt-1">
-                     {member.role}
-                   </span>
-                </div>
-              </a>
-            ))}
-          </div>
-      </div>
-
-    </div>
-  );
 };

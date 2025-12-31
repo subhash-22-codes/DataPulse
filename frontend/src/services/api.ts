@@ -18,37 +18,61 @@ export const api = axios.create({
 
 
 // --- RESPONSE INTERCEPTOR (The "Silent Refresh" Logic) ---
+type FailedQueueItem = {
+  resolve: (value?: unknown) => void;
+  reject: (reason?: unknown) => void;
+};
+
+let isRefreshing = false;
+let failedQueue: FailedQueueItem[] = [];
+
+const processQueue = (error: unknown = null) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error);
+    } else {
+      resolve();
+    }
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
-
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if error is 401 (Unauthorized) and we haven't retried yet
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes('/auth/login') &&
-      !originalRequest.url.includes('/auth/refresh')
+      !originalRequest.url.includes("/auth/login") &&
+      !originalRequest.url.includes("/auth/refresh")
     ) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(() => api(originalRequest));
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
-        console.log("🔄 Access token expired. Attempting silent refresh...");
-        await api.post('/auth/refresh');
-        console.log("✅ Refresh successful. Retrying original request.");
+        await api.post("/auth/refresh");
+        processQueue();
         return api(originalRequest);
-
-      } catch (refreshError) {
-        console.error("❌ Refresh failed. Allowing error to propagate for AuthContext handling.");
-
-        return Promise.reject(refreshError);
+      } catch (err) {
+        processQueue(err);
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
       }
     }
 
     return Promise.reject(error);
   }
 );
+
 
 export const authService = {
   // Google OAuth Login

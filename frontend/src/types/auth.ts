@@ -2,32 +2,44 @@ export interface User {
   id: string;  // UUID
   email: string;
   name: string;
+  github_id?: string | null;
+  google_id?: string | null;
+  signup_method: 'email' | 'google' | 'github';
+  created_at: string;
+  profile_pic?: string | null;
 }
 
 // UPDATE: Matches new backend response
 export interface AuthResponse {
-  message: string; // e.g., "Login successful"
+  message: string;
   user: User;
-  // token: string; <--- REMOVED. 
 }
+
+// 🛡️ Define the phases so they can be reused across the app
+export type AuthPhase = "checking" | "resolved" | "unreachable";
 
 export interface AuthContextType {
     user: User | null;
-    token: string | null; 
+    token?: string | null; // Optional since we are Cookie-based
     
-    login: (email: string, password: string) => Promise<AuthResponse>;
-    loginSuccess: boolean;
+    // Status Gates
+    loading: boolean;     
+    isAuthenticated: boolean; 
+    isAuthResolved: boolean;   
+    authPhase: AuthPhase;     
+    loginSuccess: boolean;     
 
-    // FIX THIS LINE: Must return AuthResponse
+    // Auth Actions
+    login: (email: string, password: string) => Promise<AuthResponse>;
     googleLogin: (googleToken: string) => Promise<AuthResponse>; 
-    
     register: (email: string) => Promise<boolean>;
     verifyOtp: (name: string, email: string, otp: string, password: string) => Promise<void>;
     logout: () => void;
-    loading: boolean;
-    isAuthenticated: boolean;
+    
+    // Password & Session Management
     sendPasswordReset: (email: string) => Promise<boolean>;
     resetPassword: (email: string, resetCode: string, newPassword: string) => Promise<void>;
+    checkSession: () => Promise<User | null>;
 }
 export interface OtpResponse {
   msg: string;

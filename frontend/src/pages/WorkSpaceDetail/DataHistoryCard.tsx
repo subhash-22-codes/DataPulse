@@ -401,20 +401,24 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
   const fetchAllUploads = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [manualRes, apiRes, dbRes] = await Promise.all([
-        api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads?upload_type=manual`),
-        api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads?upload_type=api_poll`),
-        api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads?upload_type=db_query`)
-      ]);
-      const combinedScheduled = [...apiRes.data, ...dbRes.data].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+      const res = await api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads?limit=100`);
       
-      setManualUploads(manualRes.data);
-      setScheduledFetches(combinedScheduled);
-      onUploadsUpdate(manualRes.data, combinedScheduled);
-      setSelectedUpload(manualRes.data[0] || combinedScheduled[0] || null);
-    } catch (error) { console.error("Failed to fetch uploads", error); } 
-    finally { setIsLoading(false); }
-  }, [workspace.id, onUploadsUpdate]);
+      const allData = res.data;
+      const manuals = allData.filter(u => u.upload_type === 'manual');
+      const scheduled = allData.filter(u => u.upload_type === 'api_poll' || u.upload_type === 'db_query');
+
+      setManualUploads(manuals);
+      setScheduledFetches(scheduled);
+      onUploadsUpdate(manuals, scheduled);
+      setSelectedUpload(allData[0] || null);
+
+    } catch (error) {
+      console.error("Failed to fetch uploads", error);
+      toast.error("Could not sync data history");
+    } finally {
+      setIsLoading(false);
+    }
+}, [workspace.id, onUploadsUpdate]);
 
   useEffect(() => {
     fetchAllUploads();
@@ -448,9 +452,19 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
         }
     } else {
         toast.success(`Viewing trend: ${columnName}`, {
-            style: { border: '1px solid #e2e8f0', padding: '12px', color: '#334155', fontSize: '13px' },
-            iconTheme: { primary: '#3b82f6', secondary: '#fff' },
-        });
+  style: { 
+    background: '#ffffff', // 👈 This fixes the black background
+    border: '1px solid #e2e8f0', 
+    padding: '12px', 
+    color: '#334155', 
+    fontSize: '13px',
+    borderRadius: '8px', // Optional: matches your UI's rounded corners
+  },
+  iconTheme: { 
+    primary: '#3b82f6', 
+    secondary: '#fff' 
+  },
+});
     }
   };
   
@@ -482,6 +496,7 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
       fetchAllUploads();
     }
   };
+  
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm lg:col-span-3 relative overflow-hidden h-full flex flex-col font-sans">

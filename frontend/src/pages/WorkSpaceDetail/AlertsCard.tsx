@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../services/api';
 import { Workspace, AlertRule } from '../../types';
-import { BellRing, Loader2, Plus, Trash2, ArrowRight, Zap, TrendingUp, AlertTriangle, Activity } from 'lucide-react';
+import { BellRing, Loader2, Plus, Trash2, ArrowRight, Zap, TrendingUp, Activity, Hash } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CreateAlertModal } from './CreateAlertModal';
-
+import axios from 'axios'; 
 interface AlertsCardProps {
   workspace: Workspace;
   isOwner: boolean;
@@ -14,7 +14,7 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
+  const [isToggling, setIsToggling] = useState<string | null>(null);
   const fetchRules = useCallback(async () => {
     if (rules.length === 0) setIsLoading(true);
     try {
@@ -48,23 +48,75 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
     }
   };
 
+  // Inside AlertsCard.tsx
+const handleToggleRule = async (ruleId: string) => {
+    if (isToggling) return;
+
+    setIsToggling(ruleId);
+    
+    // 1. Optimistic Update
+    setRules(prev => prev.map(r => 
+      r.id === ruleId ? { ...r, is_active: !r.is_active } : r
+    ));
+
+    try {
+      // 2. Sync with Backend
+      await api.patch(`/alerts/${ruleId}/toggle`);
+    } catch (error: unknown) {
+      console.error("Failed to toggle rule", error);
+      
+      // ✅ Type-safe error extraction using axios
+      let errorMessage = "Failed to update status";
+      if (axios.isAxiosError(error)) {
+          errorMessage = error.response?.data?.detail || errorMessage;
+      }
+
+      toast.error(errorMessage, {
+          style: { 
+            fontSize: '12px', 
+            background: '#fee2e2', 
+            color: '#991b1b', 
+            border: '1px solid #fecaca' 
+          }
+      });
+
+      // 3. Revert on failure
+      setRules(prev => prev.map(r => 
+        r.id === ruleId ? { ...r, is_active: !r.is_active } : r
+      ));
+    } finally {
+      setIsToggling(null);
+    }
+  };
+
   // 🎨 VISUAL HELPER: Convert text conditions to crisp symbols
   const getConditionDisplay = (cond: string) => {
     switch(cond) {
         case 'greater_than': return { symbol: '>', label: 'Exceeds' };
         case 'less_than': return { symbol: '<', label: 'Drops below' };
         case 'equals': return { symbol: '=', label: 'Equals' };
-        case 'not_equals': return { symbol: '≠', label: 'Not equal' };
+        case 'not_equals': return { symbol: '≠', label: 'Not equal' }; // Ensure this matches Backend
         default: return { symbol: '→', label: cond.replace(/_/g, ' ') };
     }
-  };
+};
 
   // 🎨 VISUAL HELPER: Get icon based on metric
   const getMetricIcon = (metric: string) => {
-      if (metric === 'z_score' || metric === 'anomaly') return <Zap className="w-4 h-4 text-amber-500" />;
-      if (metric === 'missing_count') return <AlertTriangle className="w-4 h-4 text-orange-500" />;
-      return <TrendingUp className="w-4 h-4 text-blue-500" />;
-  };
+    switch(metric) {
+        case 'mean':
+        case '50%': 
+            return <Activity className="w-4 h-4 text-blue-500" />;
+        case 'max': 
+            return <TrendingUp className="w-4 h-4 text-emerald-500" />;
+        case 'min': 
+            return <TrendingUp className="w-4 h-4 text-rose-500 rotate-180" />;
+        case 'count': 
+            return <Hash className="w-4 h-4 text-slate-500" />;
+        default: 
+            return <Zap className="w-4 h-4 text-amber-500" />;
+    }
+};
+const activeCount = rules.filter(r => r.is_active).length;
 
   return (
     <>
@@ -121,60 +173,77 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
               )}
             </div>
           ) : (
-            <div className="space-y-2">
+           <div className="space-y-3">
               {rules.map((rule) => {
                 const { symbol, label } = getConditionDisplay(rule.condition);
                 return (
                   <div
                     key={rule.id}
-                    className="group/item relative flex items-center justify-between p-3.5 bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200"
+                    className="group/item relative flex items-center justify-between p-3 sm:p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300"
                   >
-                    {/* Main Logic */}
-                    <div className="flex items-center gap-3.5 overflow-hidden">
-                      
-                      {/* Icon */}
-                      <div className="flex-shrink-0 w-8 h-8 rounded-md bg-slate-50 border border-slate-100 flex items-center justify-center group-hover/item:bg-white group-hover/item:border-slate-200 transition-colors">
-                          {getMetricIcon(rule.metric)}
+                    {/* LEFT: Information section (Adaptive Layout) */}
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                      {/* ICON: Square & Solid on Desktop, Smaller on Mobile */}
+                      <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center group-hover/item:bg-white group-hover/item:border-slate-200 transition-colors">
+                        {getMetricIcon(rule.metric)}
                       </div>
 
-                      {/* Text Content */}
-                      <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-1.5 text-sm text-slate-900">
-                             <span className="font-bold truncate max-w-[120px]" title={rule.column_name}>
-                                {rule.column_name}
-                             </span>
-                             <span className="text-slate-300 font-light text-xs px-0.5">•</span>
-                             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                {label}
-                             </span>
-                          </div>
-                          
-                          {/* Logic Badge Row */}
-                          <div className="flex items-center gap-2 mt-0.5">
-                              <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                  {rule.metric.replace('_', ' ')}
-                              </span>
-                              <ArrowRight className="w-3 h-3 text-slate-300" />
-                              <span className="font-mono font-bold text-slate-800 text-xs">
-                                 {symbol} {rule.value}
-                              </span>
-                          </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 min-w-0">
+                        {/* Column & Condition Label */}
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="text-sm font-bold text-slate-900 truncate tracking-tight" title={rule.column_name}>
+                            {rule.column_name}
+                          </span>
+                          <span className="hidden sm:inline text-slate-300 font-light">•</span>
+                          <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-tight sm:tracking-normal">
+                            {label}
+                          </span>
+                        </div>
+                        
+                        {/* Logic Badge Row: Stays compact on Mobile, expands on Desktop */}
+                        <div className="flex items-center gap-2 mt-1 sm:mt-0">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200/60 whitespace-nowrap uppercase tracking-tighter sm:tracking-normal">
+                            {rule.metric.replace('_', ' ')}
+                          </span>
+                          <ArrowRight className="hidden sm:block w-3 h-3 text-slate-300" />
+                          <span className="font-mono text-[11px] sm:text-xs font-black text-slate-800 bg-amber-50/50 sm:bg-transparent px-1.5 py-0.5 sm:p-0 rounded border border-amber-100/50 sm:border-none">
+                            {symbol} {rule.value}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Right Side: Delete Action (Reveal on Hover) */}
-                    {isOwner && (
-                      <button
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md opacity-0 group-hover/item:opacity-100 transition-all duration-200 transform translate-x-2 group-hover/item:translate-x-0"
-                        title="Remove Alert"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    
-                    {/* Status Indicator (Purely Visual) */}
-                    <div className="absolute right-3 top-3 w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover/item:opacity-0 transition-opacity"></div>
+                    {/* RIGHT: Action Section (Fixed Width) */}
+                    <div className="flex items-center gap-3 sm:gap-5 ml-4">
+                      {isOwner && (
+                        <>
+                          {/* THE TOGGLE SWITCH */}
+                          <button
+                            onClick={() => handleToggleRule(rule.id)}
+                            disabled={isToggling === rule.id}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-slate-400 focus:ring-offset-1 ${
+                              rule.is_active ? 'bg-emerald-500' : 'bg-slate-200'
+                            } ${
+                              isToggling === rule.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
+                                rule.is_active ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+
+                          {/* DELETE BUTTON: Reveal only on Desktop Hover */}
+                          <button
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all sm:opacity-0 sm:group-hover/item:opacity-100"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -185,7 +254,7 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
         {/* Footer Meta */}
         {rules.length > 0 && (
             <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 text-[10px] font-medium text-slate-400 flex justify-between items-center">
-                <span>{rules.length} active monitors</span>
+                <span>Usage: {activeCount} / 10 active alerts</span>
                 <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> System operational</span>
             </div>
         )}
@@ -196,6 +265,7 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
         setIsOpen={setIsModalOpen}
         workspaceId={workspace.id}
         onRuleCreated={fetchRules}
+        activeAlertsCount={activeCount}
       />
     </>
   );

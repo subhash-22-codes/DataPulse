@@ -1,18 +1,24 @@
 import React, { Fragment, useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { DataUpload } from '../../types';
 import { Dialog, Transition } from '@headlessui/react';
 import { Loader2, X, ChevronDown, Hash, GitCompare, Terminal, Plus, Table2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import axios from 'axios'; 
 
 interface CreateAlertModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   workspaceId: string;
   onRuleCreated: () => void;
+  activeAlertsCount: number;
 }
 
-export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setIsOpen, workspaceId, onRuleCreated }) => {
+interface SchemaResponse {
+  schema: Record<string, string>; // e.g., { "Eggs_count": "int64" }
+  has_data: boolean;
+}
+
+export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setIsOpen, workspaceId, onRuleCreated, activeAlertsCount }) => {
   const [columnName, setColumnName] = useState('');
   const [metric, setMetric] = useState('mean');
   const [condition, setCondition] = useState('greater_than');
@@ -29,23 +35,32 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
     const fetchLatestSchema = async () => {
       setIsLoadingColumns(true);
       try {
-        const res = await api.get<DataUpload[]>(`/workspaces/${workspaceId}/uploads`);
+          const res = await api.get<SchemaResponse>(`/workspaces/${workspaceId}/schema`);
+          console.log("Response Data:", res.data);
 
-        const latestUpload = res.data[0];
-        if (latestUpload && latestUpload.schema_info) {
-          const numericCols = Object.entries(latestUpload.schema_info).reduce((acc, [col, type]) => {
-            if (String(type).includes('int') || String(type).includes('float')) {
-              acc.push(col);
+          // 1. Access the 'schema' key directly from the response object
+          const schema = res.data.schema; 
+
+          if (schema) {
+            // 2. Map through the entries of that schema object
+            const numericCols = Object.entries(schema).reduce((acc, [col, type]) => {
+              const typeStr = String(type).toLowerCase();
+              
+              // 3. Robust check for int/float
+              if (typeStr.includes('int') || typeStr.includes('float')) {
+                acc.push(col);
+              }
+              return acc;
+            }, [] as string[]);
+
+            console.log("Final Numeric Columns:", numericCols);
+            setAvailableColumns(numericCols);
+            
+            if (numericCols.length > 0) {
+              setColumnName(numericCols[0]);
             }
-            return acc;
-          }, [] as string[]);
-
-          setAvailableColumns(numericCols);
-          if (numericCols.length > 0) {
-            setColumnName(numericCols[0]);
           }
-        }
-      } catch (error) {
+        }catch (error) {
         console.error("Failed to fetch schema for alerts", error);
       } finally {
         setIsLoadingColumns(false);
@@ -55,6 +70,12 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
   }, [isOpen, workspaceId]);
 
   const handleCreateRule = async () => {
+    if (activeAlertsCount >= 10) {
+      toast.error("Limit reached: Maximum 10 active alerts allowed.", {
+        style: { fontSize: '12px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' }
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       const payload = {
@@ -71,9 +92,24 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
       });
       onRuleCreated();
       setIsOpen(false);
-    } catch (error) {
-      console.log(error)
-      toast.error("Failed to create alert rule");
+    } catch (error: unknown) {
+        let errorMessage = "Failed to create alert rule";
+
+        // This is the "Type Guard" that makes the linter happy
+        if (axios.isAxiosError(error)) {
+            errorMessage = error.response?.data?.detail || errorMessage;
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+
+        toast.error(errorMessage, {
+            style: { 
+                fontSize: '12px', 
+                background: '#fee2e2', 
+                color: '#991b1b', 
+                border: '1px solid #fecaca' 
+            }
+        });
     } finally {
       setIsSaving(false);
     }
@@ -178,6 +214,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                                 className="block w-full appearance-none rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
                             >
                                 <option value="mean">Average</option>
+                                <option value="50%">Median (50th %)</option>
                                 <option value="min">Minimum</option>
                                 <option value="max">Maximum</option>
                                 <option value="count">Count</option>
@@ -229,6 +266,22 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                     </div>
                   )}
                 </div>
+                {/* Usage Indicator */}
+                <div className="mb-2 ml-3 flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-slate-500">
+                    Limit
+                  </span>
+
+                  <span
+                    className={`text-[10px] font-semibold tabular-nums ${
+                      activeAlertsCount >= 9
+                        ? 'text-amber-600'
+                        : 'text-slate-700'
+                    }`}
+                  >
+                    {activeAlertsCount}/10
+                  </span>
+                </div>
 
                 {/* Footer */}
                 <div className="bg-slate-50 px-5 py-4 flex items-center justify-end gap-3 border-t border-slate-200">
@@ -244,7 +297,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                     type="button"
                     className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center gap-2"
                     onClick={handleCreateRule}
-                    disabled={isSaving || isLoadingColumns || availableColumns.length === 0}
+                    disabled={isSaving || isLoadingColumns || availableColumns.length === 0 || activeAlertsCount >= 10}
                   >
                     {isSaving ? (
                       <>

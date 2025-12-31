@@ -2,7 +2,7 @@ import React, { Fragment, useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { Workspace } from '../../types';
 import { Dialog, Transition } from '@headlessui/react';
-import { Loader2, X, CheckCircle2, Trash2, ShieldAlert, ArrowRight, AlertTriangle } from 'lucide-react'; 
+import { Loader2, X, CheckCircle2, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react'; 
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -273,208 +273,151 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                   ) : (
                     /* FORM STATE */
                     <>
-                      {/* Modal Header */}
-                      <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
-                        {/* Left */}
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 border border-slate-200">
-                            <ShieldAlert className="h-4 w-4 text-slate-500" />
-                          </div>
+  {/* Modal Header - Professional & Centered */}
+  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+    <div className="flex items-center gap-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-50 border border-slate-200">
+        <ShieldAlert className="h-4 w-4 text-slate-500" />
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900">
+          {step === 'confirm_name' ? 'Confirm Deletion' : 'Security Check'}
+        </h3>
+        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+          Workspace Management
+        </p>
+      </div>
+    </div>
 
-                          <Dialog.Title
-                            as="h3"
-                            className="text-sm font-semibold text-slate-900"
-                          >
-                            {step === 'confirm_name' ? 'Confirm deletion' : 'Security check'}
-                          </Dialog.Title>
-                        </div>
+    <button
+      type="button"
+      onClick={() => !isLoading && setIsModalOpen(false)}
+      className="rounded-md p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors outline-none"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  </div>
 
-                        {/* Close */}
-                        <button
-                          type="button"
-                          onClick={() => !isLoading && setIsModalOpen(false)}
-                          className="
-                            rounded-md p-1.5
-                            text-slate-400
-                            hover:text-slate-600
-                            hover:bg-slate-100
-                            transition-colors
-                            focus:outline-none
-                            focus-visible:ring-2
-                            focus-visible:ring-slate-300
-                          "
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
+  {/* Modal Body - High Breathing Room */}
+  <div className="p-6 bg-white">
+    {step === 'confirm_name' ? (
+      <div className="space-y-6">
+        {/* Simplified Warning Component */}
+        <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50/50 p-4">
+          <div className="flex gap-3">
+            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-rose-900">Immediate access revocation</p>
+              <p className="text-xs text-rose-700 leading-relaxed">
+                This workspace contains <span className="font-bold">{uploadCount} datasets</span> and <span className="font-bold">{alertCount} active alerts</span>.
+              </p>
+            </div>
+          </div>
+        </div>
 
+        {/* Input Group - Clean & Professional */}
+        <div className="space-y-2">
+          <label htmlFor="confirm-name" className="block text-xs font-semibold text-slate-500 uppercase tracking-tight">
+            Verify workspace name
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              id="confirm-name"
+              value={confirmationText}
+              onChange={(e) => {
+                setConfirmationText(e.target.value);
+                setInputError(false);
+              }}
+              className={`block w-full rounded-lg border px-4 py-2.5 text-sm font-medium transition-all outline-none
+                ${inputError 
+                  ? 'border-rose-300 bg-rose-50/30 focus:border-rose-500' 
+                  : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-slate-400 focus:ring-4 focus:ring-slate-500/5'
+                }`}
+              placeholder={workspace.name}
+              autoComplete="off"
+              autoFocus
+            />
+            {confirmationText === workspace.name && (
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              </div>
+            )}
+          </div>
+          {inputError && (
+            <p className="text-xs text-rose-600 font-medium mt-1">{errorMessage}</p>
+          )}
+        </div>
+      </div>
+    ) : (
+      /* STEP 2: SECURITY CHECK (OTP) */
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="text-center space-y-2">
+          <h4 className="text-sm font-semibold text-slate-900">Verify your identity</h4>
+          <p className="text-xs text-slate-500 leading-relaxed max-w-[240px] mx-auto">
+            We've sent a 6-digit verification code to your registered email address.
+          </p>
+        </div>
 
-                      {/* Modal Body */}
-                      <div className="px-6 py-6 bg-white">
-                        {step === 'confirm_name' ? (
-                          <div className="space-y-4">
-                            <div className="flex gap-2.5 rounded-md border border-red-200 bg-red-50 px-3 py-2.5">
-                              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-                              <p className="text-[11px] sm:text-xs text-red-700 leading-relaxed">
-                                Deleting this workspace will immediately disable access.
-                                It contains{" "}
-                                <span className="font-medium">{uploadCount}</span> datasets and{" "}
-                                <span className="font-medium">{alertCount}</span> alerts.
-                                This action can be reversed for a limited time.
-                              </p>
-                            </div>
-                           {/* Input Group */}
-                            <div>
-                              {/* Label */}
-                              <label
-                                htmlFor="confirm-name"
-                                className="block mb-2 text-[11px] sm:text-xs font-medium text-slate-500"
-                              >
-                                Type{" "}
-                                <span className="font-medium text-slate-900 select-all">
-                                  {workspace.name}
-                                </span>{" "}
-                                to confirm
-                              </label>
+        <div className="space-y-3">
+          <input
+            type="text"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => {
+              setOtp(e.target.value.replace(/\D/g, ''));
+              setInputError(false);
+            }}
+            className={`block w-full rounded-lg border px-4 py-3 text-center text-lg font-mono tracking-[0.5em] transition-all outline-none
+              ${inputError 
+                ? 'border-rose-300 bg-rose-50/30 focus:border-rose-500' 
+                : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-slate-400 focus:ring-4 focus:ring-slate-500/5'
+              }`}
+            placeholder="000000"
+            autoFocus
+          />
+          {inputError && (
+            <p className="text-xs text-rose-600 text-center font-medium">{errorMessage}</p>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
 
-                              {/* Input */}
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  id="confirm-name"
-                                  value={confirmationText}
-                                  onChange={(e) => {
-                                    setConfirmationText(e.target.value);
-                                    setInputError(false);
-                                  }}
-                                  className={`
-                                    block w-full
-                                    rounded-md
-                                    border
-                                    px-3 py-2
-                                    pr-9
-                                    text-sm text-slate-900
-                                    placeholder:text-slate-400
-                                    outline-none
-                                    transition-colors
-
-                                    ${inputError
-                                      ? 'border-red-300 focus:border-red-500'
-                                      : 'border-slate-300 focus:border-slate-400'
-                                    }
-                                  `}
-                                  placeholder={workspace.name}
-                                  autoComplete="off"
-                                  autoFocus
-                                />
-
-                                {/* Verification icon (static, no animation) */}
-                                {confirmationText === workspace.name && (
-                                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Error */}
-                              {inputError && (
-                                <p className="mt-1.5 text-[11px] sm:text-xs text-red-600">
-                                  {errorMessage}
-                                </p>
-                              )}
-                            </div>
-
-                          </div>
-                        ) : (
-                          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                             <div>
-                                {/* Label */}
-                                <label className="block mb-2 text-[11px] sm:text-xs font-medium text-slate-500">
-                                  Verification code
-                                </label>
-
-                                {/* Helper text */}
-                                <p className="mb-3 text-sm text-slate-600 leading-relaxed">
-                                  Enter the 6-digit code sent to your email.
-                                </p>
-
-                                {/* OTP Input */}
-                                <input
-                                  type="text"
-                                  maxLength={6}
-                                  value={otp}
-                                  onChange={(e) => {
-                                    setOtp(e.target.value.replace(/\D/g, ''));
-                                    setInputError(false);
-                                  }}
-                                  className={`
-                                    block w-full
-                                    rounded-md
-                                    border
-                                    px-3 py-2.5
-                                    text-center
-                                    text-sm sm:text-base
-                                    font-mono
-                                    tracking-[0.3em]
-                                    text-slate-900
-                                    placeholder:text-slate-400
-                                    outline-none
-                                    transition-colors
-
-                                    ${inputError
-                                      ? 'border-red-300 focus:border-red-500'
-                                      : 'border-slate-300 focus:border-slate-400'
-                                    }
-                                  `}
-                                  placeholder="000000"
-                                  autoFocus
-                                />
-                                {/* Error */}
-                                {inputError && (
-                                  <p className="mt-1.5 text-[11px] sm:text-xs text-red-600 text-center">
-                                    {errorMessage}
-                                  </p>
-                                )}
-                              </div>
-
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Modal Footer */}
-                      <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-100">
-                        <button
-                          type="button"
-                          className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                          onClick={() => !isLoading && setIsModalOpen(false)}
-                          disabled={isLoading}
-                        >
-                          Cancel
-                        </button>
-                        
-                        {step === 'confirm_name' ? (
-                          <button
-                            type="button"
-                            onClick={handleRequestOTP}
-                            disabled={isLoading || confirmationText !== workspace.name}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all active:scale-95"
-                          >
-                            {isLoading && <Loader2 className="animate-spin h-3.5 w-3.5" />}
-                            Verify Identity <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleFinalDelete}
-                            disabled={isLoading || otp.length !== 6}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all active:scale-95"
-                          >
-                            {isLoading ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
-                            Delete Workspace
-                          </button>
-                        )}
-                      </div>
-                    </>
+  {/* Modal Footer - Professional Responsive Buttons */}
+  <div className="bg-slate-50/50 px-6 py-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-slate-100">
+    <button
+      type="button"
+      onClick={() => !isLoading && setIsModalOpen(false)}
+      disabled={isLoading}
+      className="px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+    >
+      Cancel
+    </button>
+    
+    {step === 'confirm_name' ? (
+      <button
+        type="button"
+        onClick={handleRequestOTP}
+        disabled={isLoading || confirmationText !== workspace.name}
+        className="inline-flex items-center justify-center gap-2 px-5 py-2 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 disabled:opacity-40 transition-all min-w-[140px]"
+      >
+        {isLoading && <Loader2 className="animate-spin h-4 w-4" />}
+        Next Step
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={handleFinalDelete}
+        disabled={isLoading || otp.length !== 6}
+        className="inline-flex items-center justify-center gap-2 px-5 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all min-w-[140px]"
+      >
+        {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <Trash2 className="w-4 h-4" />}
+        Confirm Delete
+      </button>
+    )}
+  </div>
+</>
                   )}
                 </Dialog.Panel>
               </Transition.Child>

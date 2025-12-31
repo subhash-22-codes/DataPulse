@@ -5,26 +5,28 @@ import { format, toZonedTime } from 'date-fns-tz'; // Import toZonedTime
 interface FormattedDateProps {
   dateString: string;
 }
-
 export const FormattedDate: React.FC<FormattedDateProps> = ({ dateString }) => {
+  if (!dateString) return <span>N/A</span>;
+
   try {
     const indiaTimeZone = 'Asia/Kolkata';
     
-    // 1. Ensure dateString is treated as UTC if it's missing the 'Z'
-    // This prevents the browser from thinking "15:21" is already local time.
-    const normalizedDateString = dateString.endsWith('Z') 
-      ? dateString 
-      : `${dateString}Z`;
+    // 1. Just create the date object. 
+    // Modern browsers and date-fns handle +00:00 perfectly.
+    const date = new Date(dateString);
 
-    // 2. Convert UTC date -> Zoned Date (India Time)
-    const zonedDate = toZonedTime(normalizedDateString, indiaTimeZone);
+    // 2. Safety check: Is it actually a valid date?
+    if (isNaN(date.getTime())) {
+        return <span>Invalid date</span>;
+    }
 
-    // 3. Format it
+    // 3. Convert and Format
+    const zonedDate = toZonedTime(date, indiaTimeZone);
     const formatted = format(zonedDate, 'dd MMM yyyy, hh:mm a', { timeZone: indiaTimeZone });
     
     return <span>{formatted} IST</span>;
   } catch (error) {
-    console.error("Date Error:", error);
+    console.error("Formatting Error:", error);
     return <span>Invalid date</span>;
   }
 };
