@@ -82,6 +82,26 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
           )}
         </div>
 
+        {/* 🚨 Error Alert: Show this only if it's NOT polling and there's a reason */}
+        {/* 🚨 Pro-Compact Full Error Banner */}
+          {!workspace.is_polling_active && workspace.last_failure_reason && (
+            <div className="bg-red-50/60 border-b border-red-100 px-5 py-2 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]" />
+                <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.1em]">
+                  System Alert: Sync Halted
+                </span>
+              </div>
+              
+              {/* Full Error Message - Small, mono-style for that 'Dev' feel */}
+              <div className="pl-3 border-l border-red-200/50 mt-0.5">
+                <p className="text-[10px] text-red-700/80 font-medium leading-relaxed font-mono break-words line-clamp-3">
+                  {workspace.last_failure_reason}
+                </p>
+              </div>
+            </div>
+          )}
+
         {/* --- CONTENT --- */}
         <div className="p-5 flex-grow flex flex-col bg-slate-50/30">
           {!workspace.data_source ? (
@@ -191,7 +211,11 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     <Power className="w-3 h-3" /> Status
                                 </span>
-                                <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                <p className={`text-sm font-semibold transition-colors duration-500 ${
+                                    workspace.is_polling_active 
+                                      ? 'text-emerald-600' // Make it stand out when active
+                                      : 'text-slate-500'
+                                  }`}>
                                     {workspace.is_polling_active ? 'Active' : 'Paused'}
                                 </p>
                             </div>

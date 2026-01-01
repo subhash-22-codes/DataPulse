@@ -11,10 +11,10 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
-  ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { FaStackOverflow } from 'react-icons/fa';
 
 interface Notification {
   id: string;
@@ -246,14 +246,11 @@ export const NotificationsPage: React.FC = () => {
         {/* --- FOOTER --- */}
         <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 opacity-50">
            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+              <FaStackOverflow className="w-3.5 h-3.5 text-slate-400" />
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-                Protected by DataPulse Security
+                notification center
               </p>
            </div>
-           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-             Version 1.0.0
-           </p>
         </div>
       </div>
     </div>

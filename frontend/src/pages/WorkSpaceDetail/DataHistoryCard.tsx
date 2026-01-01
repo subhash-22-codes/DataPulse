@@ -399,6 +399,7 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
   const [uploadToDelete, setUploadToDelete] = useState<DataUpload | null>(null);
 
   const fetchAllUploads = useCallback(async () => {
+    if (manualUploads.length > 0 || scheduledFetches.length > 0) return;
     setIsLoading(true);
     try {
       const res = await api.get<DataUpload[]>(`/workspaces/${workspace.id}/uploads?limit=100`);
@@ -418,11 +419,14 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
     } finally {
       setIsLoading(false);
     }
-}, [workspace.id, onUploadsUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id,manualUploads.length, scheduledFetches.length]); 
 
   useEffect(() => {
-    fetchAllUploads();
-  }, [fetchAllUploads]);
+    if (manualUploads.length === 0 && scheduledFetches.length === 0) {
+        fetchAllUploads();
+    }
+}, [fetchAllUploads, manualUploads.length, scheduledFetches.length]);
 
   useEffect(() => {
     if (!trackedColumn || !selectedUpload) return;

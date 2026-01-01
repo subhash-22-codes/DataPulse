@@ -161,7 +161,7 @@ export const Legal: React.FC = () => {
 
               <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500">
                 <span>Effective: Nov 3, 2025</span>
-                <span>Version: 1.0.0</span>
+                <span>Version: 1.1.0</span>
                 <span>Jurisdiction: India</span>
               </div>
             </div>

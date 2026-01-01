@@ -263,7 +263,6 @@ export const Trash: React.FC = () => {
       {/* --- FOOTER --- */}
       <div className="mt-12 pt-6 border-t border-slate-50 flex items-center justify-between opacity-30">
          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Trash Recovery Module</p>
-         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">DataPulse v1.0.0</p>
       </div>
     </div>
   );

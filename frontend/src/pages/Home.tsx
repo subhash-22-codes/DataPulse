@@ -282,9 +282,13 @@ const Home: React.FC = () => {
                                     <Clock className="h-3 w-3 text-gray-400" />
                                     {currentDate}
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                Active
+                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${
+                                    (isNetworkError || error) ? 'text-red-600' : 'text-emerald-700'
+                                }`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${
+                                        (isNetworkError || error) ? 'bg-red-500' : 'bg-emerald-500'
+                                    }`} />
+                                    {(isNetworkError || error) ? 'Offline' : 'Active'}
                                 </span>
                             </div>
                         </div>

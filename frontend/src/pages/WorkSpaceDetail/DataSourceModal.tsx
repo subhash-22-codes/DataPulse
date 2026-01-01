@@ -1,10 +1,9 @@
 import React, { Fragment, useState, useEffect } from "react";
 import { api } from "../../services/api";
 import { Dialog, Transition, RadioGroup, Switch } from '@headlessui/react';
-import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText,User, Key, BookOpen, Lock, Activity, FileSpreadsheet } from "lucide-react";
+import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText,User, Key, BookOpen, Lock, Activity, FileSpreadsheet,AlertTriangle, Clock } from "lucide-react";
 import { Workspace } from "../../types";
 import toast from 'react-hot-toast';
-
 interface DataSourceModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -109,7 +108,7 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
   const [dbQuery, setDbQuery] = useState('SELECT * FROM your_table LIMIT 100;');
   
   const [isSaving, setIsSaving] = useState(false);
-
+  const isAutoDisabled = !workspace.is_polling_active && workspace.last_failure_reason;
   useEffect(() => {
     if (isOpen) {
       setDataSource(workspace.data_source || 'CSV');
@@ -172,26 +171,48 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     }
   };
   
-  const handleCsvUpload = async () => {
-    if (!selectedFile) return toast.error("Please select a CSV file to upload.");
-    setIsSaving(true);
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    try {
-      await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      onUploadStart();
-      const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { data_source: 'CSV', is_polling_active: false });
-      onUpdate(res.data);
-      toast.success("Upload successful!", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
-      setIsOpen(false);
-    } catch (error) {
-      console.error(error);
-      toast.error("File upload failed.");
-    } finally {
-      setIsSaving(false);
-    }
+    const handleCsvUpload = async () => {
+      if (!selectedFile) return toast.error("Please select a CSV file to upload.");
+
+      // --- 🛡️ THE RENDER PROTECTOR ---
+      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        return toast.error("File is too large! Maximum limit is 5MB.", {
+          style: { fontSize: '13px', background: '#991b1b', color: '#fff' }
+        });
+      }
+
+      setIsSaving(true);
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      try {
+        // 1. Upload the file
+        await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        onUploadStart();
+
+        // 2. Set the data source and stop polling (since CSV is static)
+        const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { 
+          data_source: 'CSV', 
+          is_polling_active: false 
+        });
+
+        onUpdate(res.data);
+        
+        toast.success("Upload successful!", { 
+          style: { fontSize: '13px', background: '#334155', color: '#fff' }
+        });
+        
+        setIsOpen(false);
+      } catch (error) {
+        console.error(error);
+        toast.error("File upload failed.");
+      } finally {
+        setIsSaving(false);
+      }
   };
 
   const dataSourceOptions = [
@@ -217,6 +238,9 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-10">
                   <div>
                       <Dialog.Title as="h3" className="text-base font-bold text-slate-900">Configure Data Source</Dialog.Title>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-tighter ${workspace.is_polling_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                           {workspace.is_polling_active ? '● Active' : isAutoDisabled ? '● Auto-Disabled' : '● Paused'}
+                      </span>
                       <p className="text-[11px] text-slate-500 font-medium">Select and configure your primary ingestion method.</p>
                   </div>
                   <button 
@@ -230,6 +254,24 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                 {/* Content */}
                 <div className="px-6 py-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
                   <div className="space-y-6">
+                    {isAutoDisabled && (
+                      <div className="p-4 rounded-lg bg-red-50 border border-red-100 flex gap-3 animate-in slide-in-from-top-2 duration-300">
+                        <div className="mt-0.5">
+                          <AlertTriangle className="h-4 w-4 text-red-600" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-red-900">Polling was automatically stopped</p>
+                          <p className="text-[11px] text-red-700 leading-relaxed">
+                            <span className="font-bold underline">Reason:</span> {workspace.last_failure_reason}
+                          </p>
+                          {workspace.auto_disabled_at && (
+                             <p className="text-[10px] text-red-500 flex items-center gap-1">
+                               <Clock className="h-3 w-3" /> Stopped at {new Date(workspace.auto_disabled_at).toLocaleString()}
+                             </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Data Source Selector - Thin borders, clean look */}
                     <RadioGroup value={dataSource} onChange={setDataSource}>

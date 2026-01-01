@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Fragment, useCallback } from "react";
+import React, { useEffect, useState, Fragment, useCallback, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { useNavigate, useParams } from "react-router-dom";
@@ -12,7 +12,7 @@ import { AlertsCard } from './AlertsCard'
 import { Workspace, DataUpload } from "../../types";
 import { Tab } from "@headlessui/react";
 import { AxiosError } from "axios";
-
+import toast from "react-hot-toast";
 // Helper function for styling (from original code)
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
@@ -58,12 +58,24 @@ const WorkspaceDetail: React.FC = () => {
   // ---------------------------------------------------------
   // ✅ PRODUCTION-READY WEBSOCKET IMPLEMENTATION
   // ---------------------------------------------------------
- useEffect(() => {
-    // 1. Guard Clause: Requires ID and authenticated user
+// ---------------------------------------------------------
+  // ✅ PRODUCTION-READY WEBSOCKET IMPLEMENTATION (HARDENED)
+  // ---------------------------------------------------------
+ // 1. Add this Ref at the top of your component (above other states)
+  const socketRef = useRef<WebSocket | null>(null);
+
+  // 2. Updated useEffect block
+  useEffect(() => {
+    // Guard Clause: Requires ID and authenticated user
     if (!id || !user) return;
 
-    let socket: WebSocket | null = null;
+    // 🛡️ RE-RENDER GUARD: If a socket is already open or connecting, don't trigger a new one.
+    // This stops the "Double/Triple Connection" spam when React re-renders.
+    if (socketRef.current?.readyState === WebSocket.OPEN || 
+        socketRef.current?.readyState === WebSocket.CONNECTING) return;
+
     let retryTimeout: NodeJS.Timeout;
+    let pingInterval: NodeJS.Timeout;
     const RECONNECT_DELAY = 3000;
 
     const connect = () => {
@@ -72,43 +84,83 @@ const WorkspaceDetail: React.FC = () => {
 
         const isSecure = window.location.protocol === 'https:';
         const wsProtocol = isSecure ? 'wss' : 'ws';
-        
         const envWsUrl = import.meta.env.VITE_WS_URL; 
+        
         let wsUrl: string;
-
-        // --- 🎯 The Production Fix & Path Correction ---
+        // --- 🎯 Path Logic (Preserved exactly) ---
         if (envWsUrl) {
-            // PRODUCTION (Vercel → Render): Connect directly to the external host
             const sanitizedEnvUrl = envWsUrl.replace(/^(ws|wss):\/\//, ''); 
-            // NOTE: The /api/ prefix has been REMOVED from the path here:
             wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}`;
         } else {
-            // DEVELOPMENT (local Vite server): Connect to the current host
-            const host = window.location.host;
-            // NOTE: The /api/ prefix has been REMOVED from the path here:
-            wsUrl = `${wsProtocol}://${host}/api/workspaces/${id}/ws/${Date.now()}`;
+            wsUrl = `${wsProtocol}://${window.location.host}/api/workspaces/${id}/ws/${Date.now()}`;
         }
-        // ---------------------------------------------
 
-        console.log(`🔌 Connecting WS for Live Updates to: ${wsUrl}`);
-        socket = new WebSocket(wsUrl);
+        console.log(`🔌 Attempting WS Connection: ${wsUrl}`);
+        const ws = new WebSocket(wsUrl);
+        socketRef.current = ws;
 
-        socket.onmessage = (event) => {
-            if (event.data === "job_complete" || event.data === "job_error") {
-                setIsProcessing(false);
-                setRefreshHistoryKey((prev) => prev + 1);
+        ws.onopen = () => {
+            console.log("✅ WS Connected Successfully");
+            // 🔥 HEARTBEAT: Send a ping every 30s to prevent Render from killing idle connection
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send("ping");
+                }
+            }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+            if (event.data === "pong") return; // Ignore heartbeat responses
+            
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === "job_complete" || data.type === "job_error") {
+                    setIsProcessing(false);
+                    setRefreshHistoryKey((prev) => prev + 1);
+
+                    if (data.type === "job_error") {
+                        setWorkspace((prev) => {
+                            if (!prev) return null;
+                            return {
+                                ...prev,
+                                is_polling_active: false,
+                                last_failure_reason: data.error,
+                            };
+                        });
+                        toast.error(data.error || "Sync failed.");
+                    } else {
+                        // Handle Success
+                        setWorkspace((prev) => {
+                            if (!prev) return null;
+                            return {
+                                ...prev,
+                                is_polling_active: true,
+                                failure_count: 0,
+                            };
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                // Handle non-JSON signals
+                if (event.data === "job_complete" || event.data === "job_error") {
+                    setIsProcessing(false);
+                }
             }
         };
 
-        socket.onclose = (e) => {
+        ws.onclose = (e) => {
+            clearInterval(pingInterval);
+            // Don't retry if it was a manual close (code 1000) or tab is hidden
             if (!document.hidden && e.code !== 1000) {
-                console.log(`🔌 WS closed unexpectedly (${e.code}). Retrying in ${RECONNECT_DELAY}ms...`);
+                console.log(`🔌 WS Disconnected (${e.code}). Retrying in ${RECONNECT_DELAY}ms...`);
                 retryTimeout = setTimeout(connect, RECONNECT_DELAY);
             }
         };
-        
-        socket.onerror = (e) => {
-            console.error("🔌 WS Error:", e);
+
+        ws.onerror = (e) => {
+            console.error("🔌 WS Socket Error:", e);
         };
     };
 
@@ -116,7 +168,7 @@ const WorkspaceDetail: React.FC = () => {
 
     const handleVisibilityChange = () => {
         if (document.hidden) {
-            socket?.close(1000, "Tab hidden");
+            socketRef.current?.close(1000, "Tab hidden");
         } else {
             connect();
             setRefreshHistoryKey(k => k + 1); 
@@ -126,13 +178,17 @@ const WorkspaceDetail: React.FC = () => {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-        socket?.close(1000, "Component unmount");
+        // 🧹 ABSOLUTE CLEANUP: Stop all timers and kill connection on unmount
+        socketRef.current?.close(1000, "Component unmount");
+        socketRef.current = null;
         clearTimeout(retryTimeout);
+        clearInterval(pingInterval);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
     
-}, [id, user, setIsProcessing, setRefreshHistoryKey]);
-  // --- Other Handlers (Unchanged) ---
+  // 🔥 STABILITY FIX: Removed all unstable dependencies.
+  // This effect will ONLY re-run if the Workspace ID or User changes.
+  }, [id, user]);
   const handleHistoryLoaded = useCallback((manualUploads: DataUpload[], scheduledFetches: DataUpload[]) => {
       const allUploads = [...manualUploads, ...scheduledFetches];
       if (allUploads.length === 0) {

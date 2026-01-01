@@ -140,7 +140,7 @@ const Hero = () => {
               </span>
 
                 <span className="text-xs leading-none tracking-wide font-manrope">
-                DataPulse v1.0.0 — Academic Prototype (Live)
+                DataPulse v1.1.0 — Academic Prototype (Live)
                 </span>
             </div>
 

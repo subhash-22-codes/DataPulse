@@ -65,6 +65,9 @@ export interface Workspace {
   description_last_updated_at?: string;
   is_deleted?: boolean;
   deleted_at?: string;
+  last_failure_reason?: string | null;
+  auto_disabled_at?: string | null;
+  failure_count?: number;
 }
 
 // In src/types.ts

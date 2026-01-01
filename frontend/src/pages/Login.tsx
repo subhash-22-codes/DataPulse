@@ -262,7 +262,7 @@ const Login: React.FC = () => {
             <p>© 2025 DataPulse</p>
 
             <div className="flex items-center gap-4">
-              <span>v1.0.0</span>
+              <span>v1.1.0</span>
 
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
