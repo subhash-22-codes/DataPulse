@@ -4,6 +4,7 @@ import logging
 from fastapi import WebSocket
 from typing import List, Dict
 import asyncio
+from starlette.websockets import WebSocketState
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,15 @@ class ConnectionManager:
         if workspace_id in self.workspace_connections:
             connections = list(self.workspace_connections[workspace_id])
             logger.info(f"Broadcasting '{message}' to {len(connections)} clients in workspace {workspace_id}")
-            send_tasks = [conn.send_text(message) for conn in connections]
-            await asyncio.gather(*send_tasks, return_exceptions=True)
+            
+            # 🔥 Corrected: Check if state is CONNECTED before sending to prevent crashes
+            send_tasks = [
+                conn.send_text(message) 
+                for conn in connections 
+                if conn.client_state == WebSocketState.CONNECTED
+            ]
+            if send_tasks:
+                await asyncio.gather(*send_tasks, return_exceptions=True)
 
     async def push_to_user(self, user_id: str, message: dict):
         """
@@ -66,8 +74,15 @@ class ConnectionManager:
         if user_id in self.user_connections:
             connections = list(self.user_connections[user_id])
             logger.debug(f"Pushing notification to {len(connections)} sockets for user {user_id}")
-            send_tasks = [conn.send_json(message) for conn in connections]
-            await asyncio.gather(*send_tasks, return_exceptions=True)
+            
+            # 🔥 Corrected: Check if state is CONNECTED before sending to prevent crashes
+            send_tasks = [
+                conn.send_json(message) 
+                for conn in connections 
+                if conn.client_state == WebSocketState.CONNECTED
+            ]
+            if send_tasks:
+                await asyncio.gather(*send_tasks, return_exceptions=True)
 
 
 # Global instance for the app

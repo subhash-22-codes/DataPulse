@@ -25,11 +25,13 @@ from app.models.data_upload import DataUpload
 from app.models.alert_rule import AlertRule
 from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
+from app.services.tasks import executor
 
 # Services & Managers
 from app.api.alerts import AlertRuleResponse 
 from app.api.dependencies import get_current_user
 from app.core.connection_manager import manager
+from app.services.tasks import process_data_fetch_task
 
 
 # --- Setup ---
@@ -345,29 +347,39 @@ async def update_workspace(
         # This keeps your frontend array and backend array in perfect sync.
         db_workspace.team_members = final_members
 
-    # 5. Apply generic updates
+
     for key, value in update_data.items():
         if key == 'api_url' and value is not None:
             value = str(value)
         setattr(db_workspace, key, value)
+        
+    user_toggled_on = update_data.get('is_polling_active') is True
+    
+    if config_changed:
+        # Reset failure metrics so the UI "Red Banner" clears
+        db_workspace.failure_count = 0
+        db_workspace.last_failure_reason = None
+        db_workspace.auto_disabled_at = None
+        db_workspace.is_polling_active = False
+        
+        if user_toggled_on:
+            # User fixed config AND clicked 'Enable Sync' -> Let it run!
+            db_workspace.is_polling_active = True
+            logger.info(f"🚀 Manual re-enable detected for '{db_workspace.name}'. Resetting failures.")
+        else:
+            # User fixed config but left the switch OFF -> Keep it off for safety.
+            db_workspace.is_polling_active = False
+            logger.info(f"🛡️ Config updated for '{db_workspace.name}'. Polling stays OFF.")
     
     db.commit()
     db.refresh(db_workspace)
+    user_toggled_on = update_data.get("is_polling_active") is True
 
-    
-    # 6. CONNECT-ON-DEMAND TRIGGER 
-    should_trigger_fetch = (
-        config_changed and 
-        db_workspace.data_source in ["API", "DB"] and 
-        db_workspace.is_polling_active is True 
-    )
-
-    if should_trigger_fetch:
-        if APP_MODE == "production":
-            from app.services.tasks import process_data_fetch_task 
-            loop = asyncio.get_event_loop()
-            background_tasks.add_task(process_data_fetch_task, str(db_workspace.id), loop)
-
+    if user_toggled_on and db_workspace.is_polling_active:
+        current_loop = asyncio.get_running_loop()
+        logger.info(f"⚡ [UX KICKSTART] Triggering instant fetch for '{db_workspace.name}'")
+        executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
+        
     return db_workspace
 
 
@@ -407,10 +419,17 @@ async def upload_csv_for_workspace(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    # 2. Read & decode CSV
+    # 2. Read & decode CSV (with RAM Protection for Render Free Tier)
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB Limit
     try:
-        file_bytes = await file.read()
+        # Read only up to the limit to check size before full load
+        file_bytes = await file.read(MAX_FILE_SIZE + 1)
+        if len(file_bytes) > MAX_FILE_SIZE:
+            await file.close()
+            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 5MB.")
+        
         file_text = file_bytes.decode("utf-8")
+        del file_bytes  # Explicitly free memory for the bytes copy
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
 
@@ -448,7 +467,6 @@ async def upload_csv_for_workspace(
         "task_id": task_id,
         "message": "File upload successful, processing started."
     }
-
 #  Endpoint to get a workspace's upload history ---
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
 def get_workspace_uploads(
@@ -584,6 +602,7 @@ async def websocket_endpoint(
         mock_scope = websocket.scope.copy()
         mock_scope["type"] = "http"
         mock_scope["method"] = "GET"
+        
         from fastapi import Request
         mock_request = Request(mock_scope)
         
@@ -594,13 +613,17 @@ async def websocket_endpoint(
         
     except Exception as e:
         logger.warning(f"WS authentication failed: {e}")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        try:
+            # Code 1008 is for Policy Violation (Auth failure)
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except Exception:
+            pass # Connection might already be closed
         # Ensure DB is closed even on auth failure
         db.close()
         return
 
-    # Close the DB connection NOW.
-    # We are done with the DB. We don't need it for the long-running loop.
+    # Close the DB connection NOW. 
+    # This is excellent for Render stability as it keeps connection pools open.
     db.close() 
 
     # 2. Accept connection (Zero DB usage from here on)
@@ -615,19 +638,23 @@ async def websocket_endpoint(
     # 3. Keep-alive loop
     try:
         while True:
+            # This line keeps the connection open by waiting for data
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        # Normal disconnect (user closed tab or navigated away)
         logger.info(f"WS Disconnected: {client_id}")
     except Exception as e:
+        # Unexpected error (network flicker or server issue)
         logger.error(f"WS Error {client_id}: {e}", exc_info=True)
     finally:
         # 4. Cleanup
+        # Ensure we always remove the connection from our manager to prevent memory leaks
         if user_id_str:
             manager.disconnect('workspace', workspace_id, websocket)
             manager.disconnect('user', user_id_str, websocket)
-        
+            
 
 # ----Endpoint: Request Delete OTP Endpoint
 @router.post("/{workspace_id}/request-delete-otp", status_code=200)
@@ -642,7 +669,11 @@ async def request_delete_otp(
     COOLDOWN_SECONDS = 60
 
     if current_user.delete_confirmation_expiry:
-        time_until_expiry = (current_user.delete_confirmation_expiry - dt.datetime.now(dt.timezone.utc)).total_seconds()
+    # 🛡️ Force the DB value to be UTC-aware, then subtract current UTC time
+        time_until_expiry = (
+            current_user.delete_confirmation_expiry.replace(tzinfo=dt.timezone.utc) - 
+            dt.datetime.now(dt.timezone.utc)
+        ).total_seconds()
 
         # If expiry > 9 minutes left => sent within last 60 seconds
         if time_until_expiry > (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS):

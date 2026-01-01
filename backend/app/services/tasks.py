@@ -5,7 +5,7 @@ import requests
 import logging
 import datetime as dt
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import google.generativeai as genai
@@ -23,7 +23,12 @@ from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
+import concurrent.futures
+import json
+import re
 
+# Create a ThreadPool at the module level to reuse threads
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 APP_MODE = os.getenv("APP_MODE")
@@ -218,25 +223,300 @@ def check_alert_rules(
     else:
         logger.info("✅ Scan complete: No violations found.")
 
-# ==================
-#  Scheduled Tasks 
-# ==================
+
+def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reason: str, is_hard_fail: bool = True, loop: asyncio.AbstractEventLoop = None):
+    try:
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not ws: return
+
+        now = datetime.now(timezone.utc)
+
+        if is_hard_fail:
+            if ws.is_polling_active:
+                ws.is_polling_active = False
+                ws.last_failure_reason = user_message   
+                ws.auto_disabled_at = now
+                ws.failure_count = 0
+                db.commit()
+                logger.warning(f"🛑 [HARD KILL]  '{ws.name}': {internal_reason}")
+        else:
+            ws.failure_count += 1
+            ws.last_failure_reason = user_message
+            if ws.failure_count >= 3:
+                ws.is_polling_active = False
+                ws.auto_disabled_at = now
+                logger.error(f"🚨 [SOFT KILL] '{ws.name}' | {internal_reason}")
+            db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"🔥 [KILL_POLLER] DB Update Failed: {e}")
+
+    # --- THE CORRECT BROADCAST LOGIC ---
+    if loop and loop.is_running():
+        payload = {
+            "type": "job_error", 
+            "workspace_id": str(workspace_id),
+            "error": user_message,
+            "is_hard_fail": is_hard_fail
+        }
+
+        try:
+            # We use the explicitly passed loop to jump back to the main thread
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast_to_workspace(str(workspace_id), json.dumps(payload)), 
+                loop
+            )
+            logger.info(f"📡 Broadcasted 'job_error' to UI for {workspace_id}")
+        except Exception as e:
+            logger.error(f"❌ WebSocket Broadcast Failed: {e}")
+    else:
+        logger.warning(f"⚠️ No active loop provided to kill_poller. UI will not update automatically.")
+        
+
+def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
+    logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
+    db: Session = SessionLocal()
+    MAX_BYTES = 5 * 1024 * 1024
+    
+    try:
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not workspace or not workspace.is_polling_active:
+            return
+        header_name = workspace.api_header_name
+        header_value = workspace.api_header_value
+
+        if header_name == "Authorization":
+            if not header_value or not header_value.startswith(("Bearer ", "Basic ")):
+                kill_poller(db, workspace_id, user_message="The Authorization header is missing or invalid. Please provide a valid Bearer or Basic token.",internal_reason="Hard Fail: Malformed Authorization header", is_hard_fail=True,loop=loop)
+                return
+        
+        if not workspace.api_url or not workspace.api_url.startswith("http"):
+            kill_poller(db, workspace_id, user_message="The API URL is missing or invalid. Please provide a valid HTTP or HTTPS endpoint.",internal_reason="Hard Fail: Invalid API URL", is_hard_fail=True,loop=loop)
+            return
+
+        headers = {header_name: header_value} if header_name and header_value else {}
+        
+        try:
+            response = requests.get(workspace.api_url, headers=headers, timeout=(10, 30), stream=True)
+            
+            cl = response.headers.get('Content-Length')
+            if cl and int(cl) > MAX_BYTES:
+                kill_poller(db, workspace_id, user_message="The data source is too large (>5MB). Please reduce the payload size.", internal_reason="Hard Fail: Payload exceeds 5MB limit", is_hard_fail=True, loop=loop)
+                return
+            
+            if response.status_code in [401, 403]:
+                kill_poller(db, workspace_id, user_message="The API rejected the request due to invalid or missing credentials. Please verify your API key or token.",internal_reason=f"API Auth Failed ({response.status_code})", is_hard_fail=True,loop=loop)
+                return
+
+            response.raise_for_status()
+            
+            content = b""
+            for chunk in response.iter_content(chunk_size=8192):
+                content += chunk
+                if len(content) > MAX_BYTES:
+                    kill_poller(db, workspace_id, user_message="Data stream exceeds the 5MB limit allowed on this plan.", internal_reason="Hard Fail: Stream exceeded 5MB limit", is_hard_fail=True, loop=loop)
+                    return
+
+        except requests.exceptions.HTTPError as http_err:
+            kill_poller(db, workspace_id,user_message="The API responded with an error while processing the request. We'll retry automatically.",internal_reason=f"HTTP Error: {http_err}- ({response.status_code})", is_hard_fail=False,loop=loop)
+            return
+        except requests.Timeout:
+            kill_poller(db, workspace_id, user_message="The API took too long to respond. We'll retry automatically.", internal_reason="Network Timeout while calling API", is_hard_fail=False,loop=loop)
+            return
+        except requests.RequestException as req_err:
+            kill_poller(db, workspace_id, user_message="We couldn't reach the API due to a network issue. We'll retry automatically.",internal_reason=f"Request error: {str(req_err)[:120]}", is_hard_fail=False,loop=loop)
+            return
+
+        data = json.loads(content)
+        if not data:
+            logger.warning(f"-> [API FETCHER] Empty data for {workspace_id}")
+            kill_poller(db, workspace_id,  user_message="The API request succeeded but returned no data. Please check filters or response format.",internal_reason="Soft Fail: API returned empty response", is_hard_fail=False,loop=loop)
+            return
+
+        df = pd.json_normalize(data)
+        csv_content = df.to_csv(index=False)
+        
+        new_upload = DataUpload(
+            workspace_id=workspace.id, 
+            file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_api.csv",
+            file_content=csv_content,
+            upload_type='api_poll'
+        )
+        db.add(new_upload)
+
+        workspace.last_polled_at = datetime.now(timezone.utc)
+        workspace.failure_count = 0 
+        
+        db.commit()
+        db.refresh(new_upload)
+        if loop is None:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = None
+        
+        process_csv_task(str(new_upload.id), loop)
+   
+
+    except Exception as e:
+        logger.error(f"🔥 [API FETCHER] Unexpected Engine Crash: {e}", exc_info=True)
+        kill_poller(db, workspace_id, user_message="Something went wrong while fetching data from the API. We've stopped this task to prevent further issues.",internal_reason=f"API Fetcher Crash: {str(e)[:120]}", is_hard_fail=False,loop=loop)
+    finally:
+        db.close()
+        
+
+def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
+    MAX_ROWS = 25000
+    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
+    db: Session = SessionLocal()
+    engine = None
+    
+    try:
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        
+        if not workspace:
+            logger.warning(f"-> [DB FETCHER] Workspace {workspace_id} not found.")
+            return
+
+        if not workspace.is_polling_active:
+            logger.warning(f"-> [DB FETCHER] Polling disabled for {workspace.name}. Aborting.")
+            return
+
+        if not all([workspace.db_host, workspace.db_user, workspace.db_password, workspace.db_name, workspace.db_query]):
+            kill_poller(db, workspace_id, user_message="Database connection details are missing or incomplete. Please review your database settings.",internal_reason="Hard Fail: Incomplete DB configuration", is_hard_fail=True,loop=loop)
+            return
+
+        
+        raw_query = workspace.db_query.strip()
+        clean_query = raw_query.rstrip(';')
+        
+        # Strip SQL comments to prevent keyword obfuscation/bypassing
+        query_no_comments = re.sub(r'(--.*)|(/\*[\s\S]*?\*/)', ' ', clean_query)
+        lower_query = query_no_comments.lower()
+
+        # Structural Check: Must start with SELECT
+        if not lower_query.strip().startswith("select"):
+            kill_poller(db, workspace_id, user_message="Only read-only SELECT queries are allowed.", internal_reason="Security: Non-SELECT start", is_hard_fail=True, loop=loop)
+            return
+
+        # Injection Check: No internal semi-colons
+        if ";" in clean_query:
+            kill_poller(db, workspace_id, user_message="Multiple statements are not permitted.", internal_reason="Security: Semicolon detected", is_hard_fail=True, loop=loop)
+            return
+
+        # Content Check: Forbidden Keywords (DML, DDL, RCE, and File access)
+        forbidden_keywords = {
+            'insert', 'update', 'delete', 'drop', 'truncate', 'alter', 'create', 
+            'grant', 'revoke', 'vacuum', 'copy', 'pg_read_file', 'pg_write_file', 
+            'lo_export', 'lo_import', 'dblink', 'program', 'pg_sleep'
+        }
+        # Tokenize by removing punctuation and splitting by whitespace
+        query_words = set(lower_query.replace('(', ' ').replace(')', ' ').replace(',', ' ').split())
+        found_forbidden = query_words.intersection(forbidden_keywords)
+
+        if found_forbidden:
+            kill_poller(db, workspace_id, user_message=f"Restricted keywords detected: {', '.join(found_forbidden)}", internal_reason="Security: Forbidden keywords", is_hard_fail=True, loop=loop)
+            return
+
+        try:
+            encoded_password = quote_plus(workspace.db_password)
+            port = workspace.db_port or 5432 
+            connection_url = f"postgresql://{workspace.db_user}:{encoded_password}@{workspace.db_host}:{port}/{workspace.db_name}"
+            
+            engine = create_engine(
+                connection_url, 
+                pool_pre_ping=True,
+                connect_args={"options": "-c statement_timeout=30000"} 
+            )
+            
+            with engine.connect() as connection:
+                # --- 2. RESOURCE SANDBOXING ---
+                connection.execute(text("SET work_mem = '4MB';"))
+                connection.execute(text("SET temp_buffers = '2MB';"))
+                
+                # --- 3. ROW-LIMIT ENFORCEMENT ---
+                safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
+                df = pd.read_sql(text(safe_query), connection)
+
+            # Check if we hit the limit
+            if len(df) > MAX_ROWS:
+                kill_poller(db, workspace_id, user_message=f"Query result too large (Max {MAX_ROWS} rows).", internal_reason="Hard Fail: SQL row limit exceeded", is_hard_fail=True, loop=loop)
+                return
+
+        except Exception as conn_err:
+            err_msg = str(conn_err).lower()
+            
+            auth_patterns = ["authentication failed", "login failed", "password"]
+            permission_patterns = ["permission denied", "privileges", "access denied"]
+            query_patterns = ["syntax error", "undefined_table", "invalid input"]
+            setup_patterns = ["does not exist", "database", "role", "user"]
+            
+            if any(p in err_msg for p in auth_patterns):
+                kill_poller(db, workspace_id, user_message="We couldn't connect to your database. Please verify the username and password.", internal_reason=f"Auth failure: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+            elif any(p in err_msg for p in permission_patterns):
+                kill_poller(db, workspace_id, user_message="The database user does not have permission to run this query.", internal_reason=f"Permission denied: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+            elif any(p in err_msg for p in query_patterns):
+                kill_poller(db, workspace_id, user_message="Your query couldn't be executed. Please review the query and try again.", internal_reason=f"Query error: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+            elif any(p in err_msg for p in setup_patterns):
+                kill_poller(db, workspace_id, user_message="The specified database or user could not be found. Please verify your database setup.", internal_reason=f"Database setup issue: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+            else:
+                kill_poller(db, workspace_id, user_message="We're having trouble reaching your database right now. We'll retry automatically.", internal_reason=f"Temporary DB issue: {str(conn_err)[:120]}", is_hard_fail=False, loop=loop)
+            return
+
+        if df.empty:
+            logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace.name}")
+            kill_poller(db, workspace_id, user_message="Your query ran successfully but didn't return any data. Try adjusting filters or date ranges.",internal_reason="Soft Fail: Query returned 0 rows", is_hard_fail=False,loop=loop)
+            return
+
+        csv_content = df.to_csv(index=False)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"{timestamp}_db_query.csv"
+
+        new_upload = DataUpload(
+            workspace_id=workspace.id, 
+            file_path=file_name,
+            file_content=csv_content,
+            upload_type='db_query'
+        )
+        db.add(new_upload)
+        
+        workspace.last_polled_at = datetime.now(timezone.utc)
+        workspace.failure_count = 0
+        
+        db.commit()
+        db.refresh(new_upload)
+
+        if loop is None:
+            try: loop = asyncio.get_event_loop()
+            except RuntimeError: loop = None
+        
+        process_csv_task(str(new_upload.id), loop)
+
+    except Exception as e:
+        logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
+        kill_poller(db, workspace_id, user_message="Something went wrong while processing your data. We've stopped this task to prevent further issues.", internal_reason=f"Engine Crash: {str(e)[:120]}", is_hard_fail=False,loop=loop)
+        
+    finally:
+        if engine: 
+            engine.dispose()
+        db.close()
+        
 def schedule_data_fetches() -> None:
+ 
     logger.info("⏰ [SCHEDULER] Checking for due data fetches...")
     
     db: Session = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
         
+        # 1. Only fetch active workspaces
         workspaces = db.query(
             Workspace.id,
             Workspace.name,
             Workspace.polling_interval,
             Workspace.last_polled_at,
-            Workspace.data_source,
-            Workspace.api_url,
-            Workspace.db_host,
-            Workspace.db_query
+            Workspace.data_source
         ).filter(
             Workspace.is_polling_active == True
         ).all()
@@ -245,7 +525,6 @@ def schedule_data_fetches() -> None:
             logger.info("-> No active workspaces found.")
             return
 
-        logger.info(f"-> Analyzing {len(workspaces)} active workspace(s)...")
         triggered_count = 0
 
         for ws in workspaces:
@@ -254,6 +533,7 @@ def schedule_data_fetches() -> None:
                 last_polled = ws.last_polled_at
                 interval = ws.polling_interval
 
+                # 2. Timing Logic
                 if not last_polled:
                     is_due = True
                 elif interval == 'every_minute':
@@ -262,24 +542,25 @@ def schedule_data_fetches() -> None:
                     if (now - last_polled) > timedelta(hours=1): is_due = True
                 elif interval == 'daily':
                     if (now - last_polled) > timedelta(days=1): is_due = True
-                    
+                
                 if is_due:
-                    if ws.data_source == 'API' and ws.api_url:
-                        logger.info(f"✅ API DUE! Triggering fetch for '{ws.name}' ({ws.id})")
-                        fetch_api_data(str(ws.id))
-                        triggered_count += 1
-                        
-                    elif ws.data_source == 'DB' and ws.db_host and ws.db_query:
-                        logger.info(f"✅ DB DUE! Triggering fetch for '{ws.name}' ({ws.id})")
-                        fetch_db_data(str(ws.id))
-                        triggered_count += 1
-                        
+                    logger.info(f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool...")
+                    
+                    from app.services.tasks import process_data_fetch_task
+                    
+                    executor.submit(
+                        process_data_fetch_task, 
+                        str(ws.id), 
+                        None  
+                    )
+                    triggered_count += 1
+
             except Exception as e:
-                logger.error(f"⚠️ Error scheduling workspace {ws.id}: {e}", exc_info=True)
+                logger.error(f"⚠️ Error analyzing workspace {ws.id}: {e}")
                 continue
 
         if triggered_count > 0:
-            logger.info(f"🚀 Triggered {triggered_count} fetch jobs.")
+            logger.info(f"🚀 Offloaded {triggered_count} jobs to background threads.")
 
     except Exception as e:
         logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
@@ -287,149 +568,36 @@ def schedule_data_fetches() -> None:
         db.close()
         
 def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
-    logger.info(f"🤖 [ROUTER] Routing data fetch for workspace {workspace_id}...")
+    logger.info(f"🛡️ [GATE] Validating execution request for workspace: {workspace_id}")
+
+    if loop is None:
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            try:
+                loop = asyncio.get_event_loop_policy().get_event_loop()
+            except Exception:
+                loop = None
+
     db = SessionLocal()
     try:
         ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if not ws:
-            logger.warning(f"Workspace {workspace_id} not found.")
+        
+        if not ws or not ws.is_polling_active:
+            logger.warning(f"-> [GATE] Aborting. Workspace {workspace_id} is gone or inactive.")
             return
 
         if ws.data_source == 'API':
-            fetch_api_data(str(ws.id), loop)
-        elif ws.data_source == 'DB':
-            fetch_db_data(str(ws.id), loop)
-        else:
-            logger.info(f"Workspace {ws.id} is not configured for remote polling.")
-    finally:
-        db.close()
-
-def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
-    logger.info(f"🤖 [API FETCHER] Starting API fetch for workspace: {workspace_id}")
-    db: Session = SessionLocal()
-    try:
-        workspace_data = db.query(
-            Workspace.id,
-            Workspace.api_url, 
-            Workspace.api_header_name, 
-            Workspace.api_header_value
-        ).filter(Workspace.id == workspace_id).first()
-
-        if not workspace_data or not workspace_data.api_url:
-            logger.warning(f"-> [API FETCHER] Workspace or API URL not found. Aborting.")
-            return
-
-        headers = {}
-        if workspace_data.api_header_name and workspace_data.api_header_value:
-            headers[workspace_data.api_header_name] = workspace_data.api_header_value
-            logger.info(f"🔑 Using API Key Header: {workspace_data.api_header_name}")
+            logger.info(f"-> [GATE] Launching API Fetcher for '{ws.name}'...")
+            fetch_api_data(str(ws.id), loop) # Passes the (potentially None) loop
             
-        response = requests.get(
-            workspace_data.api_url, 
-            headers=headers, 
-            timeout=(10, 30)
-        )
-        response.raise_for_status()
-        
-        data = response.json()
-        if not data:
-            logger.warning(f"-> [API FETCHER] API returned empty data for {workspace_id}.")
-            return
-
-        df = pd.json_normalize(data)
-        
-        csv_content = df.to_csv(index=False)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_api_poll.csv"
-
-        new_upload = DataUpload(
-            workspace_id=workspace_data.id, 
-            file_path=file_name,
-            file_content=csv_content,
-            upload_type='api_poll'
-        )
-        db.add(new_upload)
-
-        db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
-        )
-        
-        db.commit()
-        db.refresh(new_upload)
-
-        logger.info("-> [API FETCHER] Handing off to the analyzer task...")
-        process_csv_task(str(new_upload.id), loop)
-
-    except requests.Timeout:
-        logger.error(f"❌ [API FETCHER] Timeout connecting to {workspace_data.api_url}")
+        elif ws.data_source == 'DB':
+            logger.info(f"-> [GATE] Launching DB Fetcher for '{ws.name}'...")
+            fetch_db_data(str(ws.id), loop)
+            
     except Exception as e:
-        logger.error(f"❌ [API FETCHER] An error occurred: {e}", exc_info=True)
+        logger.error(f"🔥 [GATE] Internal Gate Failure: {e}")
     finally:
-        db.close()
-
-def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
-    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
-    db: Session = SessionLocal()
-    try:
-        ws_config = db.query(
-            Workspace.id,
-            Workspace.db_host,
-            Workspace.db_user,
-            Workspace.db_password,
-            Workspace.db_name,
-            Workspace.db_port,
-            Workspace.db_query
-        ).filter(Workspace.id == workspace_id).first()
-
-        if not ws_config or not all([ws_config.db_host, ws_config.db_user, ws_config.db_password, ws_config.db_name, ws_config.db_query]):
-            logger.warning(f"-> [DB FETCHER] Incomplete DB config for {workspace_id}. Aborting.")
-            return
-        
-        encoded_password = quote_plus(ws_config.db_password)
-        port = ws_config.db_port or 5432 
-        connection_url = f"postgresql://{ws_config.db_user}:{encoded_password}@{ws_config.db_host}:{port}/{ws_config.db_name}"
-        
-        engine = create_engine(
-            connection_url, 
-            pool_pre_ping=True,
-            connect_args={"options": "-c statement_timeout=30000"} # 30s timeout
-        )
-        
-        with engine.connect() as connection:
-            df = pd.read_sql(ws_config.db_query, connection)
-
-        if df.empty:
-             logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace_id}.")
-             return
-
-        csv_content = df.to_csv(index=False)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_db_query.csv"
-
-        new_upload = DataUpload(
-            workspace_id=ws_config.id, 
-            file_path=file_name,
-            file_content=csv_content,
-            upload_type='db_query'
-        )
-        db.add(new_upload)
-        
-        db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
-        )
-        
-        db.commit()
-        db.refresh(new_upload)
-
-        logger.info("-> [DB FETCHER] Handing off to the analyzer task...")
-        process_csv_task(str(new_upload.id), loop)
-
-    except Exception as e:
-        logger.error(f"❌ [DB FETCHER] An error occurred: {e}", exc_info=True)
-    finally:
-        
-        if 'engine' in locals():
-            engine.dispose()
         db.close()
         
 # ======================
@@ -453,6 +621,9 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     status_message = "job_error"
     new_notifications_created = False
     
+    # SAFE LIMIT: Prevent OOM on Render Free Tier (512MB)
+    MAX_ROWS = 25000 
+    
     try:
         current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
         if not current_upload: 
@@ -466,14 +637,25 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             logger.warning(f"[WORKER] No content for upload {upload_id}.")
             return
 
+        original_row_count = 0
+        is_truncated = False
         try:
-            df = pd.read_csv(StringIO(csv_content))
+            # 🛡️ THE ROW BOUNCER: Only read first 25k rows to protect RAM
+            df = pd.read_csv(StringIO(csv_content), nrows=MAX_ROWS + 1)
+            original_row_count = len(df)
+            
+            if original_row_count > MAX_ROWS:
+                is_truncated = True
+                logger.warning(f"⚠️ [WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
+                df = df.head(MAX_ROWS)
+
             for col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='ignore')
                 
         except Exception as e:
             logger.error(f"❌ Failed to parse CSV: {e}")
-            return
+            status_message = "job_error"
+            return {"status": "error"}
 
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         new_row_count = len(df)
@@ -507,13 +689,18 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         analysis_results = {
             "row_count": new_row_count, 
             "column_count": len(df.columns), 
-            "summary_stats": summary_stats
+            "summary_stats": summary_stats,
+            "is_truncated": is_truncated
         }
         
         current_upload.schema_info = new_schema
         current_upload.analysis_results = analysis_results
         current_upload.schema_changed_from_previous = schema_has_changed
         
+        # RELEASE RAM: Immediately free the dataframe objects before heavy logic
+        del df
+        del stats_df
+
         # Notifications & Insights
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
@@ -598,9 +785,17 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     
     finally:
         if APP_MODE == "production" and workspace_id_str:
-            logger.info(f"📡 [WORKER] Signaling '{status_message}' for {workspace_id_str}...")
+            # Uses status_message dynamically (job_complete OR job_error)
+            payload = {
+                "type": status_message, 
+                "workspace_id": workspace_id_str
+            }
+            json_message = json.dumps(payload)
+
+            logger.info(f"📡 [WORKER] Signaling final state {status_message} for {workspace_id_str}...")
+            
             run_async_safely(
-                manager.broadcast_to_workspace(workspace_id_str, status_message),
+                manager.broadcast_to_workspace(workspace_id_str, json_message),
                 loop
             )
         

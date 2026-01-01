@@ -65,7 +65,9 @@ class Workspace(Base):
     is_polling_active = Column(Boolean, default=False, nullable=False, server_default='false') 
     tracked_column = Column(String(100), nullable=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-    
+    failure_count = Column(Integer, default=0, nullable=False, server_default='0')
+    last_failure_reason = Column(Text, nullable=True)
+    auto_disabled_at = Column(DateTime(timezone=True), nullable=True)
     
     db_type = Column(String(50), nullable=True) 
     db_host = Column(String(255), nullable=True)
