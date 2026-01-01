@@ -20,4 +20,3 @@ __pycache__/
 /backend/venv
 /backend/env
 /backend/celerybeat-schedule
-/backend/backup_auth.txt

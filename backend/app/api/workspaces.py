@@ -663,19 +663,16 @@ async def request_delete_otp(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-   
-    # --- 1. NEW: RATE LIMIT CHECK (Prevent Spam) ---
+  
     OTP_DURATION_MINUTES = 10
     COOLDOWN_SECONDS = 60
+    
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+
 
     if current_user.delete_confirmation_expiry:
-    # 🛡️ Force the DB value to be UTC-aware, then subtract current UTC time
-        time_until_expiry = (
-            current_user.delete_confirmation_expiry.replace(tzinfo=dt.timezone.utc) - 
-            dt.datetime.now(dt.timezone.utc)
-        ).total_seconds()
+        time_until_expiry = (current_user.delete_confirmation_expiry - now).total_seconds()
 
-        # If expiry > 9 minutes left => sent within last 60 seconds
         if time_until_expiry > (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS):
             retry_after = int(time_until_expiry - (OTP_DURATION_MINUTES * 60 - COOLDOWN_SECONDS))
             raise HTTPException(
@@ -683,10 +680,8 @@ async def request_delete_otp(
                 detail=f"Please wait {retry_after} seconds before requesting a new code."
             )
 
-
     ws_uuid = uuid.UUID(workspace_id)
     
-    # 2. Find Workspace (Ensure it's not already deleted)
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
@@ -696,21 +691,17 @@ async def request_delete_otp(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found or access denied.")
 
-    # 3. Generate 6-digit OTP
     otp = f"{random.randint(100000, 999999)}"
     
-    # 4. Save to User Model
     current_user.delete_confirmation_otp = otp
-    current_user.delete_confirmation_expiry = dt.datetime.now(dt.timezone.utc) + timedelta(minutes=OTP_DURATION_MINUTES)
+    current_user.delete_confirmation_expiry = now + timedelta(minutes=OTP_DURATION_MINUTES)
     db.commit()
 
-    # 5. Send Email (Async)
     await send_delete_otp_email(current_user.email, otp, workspace.name)
     
     return {"message": "OTP sent to your email."}
 
 
-# --- ENDPOINT: Confirm and Delete ---
 @router.delete("/{workspace_id}/confirm", status_code=204)
 async def confirm_delete_workspace(
     workspace_id: str,
@@ -718,11 +709,13 @@ async def confirm_delete_workspace(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+  
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
     
     if not current_user.delete_confirmation_otp or current_user.delete_confirmation_otp != payload.otp:
         raise HTTPException(status_code=400, detail="Invalid verification code.")
-        
-    if not current_user.delete_confirmation_expiry or dt.datetime.now(dt.timezone.utc) > current_user.delete_confirmation_expiry:
+    
+    if not current_user.delete_confirmation_expiry or now > current_user.delete_confirmation_expiry:
         raise HTTPException(status_code=400, detail="Verification code has expired.")
 
     ws_uuid = uuid.UUID(workspace_id)
@@ -734,11 +727,10 @@ async def confirm_delete_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found.")
 
-    # SOFT DELETE 
+
     workspace.is_deleted = True
-    workspace.deleted_at = dt.datetime.now(dt.timezone.utc)
+    workspace.deleted_at = now
     
-    # --- BROADCAST NOTIFICATIONS ---
     for member in workspace.team_members:
         team_note = Notification(
             user_id=member.id,
@@ -756,7 +748,6 @@ async def confirm_delete_workspace(
     )
     db.add(owner_note)
     
-    # Clear the DELETE otp
     current_user.delete_confirmation_otp = None
     current_user.delete_confirmation_expiry = None
     
