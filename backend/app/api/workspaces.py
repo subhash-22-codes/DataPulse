@@ -1,17 +1,16 @@
 import os
 import uuid
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import datetime as dt
-from datetime import datetime
 from typing import List, Optional
 import asyncio
 # FastAPI & Pydantic
 from fastapi import (
     APIRouter, Depends, HTTPException, Header, UploadFile, 
     File, WebSocket, WebSocketDisconnect, Query, Response, 
-    BackgroundTasks, status
+    BackgroundTasks, status, Request
 )
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict, HttpUrl
 
@@ -29,10 +28,10 @@ from app.services.tasks import executor
 
 # Services & Managers
 from app.api.alerts import AlertRuleResponse 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, limiter
 from app.core.connection_manager import manager
 from app.services.tasks import process_data_fetch_task
-
+from app.core.guard import send_telegram_alert
 
 # --- Setup ---
 logger = logging.getLogger(__name__)
@@ -172,7 +171,9 @@ class DeleteConfirmation(BaseModel):
 #  Routes
 # ==========================
 @router.post("/", response_model=WorkspaceResponse)
+@limiter.limit("5/minute")
 def create_workspace(
+    request: Request,
     workspace: WorkspaceCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -247,7 +248,9 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
     return workspace
 
 @router.put("/{workspace_id}", response_model=WorkspaceResponse)
+@limiter.limit("10/minute")
 async def update_workspace(
+    request: Request,
     workspace_id: str, 
     workspace_update: WorkspaceUpdate, 
     background_tasks: BackgroundTasks, 
@@ -380,6 +383,15 @@ async def update_workspace(
         logger.info(f"⚡ [UX KICKSTART] Triggering instant fetch for '{db_workspace.name}'")
         executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
         
+    if background_tasks:
+        background_tasks.add_task(
+            send_telegram_alert,
+            f"BLUE ALERT: Workspace Updated\n"
+            f"Name: {db_workspace.name}\n"
+            f"User: {current_user.email}\n"
+            f"Config Changed: {config_changed}"
+        )
+        
     return db_workspace
 
 
@@ -399,7 +411,9 @@ def get_team_workspaces(
 
 # --- THIS IS THE NEW, UPGRADED "Digital Scanner" FUNCTION ---
 @router.post("/{workspace_id}/upload-csv", response_model=TaskResponse)
+@limiter.limit("5/minute")
 async def upload_csv_for_workspace(
+    request: Request,
     workspace_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -658,8 +672,11 @@ async def websocket_endpoint(
 
 # ----Endpoint: Request Delete OTP Endpoint
 @router.post("/{workspace_id}/request-delete-otp", status_code=200)
+@limiter.limit("3/minute")
 async def request_delete_otp(
+    request: Request,
     workspace_id: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -667,9 +684,8 @@ async def request_delete_otp(
     OTP_DURATION_MINUTES = 10
     COOLDOWN_SECONDS = 60
     
-    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
-
-
+    now = datetime.now(timezone.utc)
+    
     if current_user.delete_confirmation_expiry:
         time_until_expiry = (current_user.delete_confirmation_expiry - now).total_seconds()
 
@@ -699,18 +715,28 @@ async def request_delete_otp(
 
     await send_delete_otp_email(current_user.email, otp, workspace.name)
     
+    background_tasks.add_task(
+        send_telegram_alert,
+        f"Blue Alert: Workspace Delete Requested\n"
+        f"User: {current_user.email}\n"
+        f"Workspace ID: {workspace_id}"
+    )
+    
     return {"message": "OTP sent to your email."}
 
 
 @router.delete("/{workspace_id}/confirm", status_code=204)
+@limiter.limit("5/minute")
 async def confirm_delete_workspace(
+    request: Request,
     workspace_id: str,
     payload: DeleteConfirmation,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
   
-    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     
     if not current_user.delete_confirmation_otp or current_user.delete_confirmation_otp != payload.otp:
         raise HTTPException(status_code=400, detail="Invalid verification code.")
@@ -752,11 +778,19 @@ async def confirm_delete_workspace(
     current_user.delete_confirmation_expiry = None
     
     db.commit()
+    background_tasks.add_task(
+        send_telegram_alert,
+        f"BLUE ALERT: Workspace Deleted Successfully\n"
+        f"Owner: {current_user.email}\n"
+        f"Workspace ID: {workspace_id}"
+    )
     
     return
 
 @router.post("/{workspace_id}/restore", status_code=200)
+@limiter.limit("3/minute")
 def restore_workspace(
+    request: Request,
     workspace_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
