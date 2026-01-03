@@ -215,9 +215,9 @@ const Register: React.FC = () => {
               </form>
 
               <div className="mt-6 pt-6 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-700 mb-3 uppercase tracking-wide">Included with account</p>
+                <p className="text-xs font-semibold text-slate-700 mb-3 uppercase tracking-wide">After you sign up</p>
                 <div className="space-y-2">
-                    {["Live metrics and trend dashboards", "CSV uploads and secure data source polling", "Email-based support during development"].map((benefit, i) => (
+                    {["Create your first workspace", "Upload a CSV or connect a data source", "View live metrics and trends"].map((benefit, i) => (
                         <div key={i} className="flex items-center gap-2 text-sm text-slate-600">
                             <Check className="h-3.5 w-3.5 text-blue-600" /> <span>{benefit}</span>
                         </div>
