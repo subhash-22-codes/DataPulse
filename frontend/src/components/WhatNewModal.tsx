@@ -9,36 +9,38 @@ interface WhatNewModalProps {
 
 const features = [
   {
-    title: "Direct Database Connector",
-    description: "Connect directly to PostgreSQL and run scheduled SQL queries.",
-    tag: "NEW",
+    title: "Connect your database",
+    description:
+      "Link your PostgreSQL database and run scheduled queries without manual uploads.",
+    tag: "REFINED",
   },
   {
-    title: "AI Assistance",
-    description: "Get explanations for schema changes and contextual usage help.",
+    title: "Helpful AI explanations",
+    description:
+      "Understand data structure changes and get guidance right when you need it.",
     tag: "BETA",
   },
   {
-    title: "Real-time Updates",
-    description: "Background jobs and WebSockets keep data in sync instantly.",
-    tag: "PERF",
+    title: "Live data updates",
+    description:
+      "Your data stays up to date automatically — no refreshes or waiting.",
+    tag: "UPDATE",
   },
   {
-    title: "Security Improvements",
-    description: "Rate limiting added to authentication endpoints.",
-    tag: "SEC",
+    title: "Export your data",
+    description:
+      "Download your data anytime in a clean, ready-to-use format.",
+    tag: "NEW",
   },
   {
-    title: "UI Refinements",
-    description: "Subtle layout and typography improvements across the app.",
-    tag: "UX",
-  },
-  {
-    title: "Timezone Accuracy",
-    description: "All timestamps now respect your local timezone.",
-    tag: "FIX",
+    title: "Cleaner interface",
+    description:
+      "Small visual improvements that make the app easier and nicer to use.",
+    tag: "REFINED",
   },
 ];
+
+
 
 export const WhatNewModal: React.FC<WhatNewModalProps> = ({
   isOpen,
