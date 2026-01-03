@@ -527,21 +527,32 @@ def schedule_data_fetches() -> None:
 
         triggered_count = 0
 
+        buffer = timedelta(seconds=150)
+
         for ws in workspaces:
             try:
                 is_due = False
                 last_polled = ws.last_polled_at
                 interval = ws.polling_interval
 
-                # 2. Timing Logic
                 if not last_polled:
                     is_due = True
-                elif interval == 'every_minute':
-                    if (now - last_polled) > timedelta(minutes=1): is_due = True
+                elif interval == '15min':
+                    # Use the buffer: Check if it's been at least 14m 30s
+                    if (now - last_polled) >= (timedelta(minutes=15) - buffer): 
+                        is_due = True
                 elif interval == 'hourly':
-                    if (now - last_polled) > timedelta(hours=1): is_due = True
+                    if (now - last_polled) >= (timedelta(hours=1) - buffer): 
+                        is_due = True
+                elif interval == '3hours':
+                    if (now - last_polled) >= (timedelta(hours=3) - buffer): 
+                        is_due = True
+                elif interval == '12hours':
+                    if (now - last_polled) >= (timedelta(hours=12) - buffer): 
+                        is_due = True
                 elif interval == 'daily':
-                    if (now - last_polled) > timedelta(days=1): is_due = True
+                    if (now - last_polled) >= (timedelta(days=1) - buffer): 
+                        is_due = True
                 
                 if is_due:
                     logger.info(f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool...")

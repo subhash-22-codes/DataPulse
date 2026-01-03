@@ -29,6 +29,7 @@ from app.api.dependencies import get_current_user
 from app.models.user import LoginHistory 
 from app.services.email_service import send_farewell_email
 from app.models.workspace import workspace_team
+from app.core.guard import send_telegram_alert
 
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
@@ -165,7 +166,8 @@ def get_or_create_social_user(
     name: str, 
     provider: str, 
     provider_id: str,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
+    background_tasks: BackgroundTasks = None
 ):
     
 
@@ -227,6 +229,12 @@ def get_or_create_social_user(
 
 
     logger.info(f"✨ Creating new identity via {provider}: {email}")
+    if background_tasks:
+        # This is the safe, non-crashing way to send the alert
+        background_tasks.add_task(
+            send_telegram_alert, 
+            f"✨ **NEW USER JOINED!**\nVia: {provider}\nEmail: {email}"
+        )
     new_user = User(
         email=email, 
         name=name, 
@@ -294,6 +302,7 @@ class OtpResponse(BaseModel): msg: str
 
 
 @router.get("/google/link")
+@limiter.limit("5/minute")
 async def google_link_redirect(request: Request, return_to: str = "/home"):
     if not return_to.startswith("/"):
         return_to = "/home"
@@ -308,7 +317,8 @@ async def google_link_redirect(request: Request, return_to: str = "/home"):
     )
 
 @router.get("/google/callback")
-async def google_callback(request: Request, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def google_callback(request: Request, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     try:
         destination = request.session.pop("post_oauth_redirect", "/home")
         current_user = None
@@ -333,7 +343,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
                 name=user_info.get('name', 'User'), 
                 provider="google", 
                 provider_id=google_id,
-                current_user=current_user 
+                current_user=current_user,
+                background_tasks=background_tasks
             )
         except HTTPException as e:
             logger.warning(f"⚠️ Google Link Blocked: {e.detail}")
@@ -366,7 +377,8 @@ async def github_link(request: Request, return_to: str = "/home"):
     )
 
 @router.get("/github/callback")
-async def github_callback(request: Request, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def github_callback(request: Request, db: Session = Depends(get_db),background_tasks: BackgroundTasks = None):
     destination = request.session.pop("post_oauth_redirect", "/home")
     
     current_user = None
@@ -399,7 +411,8 @@ async def github_callback(request: Request, db: Session = Depends(get_db)):
                 name=profile.get("name") or profile.get("login"), 
                 provider="github", 
                 provider_id=gh_id,
-                current_user=current_user 
+                current_user=current_user,
+                background_tasks=background_tasks
             )
             
         except HTTPException as e:
@@ -419,7 +432,7 @@ async def github_callback(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
-def google_login(request: Request, response: Response, req: GoogleLoginRequest, db: Session = Depends(get_db)):
+def google_login(request: Request, response: Response, req: GoogleLoginRequest, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
   
     try:
         
@@ -432,7 +445,7 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
         if not email or not idinfo.get('email_verified'):
             raise HTTPException(status_code=400, detail="Verified Google account required.")
 
-        user = get_or_create_social_user(db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'))
+        user = get_or_create_social_user(db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'),background_tasks=background_tasks)
         logger.info(f"✅ Google login success: {user.email}")
         
         create_tokens_and_set_cookies(request, response, user, db)
@@ -483,7 +496,7 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
 #   EMAIL / OTP ROUTES
 # ==========================
 @router.post("/login-email", response_model=AuthResponse)
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 def login_email(
     request: Request,
     response: Response,
@@ -561,7 +574,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
     otp = generate_otp(); expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)
     user.otp_code = otp; user.otp_expiry = expiry
     db.commit()
-    
+    background_tasks.add_task(send_telegram_alert, f"🔵 **OTP Requested**\nEmail: {req.email}\nType: Registration")
     if APP_MODE == "production":
         background_tasks.add_task(send_otp_email_task_async, req.email, otp, "verification")
     elif send_otp_email_task:
@@ -572,7 +585,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
 
 @router.post("/verify-otp")
 @limiter.limit("5/minute")
-def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(get_db)):
+def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(get_db),background_tasks: BackgroundTasks = None):
 
     user = db.query(User).filter(User.email == req.email).first()
     if not user or user.otp_code != req.otp:
@@ -589,9 +602,13 @@ def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(ge
 
     user.otp_code = None
     user.otp_expiry = None
-
+    
     db.commit()
-
+    if background_tasks:
+        background_tasks.add_task(
+            send_telegram_alert, 
+            f"✨ **NEW USER VERIFIED!**\nVia: Email/Pass\nName: {req.name}\nEmail: {req.email}"
+        )
     logger.info(f"✅ User {req.email} verified and activated.")
     return {"msg": "Email verified & password set successfully"}
 
@@ -749,7 +766,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
 
 @router.delete("/me")
+@limiter.limit("5/minute")
 async def delete_account(
+    request: Request,
     background_tasks: BackgroundTasks,
     response: Response, 
     db: Session = Depends(get_db), 
@@ -777,6 +796,13 @@ async def delete_account(
         response.delete_cookie("refresh_token", **cookie_params)
 
         background_tasks.add_task(send_farewell_email, user_email, user_name)
+        background_tasks.add_task(
+            send_telegram_alert, 
+            f"RED ALERT: USER DELETED ACCOUNT\n"
+            f"Name: {user_name}\n"
+            f"Email: {user_email}\n"
+            f"Status: Data Scrubbed"
+        )
 
         return {"message": "Identity scrubbed. We hope to see you again!"}
 
@@ -889,3 +915,8 @@ def logout_from_all_devices(
         db.rollback()
         logger.error(f"🚨 Global logout failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to perform security reset")
+    
+@router.get("/test-crash-guard")
+async def test_crash_guard():
+    result = 1 / 0 
+    return {"msg": result}

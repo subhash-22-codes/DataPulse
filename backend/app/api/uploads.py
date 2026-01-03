@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from fastapi.responses import StreamingResponse 
 from sqlalchemy.orm import Session
 import uuid
@@ -7,12 +7,14 @@ from app.core.database import get_db
 from app.models.data_upload import DataUpload
 from app.models.workspace import Workspace
 from app.models.user import User
-from .dependencies import get_current_user
+from .dependencies import get_current_user, limiter
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 @router.delete("/{upload_id}", status_code=204)
+@limiter.limit("5/minute")
 def delete_upload(
+    request: Request,
     upload_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
