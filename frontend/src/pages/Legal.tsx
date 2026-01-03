@@ -772,7 +772,9 @@ export const Legal: React.FC = () => {
                     <li>
                       You have the{" "}
                       <span className="font-manrope text-slate-800">right to export your data</span>.
-                      Workspace schemas and monitoring data can be downloaded at any time from the{" "}
+                      Data can be downloaded{" "}
+                      <span className="font-manrope text-slate-800">per workspace</span> that you choose,
+                      including workspace configuration, schemas, and uploaded files, from the{" "}
                       <span className="font-manrope text-slate-800">Account</span> page for backup or
                       migration purposes.
                     </li>
@@ -839,7 +841,7 @@ export const Legal: React.FC = () => {
           </div>
         </div>
         <p className="mt-10 text-center text-[11px] text-slate-400">
-            Last updated: December 31, 2025
+            Last updated: January 3, 2026
         </p>
       </main>
 
@@ -851,7 +853,7 @@ export const Legal: React.FC = () => {
             
             {/* Left */}
             <p>
-              © 2025 <span className="font-medium text-slate-700">DataPulse</span>. All rights reserved.
+              © 2026 <span className="font-medium text-slate-700">DataPulse</span>. All rights reserved.
             </p>
 
             {/* Center links */}

@@ -9,7 +9,8 @@ import {
   Monitor,
   ChevronDown,
   Check,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -44,6 +45,14 @@ interface ResultModalState {
   type: 'success' | 'error';
   message: string;
   provider: 'google' | 'github' | null;
+}
+
+interface WorkspaceExportSummary {
+  workspace_id: string;
+  name: string;
+  data_source: string;
+  total_size_bytes: number;
+  file_count: number;
 }
 
 /**
@@ -137,13 +146,14 @@ export const Account: React.FC = () => {
   const [pendingLink, setPendingLink] = useState<'google' | 'github' | null>(null);
   const [resultModal, setResultModal] = useState<ResultModalState | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const [showSecurityLogs, setShowSecurityLogs] = useState<boolean>(
   window.innerWidth >= 1024 // lg breakpoint
 );
-const [pageState, setPageState] = useState<'loading' | 'ready' | 'error'>('loading');
-const [exportSize, setExportSize] = useState<string | null>(null);
-const [exportSuccess, setExportSuccess] = useState(false);
+  const [pageState, setPageState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [workspaces, setWorkspaces] = useState<WorkspaceExportSummary[]>([]);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isFetchingList, setIsFetchingList] = useState(false);
 
  useEffect(() => {
   if (isSyncing) return; // ⬅️ IMPORTANT
@@ -281,35 +291,44 @@ const processDelete = async () => {
   }
 };
 
-const handleExport = async () => {
-  setIsExporting(true);
+// Step 1: Open Modal and fetch the list of workspace sizes
+const handleOpenExportModal = async () => {
+  setShowExportModal(true);
+  setIsFetchingList(true);
   try {
-    const response = await api.get('/user/export-data', { responseType: 'blob' });
-    
-    // Calculate Size
-    const sizeInBytes = response.data.size;
-    const sizeDisplay = sizeInBytes < 1024 * 1024 
-      ? `${(sizeInBytes / 1024).toFixed(1)} KB` 
-      : `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
-    
-    setExportSize(sizeDisplay);
+    const response = await api.get<WorkspaceExportSummary[]>('/user/export-list');
+    setWorkspaces(response.data);
+  } catch (error) {
+    console.error(error);
+    toast.error('Could not load workspace list');
+  } finally {
+    setIsFetchingList(false);
+  }
+};
+
+// Step 2: Download a SPECIFIC workspace
+const downloadWorkspace = async (workspaceId: string, wsName: string) => {
+  setExportingId(workspaceId);
+  try {
+    const response = await api.get(`/user/export-workspace/${workspaceId}`, { 
+      responseType: 'blob' 
+    });
 
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `DataPulse_Export_${new Date().toISOString().split('T')[0]}.zip`);
+    link.setAttribute('download', `DataPulse_${wsName.replace(/\s+/g, '_')}_Export.zip`);
     document.body.appendChild(link);
     link.click();
-    link.parentNode?.removeChild(link);
+    document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
     
-    setExportSuccess(true);
-    toast.success('Archive downloaded successfully');
+    toast.success(`${wsName} export successful`);
   } catch (error) {
-    console.error('Export Error:', error);
-    toast.error('Export failed');
+    console.error(error);
+    toast.error('Export failed. The workspace might be too large.');
   } finally {
-    setIsExporting(false);
+   setExportingId(null);
   }
 };
 
@@ -672,8 +691,8 @@ if (pageState === 'error') {
                         </div>
 
                         <button
-                          onClick={handleExport}
-                          disabled={isExporting}
+                          onClick={handleOpenExportModal}
+                          disabled={isFetchingList || exportingId !== null}
                           className="
                             shrink-0
                             inline-flex items-center justify-center gap-2
@@ -685,12 +704,12 @@ if (pageState === 'error') {
                             disabled:opacity-50
                           "
                         >
-                          {isExporting ? (
+                          {isFetchingList ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <History className="h-3.5 w-3.5" />
                           )}
-                          {isExporting ? 'Preparing ZIP...' : 'Export my data'}
+                          {isFetchingList ? 'Preparing ZIP...' : 'Export my data'}
                         </button>
                       </div>
                     </div>
@@ -770,6 +789,60 @@ if (pageState === 'error') {
         </div>
 
       {/* --- MODALS --- */}
+
+      {showExportModal && (
+        <ModalShell>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Choose Workspace</h3>
+              <button onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-500 mb-6">
+              Select a workspace to generate a portable .zip archive.
+            </p>
+
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+              {isFetchingList ? (
+                <div className="flex justify-center py-8"><Loader2 className="animate-spin h-6 w-6 text-indigo-500" /></div>
+              ) : workspaces.length === 0 ? (
+                <p className="text-center py-4 text-xs text-slate-400 italic">No workspaces found</p>
+              ) : workspaces.map((ws) => (
+                <div key={ws.workspace_id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{ws.name}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-tight">
+                      {ws.total_size_bytes < 1024 * 1024 
+                        ? `${(ws.total_size_bytes / 1024).toFixed(1)} KB` 
+                        : `${(ws.total_size_bytes / (1024 * 1024)).toFixed(1)} MB`} • {ws.file_count} files
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => downloadWorkspace(ws.workspace_id, ws.name)}
+                    disabled={exportingId !== null || ws.total_size_bytes === 0}
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition disabled:opacity-30"
+                  >
+                    {exportingId === ws.workspace_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button 
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+       </ModalShell>
+      )}
 
       {/* GLOBAL LOGOUT MODAL */}
         {showLogoutAllModal && (
@@ -993,41 +1066,6 @@ if (pageState === 'error') {
               <p className="text-sm text-slate-600 leading-relaxed">
                 This will permanently scrub your <span className="font-semibold text-slate-900">DataPulse</span> identity. All workspaces, encrypted keys, and history will be erased.
               </p>
-
-              {/* EXPORT BOX - Minimalist SaaS Style */}
-              {!exportSuccess ? (
-                <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-                  <div className="flex gap-3">
-                    <ShieldCheck className="h-4 w-4 text-indigo-600 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-slate-900">Backup your data?</p>
-                      <p className="text-xs text-slate-500 mt-1 leading-tight">
-                        Download an archive of your workspaces and CSVs before they are gone.
-                      </p>
-                      <button
-                        onClick={handleExport}
-                        disabled={isExporting}
-                        className="mt-3 text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-2 transition"
-                      >
-                        {isExporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <History className="h-3 w-3" />}
-                        {isExporting ? 'Preparing ZIP...' : 'Export data (.zip)'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/30 p-4 animate-in fade-in zoom-in-95 duration-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600" />
-                      <p className="text-xs font-semibold text-emerald-900">Export Complete</p>
-                    </div>
-                    <span className="text-[10px] font-mono font-bold bg-white border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded">
-                      {exportSize}
-                    </span>
-                  </div>
-                </div>
-              )}
 
               {/* CONFIRM INPUT */}
               <div className="space-y-2">
