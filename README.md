@@ -1,104 +1,383 @@
-DataPulse pulse
-An intelligent, lightweight data monitoring platform with a real-time UI and AI-powered insights.
+# DataPulse
 
-Note: Replace the link above with a real screenshot of your beautiful dashboard!
+**Real-Time Data & Schema Change Monitoring System**
 
-🚀 About DataPulse
-DataPulse is a modern, full-stack data intelligence platform designed to empower small teams, students, and developers to effortlessly monitor and analyze their datasets. It addresses the gap between simple spreadsheets and complex, enterprise-grade BI tools by providing a unified system for data ingestion, automated analysis, and intelligent alerting, all wrapped in a clean, real-time user interface.
+DataPulse is a backend-heavy data monitoring platform designed to track **schema evolution, structural changes, and metric shifts** between dataset versions and live data sources.
 
-Whether you're tracking daily sales via a manual CSV upload or monitoring a live data stream with automated API polling, DataPulse works in the background to turn your raw data into actionable insights.
+Unlike static dashboards, DataPulse treats **data change as a first-class problem** and focuses on detecting *what changed, when it changed, and why it matters*.
 
-✨ Key Features
-Distributed & Asynchronous Architecture: Built on a professional-grade stack using FastAPI, Celery, and Redis to handle heavy data processing in the background without ever blocking the user.
+---
 
-Multi-Source Data Ingestion:
+## Why DataPulse Exists
 
-Manual CSV Uploads: For ad-hoc analysis.
+Most academic and hobby data projects assume:
 
-Automated API Polling: Configure the app to fetch data from any API on a recurring schedule (e.g., every minute, every hour).
+* schemas are stable
+* datasets are static
+* uploads are one-time events
 
-Real-Time UI: The frontend, built with React, uses WebSockets to update the dashboard instantly the moment a background job is complete. No page refreshes needed.
+In real systems, none of that is true.
 
-Intelligent Alerting Engine:
+DataPulse is built around the assumption that:
 
-Structural Alerts: Automatically detects and sends alerts for changes in a dataset's schema (new or missing columns) or volume (row count changes).
+* schemas evolve
+* metrics drift
+* data sources change silently
+* teams need early visibility into those changes
 
-Smart Alerts: A user-configurable rules engine to create custom data-driven thresholds (e.g., "Alert me if the average of egg_count is greater than 500").
+This project was built to explore **how real data systems behave as data changes across versions**, not just how to visualize a dataset once.
 
-🤖 AI Business Analyst: Integrated with the Google Gemini AI, DataPulse provides human-like, formatted insights on what a schema change might mean from a business perspective, delivered directly in-app and via email.
+---
 
-Advanced Data Dashboards:
+## Core Capabilities
 
-A "Mission Control" home page for a high-level overview.
+* Monitor recurring datasets via manual CSV uploads (daily / monthly) with version-to-version comparison
+* Securely connect to **external PostgreSQL and MySQL databases** (read-only)
+* Detect:
 
-An interactive "Trend View" with "stock-style" line charts to visualize metrics over time.
+  * schema drift
+  * structural changes
+  * metric shifts
+* Ingest data from:
 
-Complete User & Team Management: Features a full JWT authentication system, a professional team invitation workflow, and a persistent in-app notification center.
+  * file uploads
+  * open APIs
+  * secured APIs with authorization headers
+* Asynchronous processing so UI never blocks
+* Configurable alerts with email notifications
+* Strong authentication and account security model
 
-AI Concierge: An in-app chatbot powered by Gemini that acts as a helpful guide, answering user questions about how to use the platform's features.
+---
 
-Production-Ready Security: Includes API Rate Limiting to prevent abuse and secure workflows for all sensitive actions.
+## High-Level Architecture
 
-🛠️ Tech Stack
-Backend: FastAPI, Python, PostgreSQL, Celery, Redis, SQLAlchemy
+```
+┌────────────┐
+│  Frontend  │  React + TypeScript
+└─────┬──────┘
+      │
+      │ Authenticated API calls
+      ▼
+┌──────────────┐
+│  FastAPI API │
+│ (Auth + Core)│
+└─────┬────────┘
+      │
+      │ Background jobs
+      ▼
+┌──────────────┐
+│ Celery Worker│
+│  + Redis     │
+└─────┬────────┘
+      │
+      │ Schema / data comparison
+      ▼
+┌──────────────┐
+│  PostgreSQL  │
+│  (Supabase)  │
+└──────────────┘
+```
 
-Frontend: React, TypeScript, Tailwind CSS, Vite
+The API layer is kept **thin and responsive**.
+All heavy work is pushed into **background execution**.
 
-AI: Google Gemini 2.5 Flash
+---
 
-DevOps: Docker, Docker Compose
+## Data Sources Supported
 
-🏁 Getting Started
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
+### 1. CSV Uploads
 
-Prerequisites
-Docker and Docker Compose
+* Designed for recurring datasets (daily / monthly)
+* Each upload is treated as a new version
+* Compared against the immediately previous version
 
-Node.js and npm (or yarn)
+### 2. External Database Connections
 
-Python
+* PostgreSQL
+* MySQL
 
-Installation & Setup
-Clone the repository:
+Connections are:
 
-git clone [https://your-repo-url.com/DataPulse.git](https://your-repo-url.com/DataPulse.git)
-cd DataPulse
+* read-only
+* isolated
+* credential-safe
 
-Configure the Backend:
+### 3. API-Based Sources
 
-Navigate to the backend directory: cd backend
+* Open APIs
+* Secured APIs using headers (e.g., Authorization, API keys)
+* Secrets are encrypted at rest
 
-Create a .env file by copying the example: cp .env.example .env
+---
 
-Fill in all the required variables in the .env file (Database credentials, JWT secret, Google Client ID, Gemini API Key, etc.).
+## External Database Connectivity (Deep Dive)
 
-# .env.example
-DATABASE_URL=postgresql://user:password@host.docker.internal/dbname
-JWT_SECRET=your_super_secret_key
-GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-GEMINI_API_KEY=your_gemini_api_key
-# ... other variables ...
+This is a **core feature** of DataPulse.
 
-Configure the Frontend:
+### Design Goals
 
-Navigate to the frontend directory: cd ../frontend
+* Never mutate external data
+* Never expose credentials in plaintext
+* Avoid SQL injection risks
+* Keep schema inspection isolated
+* Fail safely by surfacing errors and preserving system usability
 
-Install dependencies: npm install
+### How It Works (Conceptual)
 
-Create a .env.local file. This file tells the frontend where to find the backend API.
+* Users provide DB connection details
+* Credentials are **encrypted at rest** using Fernet (AES-based)
+* Encryption keys are loaded from environment variables
+* Connections are established using **read-only access**
+* Schema metadata is extracted using:
 
-# .env.local
-VITE_API_BASE_URL=/api
+  * SQLAlchemy inspection
+  * database system catalogs
+* Only metadata is stored — never actual table data
 
-Run the Application:
+Tracked changes include:
 
-Navigate back to the root DataPulse directory.
+* table creation / deletion
+* column additions / removals
+* column type changes
 
-Start the entire application using Docker Compose:
+This allows DataPulse to monitor **schema evolution over time** without compromising source databases.
 
-docker-compose up --build
+---
 
-The application will be available at http://localhost:5173.
+## Authentication & Security Model
 
-License
-This project is licensed under the MIT License.
+Authentication is treated as a **core system**, not a bolt-on.
+
+### Supported Methods
+
+* Email/password login
+* OAuth (Google, GitHub)
+
+### Key Security Features
+
+* JWT-based authentication (Access + Refresh tokens)
+* HTTP-only cookies for sensitive tokens
+* Secure account linking across auth methods
+* Token versioning for **global logout across devices**
+* MFA for sensitive operations (e.g., account deletion)
+* GDPR-style account deletion:
+  * data export
+  * full account scrubbing
+* Additional platform safeguards include request rate limiting and strict CORS controls
+  to protect public APIs and prevent unauthorized cross-origin access.
+
+---
+
+## Background Processing & Async Execution
+
+DataPulse avoids blocking user requests by offloading all heavy work to background execution.
+
+### Local / Controlled Environments
+
+* **Celery + Redis**
+* Each dataset processed in isolation
+* Failure in one job does not affect others
+
+### Cloud-Constrained Environments
+
+* Execution adapts using:
+
+  * schedulers
+  * async background tasks
+* Same guarantees, different execution strategy
+
+This dual approach allows the system to remain usable even on limited free-tier infrastructure.
+
+### Performance & Safety Considerations
+
+To avoid resource exhaustion and runaway jobs, DataPulse enforces
+explicit limits on dataset size and processing scope.
+Large inputs are truncated safely with clear UI feedback,
+and polling is automatically disabled on repeated failures.
+
+---
+
+## Change Detection Logic
+
+DataPulse compares incoming data against historical versions to detect:
+
+### Schema-Level Changes
+
+* New / removed tables
+* New / removed columns
+* Column type changes
+
+### Structural Changes
+
+* Row count deltas
+* Null density shifts
+* Presence / absence of key fields
+
+### Metric Shifts
+
+* Percentage-based changes
+* Threshold-based alerts
+* Trend comparison across versions
+
+The goal is **signal**, not noise.
+
+---
+
+## AI-Assisted Change Explanation
+
+DataPulse uses AI in a **supporting, non-decision-making role** to help explain detected changes.
+
+When a schema or structural change is identified by deterministic logic,
+AI is used to generate a human-readable explanation describing
+*possible reasons* and *potential impact* of the change.
+
+AI-assisted explanations are generated using a large language model (Gemini),
+used strictly for interpretive summaries and contextual insights.
+
+Examples include:
+- explaining newly added columns
+- describing how additional fields may affect downstream analysis
+
+All change detection, alerting, and enforcement logic remains
+system-driven and deterministic.
+
+---
+
+## Alerts & Notifications
+
+* Users define alert rules per dataset
+* Alerts trigger when defined conditions are met
+* Notifications are delivered via email (Brevo)
+* Alerting logic is designed to minimize false positives
+
+---
+
+## Frontend & UX
+
+* Built with **React + TypeScript**
+* Auth-aware routing and protected views
+* Processing states are clearly communicated
+* Data visualizations built using **Recharts**
+* Focus is on **understanding change**, not decorative charts
+* Fully responsive UI
+
+---
+
+## Technology Stack
+
+### Backend
+
+* Python
+* FastAPI
+* SQLAlchemy
+* Celery
+* Redis
+
+### Frontend
+
+* React
+* TypeScript
+* Recharts
+
+### Database & Storage
+
+* PostgreSQL (Supabase)
+* Encrypted fields for sensitive data
+
+### Infra
+
+* Docker (local orchestration)
+* Vercel (frontend)
+* Environment-based configuration
+
+---
+
+## Current Status
+
+DataPulse is **live, functional, and under active development**.
+
+Planned improvements:
+
+* Multi-tenant workspaces
+* Expanded role-based access control (beyond read-only team members)
+* More granular alert rules
+* Additional data sources
+* Performance optimizations for large datasets
+
+
+## What This Project Demonstrates
+
+* Secure authentication design
+* Background job orchestration
+* Schema-aware data comparison
+* Real-world tradeoffs under infra limits
+* End-to-end system thinking
+* Clean separation of concerns
+
+---
+
+## Live Demo
+
+- **Application:** https://data-pulse-eight.vercel.app  
+  (Frontend served via Vercel, backed by deployed APIs)
+
+---
+
+## Authors
+
+**Subhash Yaganti**  
+Full-stack development, backend systems, and security  
+Contributed across backend architecture, API design, frontend integration, and UI/UX.  
+GitHub: https://github.com/subhash-22-codes
+
+**Siri Mahalaxmi Vemula**  
+Backend engineering and database design  
+Contributed to backend logic, data modeling, and UI/UX.  
+GitHub: https://github.com/armycodes
+
+---
+
+## Repository Notice
+
+This repository was initially created under Subhash Yaganti’s GitHub account and later forked for collaboration purposes.
+
+Forking does not indicate sole ownership.  
+The project was designed, developed, and documented collaboratively by both authors.
+
+---
+
+## Final Note
+
+DataPulse is intentionally built as a **system**, not a showcase app.
+
+It assumes data will change, failures will happen, and infrastructure will be imperfect — and it is designed accordingly.
+
+---
+
+## Development Notes
+
+Modern AI tools were used selectively as productivity aids
+(for brainstorming, validation, and documentation).
+
+All system architecture, core logic, security design,
+and implementation decisions were independently designed, 
+implemented, and reviewed by the project contributors.
+
+---
+
+## License & Usage
+
+© 2026 Subhash Yaganti, Siri Mahalaxmi Vemula. All rights reserved.
+
+This repository is shared publicly for **learning, evaluation, and portfolio review**.
+
+The code and system design may not be reused, redistributed, or presented
+as original work for academic submissions, personal portfolios, or
+commercial purposes without explicit permission from the authors.
+
+For permission requests or collaboration inquiries, please contact
+**Subhash Yaganti** or **Siri Mahalaxmi Vemula**.
+
+---
+
+
