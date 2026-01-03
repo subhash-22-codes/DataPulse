@@ -190,7 +190,7 @@ const Login: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Authenticating...
+                    Signing in…
                   </>
                 ) : (
                   'Sign In'
