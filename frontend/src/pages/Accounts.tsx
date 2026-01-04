@@ -104,13 +104,13 @@ const FormattedDate: React.FC<{ dateString: string; showTime?: boolean }> = ({ d
 
   // ---------- OS detection ----------
   const systems = [
-    { name: "Windows", reg: /Windows NT/ },
-    { name: "macOS", reg: /Macintosh/ },
-    { name: "ChromeOS", reg: /CrOS/ },
-    { name: "Linux", reg: /Linux/ },
-    { name: "Android", reg: /Android/ },
-    { name: "iOS", reg: /iPhone|iPad|iPod/ },
-  ];
+  { name: "Windows", reg: /Windows NT/ },
+  { name: "macOS", reg: /Macintosh/ },
+  { name: "iOS", reg: /iPhone|iPad|iPod/ },
+  { name: "Android", reg: /Android/ },
+  { name: "ChromeOS", reg: /CrOS/ },
+  { name: "Linux", reg: /Linux/ },
+];
 
   const browser = browsers.find(b => b.reg.test(ua))?.name ?? "Browser";
   const os = systems.find(s => s.reg.test(ua))?.name ?? "Other OS";
