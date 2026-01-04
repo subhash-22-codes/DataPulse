@@ -106,7 +106,7 @@ const messages = [
         setIsError(true);
         setShowTeam(false);
       }
-    }, 90000); // 90s → Render cold start max
+    }, 105000); // 90s → Render cold start max
 
     return () => {
       clearInterval(progressTimer);
