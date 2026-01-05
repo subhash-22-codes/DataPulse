@@ -76,6 +76,8 @@ async def guardian_middleware(request: Request, call_next):
             "/api/auth/login-email",
             "/api/auth/google",
             "/api/auth/github/callback",
+            "/api/auth/send-otp",
+            "/api/auth/verify-otp",
         }
 
         if request.url.path not in CSRF_EXEMPT_PATHS:
