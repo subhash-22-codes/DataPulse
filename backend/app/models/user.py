@@ -36,8 +36,10 @@ class User(Base):
 
     auth_type = Column(String(20), default="email")
     is_verified = Column(Boolean, default=False)
-    otp_code = Column(String(6), nullable=True)
+    otp_code = Column(String(255), nullable=True)
     otp_expiry = Column(DateTime(timezone=True), nullable=True)
+    otp_attempts = Column(Integer, default=0, nullable=False)
+    last_otp_requested_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), 
         nullable=False, 

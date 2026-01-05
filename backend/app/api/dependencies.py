@@ -37,7 +37,7 @@ def get_current_user(
         # 2. Decode
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         
-        # 3. STRICT CLAIMS VALIDATION (His mandatory fixes)
+        # 3. STRICT CLAIMS VALIDATION 
         user_id = payload.get("sub")
         token_version = payload.get("ver")
         token_type = payload.get("type")
