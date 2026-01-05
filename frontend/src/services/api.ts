@@ -6,22 +6,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  xsrfCookieName: "csrf_token",
+  xsrfHeaderName: "X-CSRF-Token",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
-api.interceptors.request.use((config) => {
-  const csrfCookie = document.cookie
-    .split("; ")
-    .find(row => row.startsWith("csrf_token="));
 
-  if (csrfCookie) {
-    const csrfToken = csrfCookie.split("=")[1];
-    config.headers["X-CSRF-Token"] = csrfToken;
-  }
-
-  return config;
-});
 
 type FailedQueueItem = {
   resolve: (value?: unknown) => void;
