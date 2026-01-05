@@ -207,19 +207,18 @@ const verifyOtp = useCallback(async (name: string, email: string, otp: string, p
         }
     }, [handleError]);
 
-    const logout = useCallback(async () => {
-        clearAuth();
-        
-        // 🛡️ Reviewer Fix 3: Explicitly resolve phase on logout
-        setAuthPhase("resolved"); 
-
-        navigate("/login");
+   const logout = useCallback(async () => {
         try {
-            await authService.logout();
+            await authService.logout(); // ✅ CSRF still exists here
         } catch (err) {
             console.error("Logout API failure:", err);
+        } finally {
+            clearAuth();               // ✅ now safe
+            setAuthPhase("resolved");
+            navigate("/login");
         }
-    }, [clearAuth, navigate]);
+        }, [clearAuth, navigate]);
+
 
 
     // --- 🛡️ 5. Final Context Value ---
