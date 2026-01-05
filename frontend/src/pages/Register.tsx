@@ -5,7 +5,7 @@ import GoogleLoginButton from '../components/GoogleLoginButton';
 import GitHubButton from '../components/GitHubButton'; // Added Import
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
-
+ import axios from 'axios';
 const Register: React.FC = () => {
   // ... [All states preserved exactly]
   const [step, setStep] = useState<'email' | 'otp'>('email');
@@ -21,8 +21,16 @@ const Register: React.FC = () => {
   const [isResending, setIsResending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [resendTimer, setResendTimer] = useState(0);
   const { register, verifyOtp } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => setResendTimer(prev => prev - 1), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [resendTimer]);
 
   const passwordRequirements = [
     { label: '8+ characters', test: (pwd: string) => pwd.length >= 8 },
@@ -33,7 +41,6 @@ const Register: React.FC = () => {
   const isStrong = passwordRequirements.every(req => req.test(password));
   const isMatching = password === confirmPassword && confirmPassword.length > 0;
 
-  // ... [All useEffects preserved exactly]
   useEffect(() => {
     setIsInitializing(true);
     const savedStep = localStorage.getItem('register-step') as 'email' | 'otp' | null;
@@ -67,7 +74,6 @@ const Register: React.FC = () => {
     if (step === 'otp') localStorage.setItem('register-otp', JSON.stringify(otp));
   }, [otp, step, isInitializing]);
 
-  // ... [OTP Logic preserved exactly]
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1 || !/^\d*$/.test(value)) return;
     const newOtp = [...otp]; newOtp[index] = value; setOtp(newOtp);
@@ -95,20 +101,44 @@ const Register: React.FC = () => {
   };
 
   const sendOtp = async (isFromResend = false) => {
-    if (!isFromResend) setIsLoading(true); else setIsResending(true);
+    if (isFromResend && resendTimer > 0) return;
+    if (!isFromResend) setIsLoading(true); 
+    else setIsResending(true);
+
     const startTime = Date.now();
-    let success = false;
-    try { success = await register(email); } catch (error) { console.error(error); }
-    if (!isFromResend) {
-        const remainingTime = Math.max(0, 3000 - (Date.now() - startTime));
-        if (remainingTime > 0) await new Promise(resolve => setTimeout(resolve, remainingTime));
-    }
-    if (success) {
+    try { 
+      const success = await register(email); 
+
+      const elapsed = Date.now() - startTime;
+      const waitTime = Math.max(0, 2000 - elapsed);
+      if (waitTime > 0) await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      if (success) {
         toast.success(isFromResend ? 'New OTP on its way.' : 'OTP on its way.');
-        setStep('otp'); setOtp(['', '', '', '', '', '']);
+        setStep('otp'); 
+        setOtp(['', '', '', '', '', '']);
         localStorage.removeItem('register-email'); 
+        setResendTimer(60); 
+      }
+    } catch (err: unknown) { 
+      let detail = "Failed to send OTP";
+      let status: number | undefined;
+
+      if (axios.isAxiosError(err)) {
+        status = err.response?.status;
+        detail = err.response?.data?.detail || detail;
+      }
+
+      if (status === 429) {
+        toast.error(detail);
+        setResendTimer(60); 
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      if (!isFromResend) setIsLoading(false); 
+      else setIsResending(false);
     }
-    if (!isFromResend) setIsLoading(false); else setIsResending(false);
   };
 
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -127,19 +157,44 @@ const Register: React.FC = () => {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     const otpCode = otp.join('');
+
     if (name.trim().length === 0) return toast.error('Enter full name');
     if (otpCode.length !== 6) return toast.error('Enter 6-digit OTP');
     if (password !== confirmPassword) return toast.error('Passwords mismatch');
-    if (password.length < 8) return toast.error('Password too short');
+    if (!isStrong) return toast.error('Password does not meet requirements');
+
     setIsLoading(true);
     try {
       await verifyOtp(name, email, otpCode, password);
+      
       localStorage.removeItem('register-step');
       localStorage.removeItem('register-email');
       localStorage.removeItem('register-otp');
+      
       toast.success('Account created! Redirecting...');
       setTimeout(() => navigate('/login'), 2000);
-    } catch (e) { console.log(e); } finally { setIsLoading(false); }
+    } catch (err: unknown) { 
+      let detail = "Verification failed";
+      let status: number | undefined;
+      if (axios.isAxiosError(err)) {
+        status = err.response?.status;
+        detail = err.response?.data?.detail || detail;
+      }
+
+      if (status === 403) {
+        toast.error(detail);
+        setStep('email');
+        setOtp(['', '', '', '', '', '']); 
+      } else if (status === 401) {
+        toast.error(detail);
+        setOtp(['', '', '', '', '', '']); 
+        otpRefs.current[0]?.focus(); 
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isInitializing) {
@@ -253,9 +308,20 @@ const Register: React.FC = () => {
                     ))}
                   </div>
                   <div className="text-center">
-                     <button type="button" onClick={() => sendOtp(true)} disabled={isResending} className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {isResending ? 'Resending code...' : "Didn't receive code? Resend"}
-                     </button>
+                     <button 
+                        type="button" 
+                        onClick={() => sendOtp(true)} 
+                        disabled={isResending || resendTimer > 0} 
+                        className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isResending ? (
+                          'Resending code...'
+                        ) : resendTimer > 0 ? (
+                          `Try again in ${resendTimer}s`
+                        ) : (
+                          "Didn't receive code? Resend"
+                        )}
+                      </button>
                   </div>
                 </div>
                 <div className="h-px bg-slate-100 my-2"></div>

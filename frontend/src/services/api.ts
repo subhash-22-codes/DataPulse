@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { AuthResponse, OtpResponse, VerifyOtpResponse, PasswordResetResponse, User } from '../types/auth';
 
-// 1. Point to the PROXY. 
-// Vercel/Vite will forward this to the real backend.
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export const api = axios.create({
@@ -12,12 +10,19 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+api.interceptors.request.use((config) => {
+  const csrfCookie = document.cookie
+    .split("; ")
+    .find(row => row.startsWith("csrf_token="));
 
-// --- NO REQUEST INTERCEPTOR NEEDED ---
-// The browser attaches cookies automatically.
+  if (csrfCookie) {
+    const csrfToken = csrfCookie.split("=")[1];
+    config.headers["X-CSRF-Token"] = csrfToken;
+  }
 
+  return config;
+});
 
-// --- RESPONSE INTERCEPTOR (The "Silent Refresh" Logic) ---
 type FailedQueueItem = {
   resolve: (value?: unknown) => void;
   reject: (reason?: unknown) => void;
@@ -113,19 +118,14 @@ export const authService = {
   },
 
   async checkSession(): Promise<{ user: User }> {
- // Use the new dedicated GET endpoint for a cleaner read operation.
  const response = await api.get('/auth/session-check'); 
  
- // Return the data, which we expect to be { user: {...} } from the backend.
  return response.data;
- 
- // If this call fails (401), Axios will throw an error, 
- // which the AuthContext will catch to set the state to logged out.
+
  },
 
- // 🔑 CORE FIX 2: Logout function stops forcing a full page reload
  async logout(): Promise<void> {
- await api.post('/auth/logout');// 🚨 REMOVED: window.location.href = '/login';  // The navigation is now handled by the AuthContext for a smoother transition.
+ await api.post('/auth/logout');
  },
   
 };
