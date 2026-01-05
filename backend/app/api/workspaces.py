@@ -382,15 +382,16 @@ async def update_workspace(
         current_loop = asyncio.get_running_loop()
         logger.info(f"⚡ [UX KICKSTART] Triggering instant fetch for '{db_workspace.name}'")
         executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
-        
-    if background_tasks:
-        background_tasks.add_task(
-            send_telegram_alert,
-            f"BLUE ALERT: Workspace Updated\n"
-            f"Name: {db_workspace.name}\n"
-            f"User: {current_user.email}\n"
-            f"Config Changed: {config_changed}"
-        )
+    
+    if user_toggled_on:   
+        if background_tasks:
+            background_tasks.add_task(
+                send_telegram_alert,
+                f"BLUE ALERT: Workspace Updated\n"
+                f"Name: {db_workspace.name}\n"
+                f"User: {current_user.email}\n"
+                f"Config Changed: {config_changed}"
+            )
         
     return db_workspace
 

@@ -5,11 +5,12 @@ import uuid
 import datetime as dt
 import secrets
 import string
+import re
 from typing import Optional, List, Union
 from datetime import datetime
 from uuid import UUID
 # FastAPI & Pydantic
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from fastapi.responses import RedirectResponse
@@ -61,7 +62,7 @@ JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-MAX_LOGIN_HISTORY = 20
+MAX_LOGIN_HISTORY = 10
         
 oauth = OAuth()
 oauth.register(
@@ -87,77 +88,89 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 def generate_otp(length=6):
     return ''.join(secrets.choice(string.digits) for _ in range(length))
 
-def create_tokens_and_set_cookies(request: Request, response: Response, user: User, db: Session):
-   
+def create_tokens_and_set_cookies(
+    request: Request, 
+    response: Response, 
+    user: User, 
+    db: Session, 
+    provider: str  
+):
     try:
-        current_provider = "email"
-        if user.google_id and "google" in request.url.path:
-            current_provider = "google"
-        elif user.github_id and "github" in request.url.path:
-            current_provider = "github"
-        elif user.password_hash:
-            current_provider = "email"
-
         new_log = LoginHistory(
             user_id=user.id,
-            provider=current_provider,
+            provider=provider,
             ip_address=request.client.host if request.client else "unknown",
             user_agent=request.headers.get("user-agent", "unknown"),
             created_at=dt.datetime.now(dt.timezone.utc)
         )
         db.add(new_log)
-
         old_logs_to_delete = db.query(LoginHistory.id).filter(
             LoginHistory.user_id == user.id
         ).order_by(LoginHistory.created_at.desc()).offset(MAX_LOGIN_HISTORY).all()
 
         if old_logs_to_delete:
             ids_to_del = [log.id for log in old_logs_to_delete]
-            db.query(LoginHistory).filter(LoginHistory.id.in_(ids_to_del)).delete(synchronize_session=False)
+            db.query(LoginHistory).filter(
+                LoginHistory.id.in_(ids_to_del)
+            ).delete(synchronize_session=False)
 
     except Exception as e:
+        # We log but don't stop the login process if auditing fails
         logger.error(f"⚠️ Audit Log/Pruning Failed: {str(e)}")
 
-    expiration = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_payload = {
+    access_token = jwt.encode({
         "sub": str(user.id), 
-        "user_id": str(user.id),
-        "email": user.email, 
+        "user_id": str(user.id), 
         "type": "access",
         "ver": user.token_version,
-        "exp": expiration
-    }
-    access_token = jwt.encode(access_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        "exp": dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    }, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     refresh_token_str = str(uuid.uuid4())
-    new_refresh_token = RefreshToken(
+    db.add(RefreshToken(
         token=refresh_token_str,
         user_id=user.id,
         expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    )
-    db.add(new_refresh_token)
+    ))
+    
+    csrf_token = secrets.token_hex(32)
 
-    cookie_params = {
-        "secure": True, 
-        "samesite": "none",
+    secure_cookie = {
+    "secure": True,
+    "samesite": "none",
+    }
+
+    http_only_cookie = {
+        **secure_cookie,
         "httponly": True,
     }
+
 
     response.set_cookie(
         key="access_token", 
         value=f"Bearer {access_token}", 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60, 
-        **cookie_params
+        path="/",
+        **http_only_cookie
     )
 
     response.set_cookie(
         key="refresh_token", 
         value=refresh_token_str, 
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        **cookie_params
+        path="/",
+        **http_only_cookie
     )
-
-    return response
+    
+    response.set_cookie(
+        key="csrf_token", 
+        value=csrf_token, 
+        httponly=False, 
+        max_age = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600, 
+        path="/",
+        **secure_cookie
+    )
+    # db.commit() is NOT here. It's handled by other endpoints.
 
 
 def get_or_create_social_user(
@@ -277,12 +290,29 @@ class AuthResponse(BaseModel):
     user: UserResponse
     
 class GoogleLoginRequest(BaseModel): token: str
-class SendOtpRequest(BaseModel): email: EmailStr
+class SendOtpRequest(BaseModel): 
+    email: EmailStr
+
+    @field_validator('email')
+    def normalize_email(cls, v):
+        return v.lower().strip()
+
 class VerifyOtpRequest(BaseModel):
-    name: str; email: EmailStr; otp: str; password: str
+    name: str
+    email: EmailStr
+    otp: str
+    password: str
+
+    @field_validator('email')
+    def normalize_email(cls, v):
+        return v.lower().strip()
+
     @field_validator('password')
     def validate_password(cls, v):
-        if len(v) < 8: raise ValueError('Password must be at least 8 characters long')
+        if len(v) < 8: 
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one number')
         return v
 class LoginEmailRequest(BaseModel):
     email: EmailStr; password: str
@@ -351,7 +381,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db), backg
             return RedirectResponse(url=f"{FRONTEND_URL}/account?error={e.detail.replace(' ', '_')}")
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
-        create_tokens_and_set_cookies(request, response, user, db)      
+        create_tokens_and_set_cookies(request, response, user, db, 'google')      
         logger.info(f"🚀 [GOOGLE] Success: {user.email} landed at {destination}")
         
         db.commit()      
@@ -421,7 +451,7 @@ async def github_callback(request: Request, db: Session = Depends(get_db),backgr
             return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error={error_msg}")
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
-        create_tokens_and_set_cookies(request, response, user, db)
+        create_tokens_and_set_cookies(request, response, user, db, 'github')
         db.commit()      
         return response
 
@@ -448,7 +478,7 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
         user = get_or_create_social_user(db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'),background_tasks=background_tasks)
         logger.info(f"✅ Google login success: {user.email}")
         
-        create_tokens_and_set_cookies(request, response, user, db)
+        create_tokens_and_set_cookies(request, response, user, db, 'google')
 
         db.commit()
         db.refresh(user) 
@@ -531,7 +561,7 @@ def login_email(
         user.password_hash = bcrypt.hash(req.password)
     logger.info(f"✅ Email login success: {user.email}")
 
-    create_tokens_and_set_cookies(request, response, user, db)
+    create_tokens_and_set_cookies(request, response, user, db, 'email')
 
     db.commit()
     db.refresh(user)
@@ -562,54 +592,84 @@ def login_email(
 @router.post("/send-otp", response_model=OtpResponse)
 @limiter.limit("5/minute")
 def send_otp(request: Request, req: SendOtpRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    email_normalized = req.email.lower()
+    
+    user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
 
     if user and user.is_verified and user.password_hash:
-        raise HTTPException(status_code=400, detail="Account already active. Please login.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account already active. Please login.")
     
+    now = dt.datetime.now(dt.timezone.utc)
+    if user and user.last_otp_requested_at:
+        if now < user.last_otp_requested_at + dt.timedelta(seconds=60):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, 
+                detail="Please wait 60 seconds before requesting another OTP."
+            )
+
     if not user:
-        user = User(email=req.email, signup_method="email", auth_type="email", is_verified=False)
+        user = User(email=email_normalized, signup_method="email", auth_type="email", is_verified=False)
         db.add(user)
 
-    otp = generate_otp(); expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)
-    user.otp_code = otp; user.otp_expiry = expiry
+    raw_otp = generate_otp()
+    hashed_otp = bcrypt.hash(raw_otp) 
+    
+    expiry = now + dt.timedelta(minutes=5)
+    
+    user.otp_code = hashed_otp
+    user.otp_expiry = expiry
+    user.otp_attempts = 0 
+    user.last_otp_requested_at = now
+    
     db.commit()
-    background_tasks.add_task(send_telegram_alert, f"🔵 **OTP Requested**\nEmail: {req.email}\nType: Registration")
+    
     if APP_MODE == "production":
-        background_tasks.add_task(send_otp_email_task_async, req.email, otp, "verification")
+        background_tasks.add_task(send_otp_email_task_async, email_normalized, raw_otp, "verification")
     elif send_otp_email_task:
-        send_otp_email_task.delay(req.email, otp, "verification")
+        send_otp_email_task.delay(email_normalized, raw_otp, "verification")
             
     return {"msg": "OTP sent to your email"}
 
 
 @router.post("/verify-otp")
 @limiter.limit("5/minute")
-def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(get_db),background_tasks: BackgroundTasks = None):
+def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+    email_normalized = req.email.lower()
+    user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
 
-    user = db.query(User).filter(User.email == req.email).first()
-    if not user or user.otp_code != req.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+    if not user or not user.otp_code:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active OTP request found")
 
-    now = dt.datetime.now(dt.timezone.utc)
+    if user.otp_attempts >= 5:
+        user.otp_code = None
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Too many failed attempts. Request a new OTP.")
 
-    if not user.otp_expiry or now >= user.otp_expiry:
-        raise HTTPException(status_code=400, detail="OTP has expired")
+    if not user.otp_expiry or dt.datetime.now(dt.timezone.utc) >= user.otp_expiry:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
+
+    if not bcrypt.verify(req.otp, user.otp_code):
+        user.otp_attempts += 1
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP")
 
     user.name = req.name
     user.password_hash = bcrypt.hash(req.password)
     user.is_verified = True
-
+    
     user.otp_code = None
     user.otp_expiry = None
+    user.otp_attempts = 0
+    user.last_otp_requested_at = None
     
     db.commit()
+
     if background_tasks:
         background_tasks.add_task(
             send_telegram_alert, 
-            f"✨ **NEW USER VERIFIED!**\nVia: Email/Pass\nName: {req.name}\nEmail: {req.email}"
+            f"✨ **NEW USER VERIFIED!**\nName: {req.name}\nEmail: {email_normalized}"
         )
-    logger.info(f"✅ User {req.email} verified and activated.")
+    
     return {"msg": "Email verified & password set successfully"}
 
 
@@ -674,11 +734,12 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         "samesite": "none",
         "secure": True,
         "httponly": True,
-        "path": "/" # Adding path is safer to ensure it clears everywhere
+        "path": "/"
     }
 
     response.delete_cookie("access_token", **cookie_params)
     response.delete_cookie("refresh_token", **cookie_params)
+    response.delete_cookie("csrf_token", path="/")
 
     # CRITICAL: Do NOT return a new JSONResponse. 
     # Just return a dict or update the response object.
@@ -723,46 +784,91 @@ def check_session(
     }
 
 @router.post("/refresh")
+@limiter.limit('5/minute')
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
-    rt = request.cookies.get("refresh_token")
-    if not rt:
+    old_rt_value = request.cookies.get("refresh_token")
+    if not old_rt_value:
         raise HTTPException(status_code=401, detail="No refresh token provided")
 
-    db_token = db.query(RefreshToken).filter(
-        RefreshToken.token == rt, 
-        RefreshToken.revoked == False
-    ).first()
+    db_token = db.query(RefreshToken).filter(RefreshToken.token == old_rt_value).with_for_update().first()
     
     if not db_token:
         raise HTTPException(status_code=401, detail="Invalid refresh session")
 
-    if db_token.expires_at < dt.datetime.now(dt.timezone.utc):
+    if db_token.revoked:
+        # Security Action: Revoke every single token this user has
+        db.query(RefreshToken).filter(RefreshToken.user_id == db_token.user_id).delete()
+        # Increment token version to invalidate existing Access Tokens (JWTs)
+        db_token.user.token_version += 1
+        db.commit()
+        raise HTTPException(status_code=401, detail="Security breach detected. Please login again.")
+
+    now = dt.datetime.now(dt.timezone.utc)
+    if db_token.expires_at < now:
+        db_token.revoked = True # Clean up DB state
+        db.commit()
         raise HTTPException(status_code=401, detail="Refresh session expired")
 
     user = db_token.user
+    new_rt_value = str(uuid.uuid4())
+    
+    new_refresh_token = RefreshToken(
+        token=new_rt_value,
+        user_id=user.id,
+        expires_at=now + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    db.add(new_refresh_token)
+    db_token.revoked = True
+    db_token.last_used_at = now
+    db_token.replaced_by_token = new_rt_value
+    
+    new_csrf_token = secrets.token_hex(32)
 
-    access_exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_exp = now + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user.id), 
-        "user_id": str(user.id), 
-        "email": user.email, 
+        "user_id": str(user.id),  
         "type": "access", 
-        "ver": user.token_version, 
+        "ver": user.token_version,
         "exp": access_exp
     }
     new_at = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    # Set Cookie 
+    db.commit()
+
+    cookie_params = {
+        "secure": True,
+        "samesite": "none",
+    }
+    
     response.set_cookie(
         key="access_token", 
         value=f"Bearer {new_at}", 
-        httponly=True, 
-        secure=True, 
-        samesite="none", 
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        path="/",
+        **cookie_params
+    )
+    
+    response.set_cookie(
+        key="refresh_token", 
+        value=new_rt_value, 
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        httponly=True,
+        path="/",
+        **cookie_params
+    )
+    
+    response.set_cookie(
+        key="csrf_token", 
+        value=new_csrf_token, 
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        httponly=False,
+        path="/",
+        **cookie_params
     )
 
-    return {"message": "Access token rotated successfully"}
+    return {"message": "Tokens rotated successfully"}
 
 
 @router.delete("/me")
@@ -794,6 +900,7 @@ async def delete_account(
         }
         response.delete_cookie("access_token", **cookie_params)
         response.delete_cookie("refresh_token", **cookie_params)
+        response.delete_cookie("csrf_token", path="/")
 
         background_tasks.add_task(send_farewell_email, user_email, user_name)
         background_tasks.add_task(
@@ -903,11 +1010,13 @@ def logout_from_all_devices(
         cookie_settings = {
             "samesite": "none",
             "secure": True,
-            "httponly": True
+            "httponly": True,
+            "path":"/"
         }
         
         response.delete_cookie(key="access_token", **cookie_settings)
         response.delete_cookie(key="refresh_token", **cookie_settings)
+        response.delete_cookie("csrf_token", path="/")
         
         return response
 

@@ -18,5 +18,7 @@ class RefreshToken(Base):
         server_default=func.now()                  
     )
     revoked = Column(Boolean, default=False)
+    replaced_by_token = Column(String, nullable=True) 
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     user = relationship("User", back_populates="refresh_tokens")
