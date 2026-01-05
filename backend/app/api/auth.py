@@ -132,43 +132,25 @@ def create_tokens_and_set_cookies(
         user_id=user.id,
         expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     ))
-    
-    csrf_token = secrets.token_hex(32)
 
-    secure_cookie = {
-    "secure": True,
-    "samesite": "none",
-    }
-
-    http_only_cookie = {
-        **secure_cookie,
+    cookie_params = {
+        "secure": True, 
+        "samesite": "none",
         "httponly": True,
     }
-
 
     response.set_cookie(
         key="access_token", 
         value=f"Bearer {access_token}", 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60, 
-        path="/",
-        **http_only_cookie
+        **cookie_params
     )
 
     response.set_cookie(
         key="refresh_token", 
         value=refresh_token_str, 
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        path="/",
-        **http_only_cookie
-    )
-    
-    response.set_cookie(
-        key="csrf_token", 
-        value=csrf_token, 
-        httponly=False, 
-        max_age = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600, 
-        path="/",
-        **secure_cookie
+        **cookie_params
     )
     # db.commit() is NOT here. It's handled by other endpoints.
 
@@ -734,12 +716,11 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         "samesite": "none",
         "secure": True,
         "httponly": True,
-        "path": "/"
+        "path": "/" # Adding path is safer to ensure it clears everywhere
     }
 
     response.delete_cookie("access_token", **cookie_params)
     response.delete_cookie("refresh_token", **cookie_params)
-    response.delete_cookie("csrf_token", path="/")
 
     # CRITICAL: Do NOT return a new JSONResponse. 
     # Just return a dict or update the response object.
@@ -821,8 +802,6 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     db_token.revoked = True
     db_token.last_used_at = now
     db_token.replaced_by_token = new_rt_value
-    
-    new_csrf_token = secrets.token_hex(32)
 
     access_exp = now + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
@@ -837,6 +816,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     db.commit()
 
     cookie_params = {
+        "httponly": True,
         "secure": True,
         "samesite": "none",
     }
@@ -845,8 +825,6 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         key="access_token", 
         value=f"Bearer {new_at}", 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        path="/",
         **cookie_params
     )
     
@@ -854,17 +832,6 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         key="refresh_token", 
         value=new_rt_value, 
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        httponly=True,
-        path="/",
-        **cookie_params
-    )
-    
-    response.set_cookie(
-        key="csrf_token", 
-        value=new_csrf_token, 
-        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        httponly=False,
-        path="/",
         **cookie_params
     )
 
@@ -900,7 +867,6 @@ async def delete_account(
         }
         response.delete_cookie("access_token", **cookie_params)
         response.delete_cookie("refresh_token", **cookie_params)
-        response.delete_cookie("csrf_token", path="/")
 
         background_tasks.add_task(send_farewell_email, user_email, user_name)
         background_tasks.add_task(
@@ -1010,13 +976,11 @@ def logout_from_all_devices(
         cookie_settings = {
             "samesite": "none",
             "secure": True,
-            "httponly": True,
-            "path":"/"
+            "httponly": True
         }
         
         response.delete_cookie(key="access_token", **cookie_settings)
         response.delete_cookie(key="refresh_token", **cookie_settings)
-        response.delete_cookie("csrf_token", path="/")
         
         return response
 
