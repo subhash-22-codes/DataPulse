@@ -116,44 +116,6 @@ export const Chatbot: React.FC = () => {
   // UI/UX Overhaul Section starts here
   return (
     <>
-      {/* Refined Styles for Scrollbar & Animations */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .chatbot-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 10px;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
-        }
-        
-        @keyframes float {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-5px); }
-          100% { transform: translateY(0px); }
-        }
-        
-        .animate-float {
-          animation: float 3s ease-in-out infinite;
-        }
-
-        .typing-dot {
-          animation: typing 1.4s infinite ease-in-out both;
-        }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        
-        @keyframes typing {
-          0%, 80%, 100% { transform: scale(0); }
-          40% { transform: scale(1); }
-        }
-      `}} />
-
       {/* Launcher Button */}
       <Transition
         show={!isOpen}
