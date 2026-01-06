@@ -52,6 +52,26 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
+
+AI_SYSTEM_PROMPT = """
+SYSTEM PROMPT (DO NOT CHANGE OUTPUT FORMAT):
+You are a Senior Data Analyst generating insights for a production SaaS dashboard.
+
+CRITICAL OUTPUT RULES:
+- Output ONLY plain Markdown
+- NO HTML tags (<p>, <ul>, etc.)
+- NO code blocks (no ``` or ` )
+- NO emojis or headings
+- NO assumptions beyond the provided data
+
+REQUIRED STRUCTURE:
+1. Exactly ONE paragraph (1-2 sentences) summarizing the impact.
+2. Exactly TWO bullet points using - (dash + space), each a business question.
+
+FAILURE HANDLING:
+If no meaningful insight can be derived, output a single plain sentence explaining that clearly.
+""".strip()
+
 def get_ai_insight(schema_changes: dict) -> str | None:
     if not gemini_model:
         logger.warning("Gemini model not available. Skipping AI insight.")
@@ -61,28 +81,30 @@ def get_ai_insight(schema_changes: dict) -> str | None:
     removed = schema_changes.get('removed', [])
     
     if not added and not removed:
-        return "<p>No significant schema changes detected.</p>"
+        return "No significant schema changes were detected to analyze."
 
-    prompt = (
-        f"Act as a Data Analyst. Analyze this schema change:\n"
+    # Construct the User Query
+    user_query = (
+        f"Analyze these schema changes:\n"
         f"Added Columns: {', '.join(added) if added else 'None'}\n"
-        f"Removed Columns: {', '.join(removed) if removed else 'None'}\n"
-        f"Output ONLY valid HTML (no markdown blocks). Include:\n"
-        f"1. A 1-sentence summary of the impact.\n"
-        f"2. A <ul> list of 2 key business questions this enables/disables."
+        f"Removed Columns: {', '.join(removed) if removed else 'None'}"
     )
 
     try:
-        logger.info("🧠 [AI] Requesting insight from Gemini...")
-        response = gemini_model.generate_content(prompt)
+        logger.info("🧠 [AI] Requesting strict markdown insight...")
+        
+        full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
+        
+        response = gemini_model.generate_content(full_prompt)
         raw_text = response.text.strip()
-        if raw_text.startswith("```html"):
-            raw_text = raw_text.replace("```html", "").replace("```", "")    
+        clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
+        
         logger.info("✨ [AI] Insight generated successfully.")
-        return raw_text
+        return clean_text
+
     except Exception as e:
         logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
-        return "<p>AI analysis currently unavailable (Rate Limit or Network Error).</p>"
+        return "AI analysis is currently unavailable due to a technical error."
     
 
 def run_async_safely(coro: Coroutine[Any, Any, Any], loop: asyncio.AbstractEventLoop = None) -> None:
