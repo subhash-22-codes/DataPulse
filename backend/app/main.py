@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException  # Added HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware 
 from slowapi.errors import RateLimitExceeded
@@ -56,9 +57,34 @@ app = FastAPI(lifespan=lifespan)
 # ---  THE GUARDIAN MIDDLEWARE ---
 @app.middleware("http")
 async def guardian_middleware(request: Request, call_next):
+    # 1. Health check bypass
     if request.url.path == "/ping":
         return await call_next(request)
     
+    # 2. CSRF Header Verification (Header-Only Strategy)
+    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+        # Routes that don't need a CSRF token yet
+        CSRF_EXEMPT_PATHS = {
+            "/api/auth/login-email",
+            "/api/auth/send-otp",
+            "/api/auth/verify-otp",
+            "/api/auth/google",
+            "/api/auth/github/callback",
+            "/api/auth/google/callback",
+            "/",
+        }
+
+        if request.url.path not in CSRF_EXEMPT_PATHS:
+            csrf_header = request.headers.get("X-CSRF-Token")
+            
+            # If the header is missing or empty, block immediately
+            if not csrf_header:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF Protected: X-CSRF-Token header missing"}
+                )
+
+    # 3. Process Request
     try:
         response = await call_next(request)
         
@@ -72,11 +98,9 @@ async def guardian_middleware(request: Request, call_next):
         return response
 
     except Exception as e:
-        # Ignore normal validation/auth errors so your phone doesn't spam
         if isinstance(e, HTTPException):
             raise e
 
-        # This catches logic errors, DB connection issues, and code failures
         error_type = type(e).__name__
         alert_msg = (
             f"🚨 **CRITICAL SERVER ERROR\n\n"
