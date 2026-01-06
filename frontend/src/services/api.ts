@@ -11,6 +11,21 @@ export const api = axios.create({
   },
 });
 
+api.interceptors.request.use(
+  (config) => {
+    // We only need to attach this for methods that change data
+    const unsafeMethods = ['post', 'put', 'patch', 'delete'];
+    
+    if (config.method && unsafeMethods.includes(config.method.toLowerCase())) {
+      config.headers['X-CSRF-Token'] = 'DataPulse-Secure-Client-v1'; 
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 type FailedQueueItem = {
   resolve: (value?: unknown) => void;
   reject: (reason?: unknown) => void;

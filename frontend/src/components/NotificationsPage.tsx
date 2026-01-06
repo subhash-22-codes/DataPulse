@@ -15,6 +15,7 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { FaStackOverflow } from 'react-icons/fa';
+import ReactMarkdown from "react-markdown";
 
 interface Notification {
   id: string;
@@ -223,14 +224,13 @@ export const NotificationsPage: React.FC = () => {
                             Insight
                             {expandedInsights.has(n.id) ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
-                          
                           {expandedInsights.has(n.id) && (
                             <div className="mt-3 p-4 bg-slate-50 border border-slate-100 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
-                              <div 
-                                className="text-[13px] text-slate-600 leading-relaxed font-medium prose prose-slate max-w-none 
-                                prose-strong:text-slate-900 prose-p:mb-0"
-                                dangerouslySetInnerHTML={{ __html: n.ai_insight }} 
-                              />
+                              <div className="prose prose-slate max-w-none text-[13px] text-slate-600 font-medium">
+                                <ReactMarkdown>
+                                  {n.ai_insight}
+                                </ReactMarkdown>
+                              </div>
                             </div>
                           )}
                         </div>
