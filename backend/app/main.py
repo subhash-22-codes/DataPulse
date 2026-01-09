@@ -19,10 +19,19 @@ load_dotenv()
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.api import auth, workspaces, notifications, uploads, alerts, chat, user_action
 from app.models import user, workspace, data_upload, notification, alert_rule, token
-from app.core.guard import send_telegram_alert 
+from app.core.guard import send_telegram_alert
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+origins = [
+    frontend_url,
+    "http://localhost:5173",
+    "https://data-pulse-eight.vercel.app" 
+]
 
 scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -74,15 +83,27 @@ async def guardian_middleware(request: Request, call_next):
             "/",
         }
 
-        if request.url.path not in CSRF_EXEMPT_PATHS:
-            csrf_header = request.headers.get("X-CSRF-Token")
-            
-            # If the header is missing or empty, block immediately
-            if not csrf_header:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "CSRF Protected: X-CSRF-Token header missing"}
-                )
+        csrf_header = request.headers.get("X-CSRF-Token")
+        origin = request.headers.get("Origin")
+
+        if not origin:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF blocked: Missing Origin"}
+            )
+
+        if origin not in origins:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF blocked: Invalid Origin"}
+            )
+
+        if not csrf_header:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF blocked: Missing X-CSRF-Token"}
+            )
+
 
     # 3. Process Request
     try:
@@ -126,13 +147,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- CORS Middleware ---
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-origins = [
-    frontend_url,
-    "http://localhost:5173",
-    "https://data-pulse-eight.vercel.app" 
-]
 
 app.add_middleware(
     CORSMiddleware,

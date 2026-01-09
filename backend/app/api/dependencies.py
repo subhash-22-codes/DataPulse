@@ -35,7 +35,16 @@ def get_current_user(
 
     try:
         # 2. Decode
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, 
+            JWT_SECRET, 
+            algorithms=[JWT_ALGORITHM],
+            issuer="datapulse-auth",
+            options={
+                "require": ["exp", "iss", "sub"],
+                "verify_iss": True           
+            }
+        )
         
         # 3. STRICT CLAIMS VALIDATION 
         user_id = payload.get("sub")
@@ -59,8 +68,9 @@ def get_current_user(
             raise HTTPException(status_code=401, detail="Invalid user identifier")
             
         user = db.query(User).filter(User.id == user_uuid).first()
+        
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
         if user.token_version != token_version:
             logger.warning(
