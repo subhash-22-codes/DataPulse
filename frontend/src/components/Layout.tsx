@@ -135,23 +135,40 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="p-6 text-center">
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-2">Sign out?</h2>
               <p className="text-xs text-slate-500 mb-6"> You’ll be signed out of your account on this device.</p>
-              <div className="flex gap-2">
+             <div className="flex w-full gap-2">
+                {/* LEFT SIDE: Cancel */}
                 <button
                   onClick={() => setShowConfirm(false)}
-                  className="flex-1 px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-50 border border-slate-200 transition-all"
+                  className="
+                    flex-1 
+                    h-8
+                    rounded-sm border border-slate-200 
+                    text-[10px] font-bold text-slate-400 font-manrope tracking-widest 
+                    hover:bg-slate-50 hover:text-slate-900 hover:bg-black/5
+                    transition-all
+                  "
                 >
                   Cancel
                 </button>
+                
+                {/* RIGHT SIDE: Sign Out */}
                 <button
                   onClick={handleLogout}
-                  className="flex-1 px-4 py-2 rounded-lg text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all"
+                  className="
+                    flex-1 
+                    h-8
+                    bg-slate-900 hover:bg-black 
+                    rounded-sm 
+                    text-[10px] font-bold text-white font-manrope tracking-widest 
+                    shadow-sm transition-all active:scale-95
+                  "
                 >
                   Sign Out
                 </button>
               </div>
+              </div>
             </div>
           </div>
-        </div>
       )}
     </div>
   );

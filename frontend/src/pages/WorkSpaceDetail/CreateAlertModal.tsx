@@ -284,30 +284,50 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                 </div>
 
                 {/* Footer */}
-                <div className="bg-slate-50 px-5 py-4 flex items-center justify-end gap-3 border-t border-slate-200">
+                <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 px-4 pb-4 bg-white">
+                  {/* SECONDARY: Minimal and safe */}
                   <button
                     type="button"
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
                     onClick={() => !isSaving && setIsOpen(false)}
                     disabled={isSaving}
+                    className="
+                      w-full sm:w-auto 
+                      px-5 py-2 
+                      text-[11px] font-bold text-slate-500 font-manrope tracking-widest
+                      hover:text-slate-900 hover:bg-slate-100 
+                      rounded-sm transition-all
+                      disabled:opacity-20
+                    "
                   >
                     Cancel
                   </button>
+
+                  {/* PRIMARY: SaaS Blue - Growth Action */}
                   <button
                     type="button"
-                    className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center gap-2"
                     onClick={handleCreateRule}
                     disabled={isSaving || isLoadingColumns || availableColumns.length === 0 || activeAlertsCount >= 10}
+                    className="
+                      w-full sm:w-auto 
+                      min-w-[140px] 
+                      bg-blue-600 hover:bg-blue-700 
+                      px-6 py-2.5 
+                      text-[11px] font-bold text-white font-manrope tracking-widest 
+                      rounded-sm shadow-sm 
+                      transition-all active:scale-[0.98]
+                      disabled:opacity-20 disabled:cursor-not-allowed
+                      flex items-center justify-center gap-2
+                    "
                   >
                     {isSaving ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Saving
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving...</span>
                       </>
                     ) : (
                       <>
                         <Plus className="w-3.5 h-3.5" />
-                        Create Rule
+                        <span>Create Rule</span>
                       </>
                     )}
                   </button>

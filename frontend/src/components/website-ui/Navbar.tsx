@@ -15,43 +15,55 @@ const FeaturesMenu: React.FC<{
   items: Service[]; 
   handleItemClick: (id: string) => void;
 }> = ({ items, handleItemClick }) => (
-   <div 
-     className="absolute top-full left-1/2 -translate-x-1/2 mt-3 
-               bg-white/80 backdrop-blur-xl rounded-2xl shadow-[0_40px_100px_-20px_rgba(50,50,93,0.15)] 
-               border border-white/20 ring-1 ring-slate-900/5
-               w-[640px] p-6 grid grid-cols-2 gap-x-6 gap-y-4
-               animate-fadeInUp z-50"
-     style={{ animationDuration: '200ms' }}
-   >
-     {/* Glass Arrow */}
-     <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white/80 border-t border-l border-white/20 rotate-45 backdrop-blur-xl"></div>
+  <div 
+    className="
+      /* Alignment Fix: Centers it perfectly under the button */
+      absolute top-full left-1/2 -translate-x-1/2 mt-3 
+      
+      /* Responsive Width: 600px on big screens, shrinks on smaller ones */
+      w-[90vw] max-w-[600px] 
+      
+      bg-white rounded-xl shadow-xl border border-slate-100 
+      p-3 grid grid-cols-1 sm:grid-cols-2 gap-1 z-50
+      animate-in fade-in zoom-in-95 duration-200
+    "
+  >
+    {items.map((item) => (
+      <button
+        key={item.id}
+        onClick={() => handleItemClick(item.id)}
+        className="
+          group flex items-center gap-4 p-3 
+          rounded-lg hover:bg-slate-50 transition-colors text-left
+        "
+      >
+        {/* Simple Minimal Icon */}
+        <div className={`
+          flex shrink-0 items-center justify-center 
+          h-10 w-10 rounded-lg border border-slate-50
+          ${item.color.replace('bg-', 'bg-opacity-10 bg-')} 
+        `}>
+          <item.icon className="w-5 h-5 text-slate-600" />
+        </div>
 
-     {items.map((item) => (
-       <button
-         key={item.id}
-         onClick={() => handleItemClick(item.id)}
-         className="group flex items-start gap-4 p-4 rounded-xl hover:bg-white/60 transition-all duration-200 text-left border border-transparent hover:border-slate-100/50"
-       >
-         {/* Notion-style Icon Container */}
-         <div className={`p-2.5 rounded-lg ${item.color} text-slate-700 group-hover:scale-110 transition-transform shrink-0 shadow-sm border border-black/5`}>
-           <item.icon className="w-5 h-5" />
-         </div>
-         <div>
-           <div className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors text-sm mb-1">
-             {item.name}
-           </div>
-           <p className="text-xs text-slate-500 leading-relaxed font-medium">
-             {item.subdomains.slice(0, 2).join(', ')}...
-           </p>
-         </div>
-       </button>
-     ))}
-     
-     <div className="col-span-2 mt-2 pt-4 border-t border-slate-100/50 flex justify-between items-center px-2">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Explore Platform</span>
-        <ArrowRight className="w-4 h-4 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-     </div>
-   </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm font-bold font-manrope text-slate-900 group-hover:text-blue-600 transition-colors">
+            {item.name}
+          </span>
+          <p className="text-xs text-slate-500 truncate">
+            {item.subdomains.slice(0, 2).join(' & ')}
+          </p>
+        </div>
+      </button>
+    ))}
+
+    {/* Footer Link: Minimal & Clean */}
+    <div className="sm:col-span-2 mt-2 px-3 py-3 bg-slate-50/50 rounded-lg flex justify-between items-center border border-slate-100/50">
+      <span className="text-[12px] font-manrope text-slate-500">
+        Ready to monitor your infrastructure?
+      </span>
+    </div>
+  </div>
 );
 
 // --- MAIN NAVBAR ---
@@ -103,35 +115,51 @@ export default function Navbar() {
   
   // UPDATED: Specific Icons & Colors for Notion-like feel
   const featuresList: Service[] = [ 
-    { 
-      id: 'monitoring', 
-      name: 'Real-Time Monitoring', 
-      subdomains: ['Live Metrics', 'Anomaly Detection', 'Zero Latency'],
-      icon: Activity,
-      color: 'bg-blue-100' 
-    },
-    { 
-      id: 'ai-insights', 
-      name: 'AI & Analytics', 
-      subdomains: ['Schema Analysis', 'Performance Tips', 'Auto-Scaling'],
-      icon: Brain,
-      color: 'bg-purple-100'
-    },
-    { 
-      id: 'security', 
-      name: 'Security & Access', 
-      subdomains: ['RBAC', 'Audit Logs', 'SSO Integration'],
-      icon: ShieldCheck,
-      color: 'bg-emerald-100'
-    },
-    { 
-      id: 'integrations', 
-      name: 'Data Integrations', 
-      subdomains: ['PostgreSQL', 'Redis', 'Custom APIs'],
-      icon: Database,
-      color: 'bg-orange-100'
-    }
-  ];
+  { 
+    id: 'monitoring', 
+    name: 'Stay on Top of Data Changes', 
+    subdomains: [
+      'Track updates in your data',
+      'Spot structural changes early',
+      'Understand metric differences'
+    ],
+    icon: Activity,
+    color: 'bg-blue-100' 
+  },
+  { 
+    id: 'ai-insights', 
+    name: 'Clear Explanations', 
+    subdomains: [
+      'Understand why data changed',
+      'Get context for new fields',
+      'Helpful summaries, not raw diffs'
+    ],
+    icon: Brain,
+    color: 'bg-purple-100'
+  },
+  { 
+    id: 'security', 
+    name: 'Built with Security in Mind', 
+    subdomains: [
+      'Protected accounts',
+      'Controlled team access',
+      'Activity visibility'
+    ],
+    icon: ShieldCheck,
+    color: 'bg-emerald-100'
+  },
+  { 
+    id: 'integrations', 
+    name: 'Works with Your Data', 
+    subdomains: [
+      'CSV uploads',
+      'Databases',
+      'APIs'
+    ],
+    icon: Database,
+    color: 'bg-orange-100'
+  }
+];
 
   const handleScrollToSection = (sectionId: string) => {
     setIsMobileMenuOpen(false);
@@ -185,66 +213,107 @@ const handleItemClick = () => {
           </Link>
 
           {/* === DESKTOP NAV === */}
-          <div className="hidden lg:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-2">
             <Link 
               to="/" 
-              className="px-4 py-2 font-poppins text-sm font-semibold text-slate-600 rounded-full transition-all hover:bg-slate-100/50 hover:text-blue-700"
+              className="
+                px-3 py-2 
+                text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
+                rounded-sm transition-all 
+                hover:bg-slate-50 hover:text-slate-900
+              "
             >
               Home
             </Link>
             
             {/* Features Dropdown */}
             <div className="relative" ref={featuresRef}>
-               <button
-                 onClick={() => setIsFeaturesOpen(!isFeaturesOpen)}
-                 className={`px-4 py-2 text-sm font-semibold font-poppins rounded-full transition-all flex items-center gap-1.5 hover:bg-slate-100/50 hover:text-blue-700 ${isFeaturesOpen ? 'text-blue-700 bg-blue-50/30' : 'text-slate-600'}`}
-                 aria-haspopup="true"
-                 aria-expanded={isFeaturesOpen}
-               >
-                 Features
-                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFeaturesOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
-               </button>
-               {isFeaturesOpen && (
-                 <FeaturesMenu 
-                  items={featuresList} 
-                  handleItemClick={() => {
-                    handleItemClick();       // scroll to section
-                    setIsFeaturesOpen(false);  // close dropdown
-                  }} 
-                />
-
-               )}
+              <button
+                onClick={() => setIsFeaturesOpen(!isFeaturesOpen)}
+                className={`
+                  px-3 py-2 
+                  text-[12px] font-bold font-manrope tracking-[0.2em] 
+                  rounded-sm transition-all 
+                  flex items-center gap-2
+                  ${isFeaturesOpen 
+                    ? 'text-blue-600 bg-slate-50' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                `}
+                aria-haspopup="true"
+                aria-expanded={isFeaturesOpen}
+              >
+                Features
+                <ChevronDown className={`w-3 h-3 transition-transform duration-200 stroke-[3] ${isFeaturesOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
+              </button>
+              
+              {isFeaturesOpen && (
+                <div className="absolute top-full left-0 mt-1">
+                  <FeaturesMenu 
+                    items={featuresList} 
+                    handleItemClick={() => {
+                      handleItemClick();      
+                      setIsFeaturesOpen(false); 
+                    }} 
+                  />
+                </div>
+              )}
             </div>
             
             <button 
               onClick={() => handleScrollToSection('architecture')} 
-              className="px-4 py-2 font-poppins text-sm font-semibold text-slate-600 rounded-full transition-all hover:bg-slate-100/50 hover:text-blue-700"
+              className="
+                px-3 py-2 
+                text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
+                rounded-sm transition-all 
+                hover:bg-slate-50 hover:text-slate-900
+              "
             >
               Architecture
             </button>
+            
             <button 
               onClick={() => handleScrollToSection('about')} 
-              className="px-4 py-2 font-poppins text-sm font-semibold text-slate-600 rounded-full transition-all hover:bg-slate-100/50 hover:text-blue-700"
+              className="
+                px-3 py-2 
+                text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
+                rounded-sm transition-all 
+                hover:bg-slate-50 hover:text-slate-900
+              "
             >
               About
             </button>
           </div>
 
           {/* === DESKTOP ACTIONS === */}
-          <div className="hidden lg:flex items-center gap-4">
+          
+          <div className="hidden lg:flex items-center gap-6">
+            {/* LOG IN: Clean Utility Link */}
             <Link 
               to="/login"
-              className="text-sm font-poppins font-semibold text-slate-600 hover:text-blue-700 transition-colors"
+              className="
+                text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em]
+                hover:text-slate-900 transition-all
+              "
             >
               Log in
             </Link>
 
+            {/* GET STARTED: Sharp Primary Trigger */}
             <Link
               to="/register" 
-              className="group relative font-poppins inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-full overflow-hidden transition-all hover:bg-blue-700 hover:shadow-lg  active:scale-95"
+              className="
+                group relative 
+                inline-flex items-center gap-2 
+                h-9 px-5
+                bg-blue-600 text-white 
+                rounded-sm 
+                text-[12px] font-bold font-manrope tracking-[0.2em]
+                shadow-sm transition-all 
+                hover:bg-blue-700 active:scale-95
+              "
             >
               <span>Get Started</span>
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="w-3 h-3 stroke-[3] transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
 
@@ -269,67 +338,98 @@ const handleItemClick = () => {
           <div className="flex flex-col h-full w-full pt-24 pb-10 px-6 overflow-y-auto">
             
             <div className="space-y-1 py-4">
+                {/* HOME LINK */}
                 <Link 
                   to="/" 
                   onClick={() => setIsMobileMenuOpen(false)} 
-                  className="font-poppins flex items-center justify-between w-full py-3.5 text-lg font-semibold text-slate-800 border-b border-slate-200/50 active:bg-white/50 rounded-lg px-2"
+                  className="flex items-center justify-between w-full py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
                   Home
                 </Link>
+
+                {/* ARCHITECTURE BUTTON */}
                 <button 
-                  onClick={() => handleScrollToSection('architecture')} 
-                  className="font-poppins flex items-center justify-between w-full text-left py-3.5 text-lg font-semibold text-slate-800 border-b border-slate-200/50 active:bg-white/50 rounded-lg px-2"
+                  onClick={() => { handleScrollToSection('architecture'); setIsMobileMenuOpen(false); }} 
+                  className="flex items-center justify-between w-full text-left py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
                   Architecture
                 </button>
+
+                {/* ABOUT BUTTON */}
                 <button 
-                  onClick={() => handleScrollToSection('about')} 
-                  className="font-poppins flex items-center justify-between w-full text-left py-3.5 text-lg font-semibold text-slate-800 border-b border-slate-200/50 active:bg-white/50 rounded-lg px-2"
+                  onClick={() => { handleScrollToSection('about'); setIsMobileMenuOpen(false); }} 
+                  className="flex items-center justify-between w-full text-left py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
                   About
                 </button>
 
-                {/* Features Accordion - Minimal & Modern */}
+                {/* FEATURES ACCORDION */}
                 <div className="pt-2">
-                   <button
-                     onClick={() => setIsMobileFeaturesOpen(!isMobileFeaturesOpen)}
-                     className="font-poppins flex items-center justify-between w-full py-3.5 text-lg font-semibold text-slate-800 rounded-lg px-2 active:bg-white/50"
-                   >
-                     <span>Features</span>
-                     <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isMobileFeaturesOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
-                   </button>
-                   
-                   <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isMobileFeaturesOpen ? 'max-h-[400px] opacity-100 pb-2' : 'max-h-0 opacity-0'}`}>
-                     <div className="grid gap-2 pl-4">
-                       {featuresList.map((item) => (
-                         <div key={item.id} className="font-manrope flex items-center gap-3 text-slate-600 py-3 px-3 rounded-xl active:bg-white/60 border border-transparent active:border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
-                           <div className={`p-1.5 rounded-md ${item.color} text-slate-700`}>
-                              <item.icon className="w-4 h-4" />
-                           </div>
-                           <span className="font-medium text-base text-slate-700">{item.name}</span>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
+                  <button
+                    onClick={() => setIsMobileFeaturesOpen(!isMobileFeaturesOpen)}
+                    className="flex items-center justify-between w-full py-4 px-3 rounded-sm text-[12px] font-bold text-slate-900 font-manrope tracking-[0.2em] active:bg-slate-50 transition-all"
+                  >
+                    <span>Features</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-300 stroke-[2.5] ${isMobileFeaturesOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
+                  </button>
+                  
+                  {/* Animated Feature List */}
+                  <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isMobileFeaturesOpen ? 'max-h-[500px] opacity-100 pb-4' : 'max-h-0 opacity-0'}`}>
+                    <div className="grid gap-1 pl-2 pr-2">
+                      {featuresList.map((item) => (
+                        <div 
+                          key={item.id} 
+                          className="flex items-center gap-4 py-3 px-3 rounded-sm border border-transparent active:border-slate-200 active:bg-slate-50 group transition-all" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          {/* Square Industrial Icon Wrapper */}
+                          <div className={`flex items-center justify-center h-8 w-8 rounded-sm ${item.color.replace('bg-', 'bg-opacity-10 bg-')} border border-slate-50 shadow-sm`}>
+                            <item.icon className="w-3.5 h-3.5 text-slate-700" />
+                          </div>
+                          
+                          <span className="text-[11px] font-manrope font-bold text-slate-700 tracking-wider group-active:text-blue-600">
+                            {item.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-            </div>
+              </div>
 
             {/* Bottom Actions */}
             <div className="mt-6 space-y-3 pt-6 border-t border-slate-200/50">
-              <Link 
-                 to="/login"
-                 className="font-poppins flex items-center justify-center w-full py-3.5 font-semibold text-slate-700 bg-white/80 border border-slate-200 rounded-xl active:bg-white transition-all shadow-sm backdrop-blur-sm"
-               >
-                 <LogIn className="w-4 h-4 mr-2" />
-                 Log in
-               </Link>
+              <Link
+                to="/login"
+                className="
+                  flex items-center justify-center gap-3 
+                  w-full h-12 
+                  bg-white border border-slate-200
+                  text-slate-600 active:text-slate-900
+                  rounded-sm 
+                  text-[12px] font-bold font-manrope tracking-[0.25em]
+                  shadow-sm transition-all active:scale-[0.97]
+                  active:bg-slate-50
+                "
+              >
+                <LogIn className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Log in</span>
+              </Link>
                <Link
-                 to="/register"
-                 className="font-poppins flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 text-white font-semibold text-base rounded-xl shadow-lg shadow-blue-600/20 active:bg-blue-700 transition-all"
-               >
-                 Get Started
-                 <ArrowRight className="w-4 h-4" />
-               </Link>
+                  to="/register"
+                  className="
+                    flex items-center justify-center gap-3 
+                    w-full h-12 
+                    bg-blue-600 active:bg-blue-700 
+                    text-white 
+                    rounded-sm 
+                    text-[12px] font-bold font-manrope tracking-[0.25em]
+                    shadow-sm transition-all active:scale-[0.97]
+                  "
+                >
+                  <span>Get Started</span>
+                  <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
+                </Link>
             </div>
 
           </div>

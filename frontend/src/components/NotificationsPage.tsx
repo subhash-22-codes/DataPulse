@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { FaStackOverflow } from 'react-icons/fa';
 import ReactMarkdown from "react-markdown";
+import { ModalShell } from './ModelShell';
 
 interface Notification {
   id: string;
@@ -32,6 +33,7 @@ export const NotificationsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [expandedInsights, setExpandedInsights] = useState<Set<string>>(new Set());
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   
   const navigate = useNavigate();
 
@@ -72,9 +74,10 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const handleDeleteAll = async () => {
-    if (!window.confirm("Clear all notifications?")) return;
-    const original = notifications;
+    setIsClearModalOpen(false); // Close the modal
+    const original = [...notifications];
     setNotifications([]);
+
     try {
       await api.delete('/notifications/');
       toast.success("Inbox cleared");
@@ -84,7 +87,6 @@ export const NotificationsPage: React.FC = () => {
       toast.error("Failed to clear inbox");
     }
   };
-
   const toggleInsight = (id: string) => {
     setExpandedInsights(prev => {
       const next = new Set(prev);
@@ -138,7 +140,7 @@ export const NotificationsPage: React.FC = () => {
           </div>
           
           <button 
-            onClick={handleDeleteAll}
+            onClick={() => setIsClearModalOpen(true)}
             disabled={notifications.length === 0}
             className="w-fit flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-all uppercase tracking-wider disabled:opacity-20"
           >
@@ -253,6 +255,44 @@ export const NotificationsPage: React.FC = () => {
            </div>
         </div>
       </div>
+
+     {isClearModalOpen && (
+      <ModalShell>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-6">
+          {/* max-w-sm and p-4 make it feel much tighter and more "production" */}
+          <div className="w-full max-w-[340px] rounded-sm border border-slate-300 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+            
+            {/* Simple, direct header */}
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+              Empty inbox?
+            </h3>
+            
+            {/* Minimalist body - no scary wording */}
+            <p className="mt-2 text-xs text-slate-500 leading-normal font-medium">
+              All your current notifications will be removed. You won't be able to see them again.
+            </p>
+
+            {/* Compact Actions */}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setIsClearModalOpen(false)}
+                className="px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-900 transition-colors font-manrope hover:bg-black/5 tracking-widest"
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={handleDeleteAll}
+                className="rounded-sm bg-slate-900 px-4 py-1.5 text-[11px] font-bold text-white hover:bg-black shadow-sm transition-all font-manrope tracking-widest"
+              >
+                Clear Inbox
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </ModalShell>
+    )}
     </div>
   );
 };

@@ -146,7 +146,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
                 <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-end gap-4">
                   <button
                     type="button"
-                    className="text-[11px] font-bold text-slate-400 hover:text-slate-900 transition-all uppercase tracking-widest"
+                    className="text-[11px] font-bold text-slate-400 hover:text-slate-900 transition-all font-manrope tracking-widest"
                     onClick={handleClose}
                     disabled={isCreating}
                   >
@@ -159,8 +159,8 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
                       rounded-sm 
                       bg-blue-700 
                       px-5 py-2 
-                      text-[11px] font-bold text-white
-                      uppercase tracking-widest
+                      text-[11px] font-bold font-manrope text-white
+                      tracking-widest
                       transition-all
                       hover:bg-blue-800
                       active:scale-[0.98]

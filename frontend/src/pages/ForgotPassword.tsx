@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Check, KeyRound, Shield, RefreshCw, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Check, KeyRound, Shield, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -190,16 +190,27 @@ const ForgotPassword: React.FC = () => {
         </p>
       </div>
 
-      <button
+     <button
         type="submit"
         disabled={isLoading}
-        className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm"
+        className="
+          w-full 
+          flex justify-center items-center
+          h-10 sm:h-11 
+          bg-blue-600 hover:bg-blue-700 
+          text-white 
+          rounded-sm 
+          text-[11px] sm:text-[12px] font-bold font-manrope tracking-widest
+          shadow-sm 
+          transition-all active:scale-[0.98]
+          disabled:opacity-20 disabled:cursor-not-allowed
+        "
       >
         {isLoading ? (
-          <>
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white mr-2"></div>
-            Sending Code...
-          </>
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>Sending Code...</span>
+          </div>
         ) : (
           'Send Reset Code'
         )}
@@ -252,7 +263,7 @@ const ForgotPassword: React.FC = () => {
             type="button"
             onClick={handleResendCode}
             disabled={isResending}
-            className="inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center text-xs font-bold font-manrope text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
             <RefreshCw className={`h-3 w-3 mr-1.5 ${isResending ? 'animate-spin' : ''}`} />
             {isResending ? 'Resending...' : 'Resend Code'}
@@ -352,21 +363,49 @@ const ForgotPassword: React.FC = () => {
   
       </div>
 
-      <div className="grid grid-cols-2 gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => setShowConfirm(true)}
-            className="flex justify-center items-center py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-semibold shadow-sm transition-all text-sm"
-          >
-            Edit Email
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading || !isStrong || !isMatching || resetCode.some(digit => !digit)}
-            className="flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm"
-          >
-            {isLoading ? 'Resetting...' : 'Reset Password'}
-          </button>
+     <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-4">
+        {/* SECONDARY: Neutral Maintenance Action */}
+        <button
+          type="button"
+          onClick={() => setShowConfirm(true)}
+          className="
+            flex justify-center items-center
+            h-10 sm:h-11
+            bg-white border border-slate-200
+            rounded-sm 
+            text-[10px] sm:text-[11px] font-bold text-slate-400 font-manrope tracking-widest
+            hover:text-slate-900 hover:border-slate-400
+            transition-all active:scale-[0.98]
+          "
+        >
+          Edit Email
+        </button>
+
+        {/* PRIMARY: SaaS Blue Growth Action */}
+        <button
+          type="submit"
+          disabled={isLoading || !isStrong || !isMatching || resetCode.some(digit => !digit)}
+          className="
+            flex justify-center items-center
+            h-10 sm:h-11
+            bg-blue-600 hover:bg-blue-700 
+            text-white 
+            rounded-sm 
+            text-[10px] sm:text-[11px] font-bold font-manrope tracking-widest
+            shadow-sm 
+            transition-all active:scale-[0.98]
+            disabled:opacity-20 disabled:cursor-not-allowed
+          "
+        >
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Resetting...</span>
+            </div>
+          ) : (
+            'Reset Password'
+          )}
+        </button>
       </div>
 
     </form>
@@ -392,12 +431,23 @@ const ForgotPassword: React.FC = () => {
       </div>
 
       <button
-        className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all text-sm"
+        type="button"
         onClick={() => {
           localStorage.removeItem('forgot_password_step');
           localStorage.removeItem('forgot_password_email');
           navigate('/login');
         }}
+        className="
+          w-full 
+          flex justify-center items-center
+          h-10 sm:h-11 
+          bg-blue-600 hover:bg-blue-700 
+          text-white 
+          rounded-sm 
+          text-[11px] sm:text-[12px] font-bold font-manrope tracking-widest
+          shadow-sm 
+          transition-all active:scale-[0.98]
+        "
       >
         Sign In Now
       </button>
@@ -535,30 +585,47 @@ const ForgotPassword: React.FC = () => {
       {showConfirm && (
         <div className="fixed inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center border border-slate-100 transform transition-all animate-fade-in">
-            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-               <AlertCircle className="h-6 w-6 text-red-600" />
-            </div>
             <h2 className="text-lg font-bold text-slate-900 mb-2">
               Use different email?
             </h2>
             <p className="text-sm text-slate-600 mb-6">
               Going back will cancel the current reset process and require you to start over.
             </p>
-            <div className="flex gap-3">
+            <div className="flex gap-2 w-full pt-4">
+              {/* SAFE ACTION: Stay on current step */}
               <button
+                type="button"
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-sm transition-colors"
+                className="
+                  flex-1 
+                  h-10 sm:h-11
+                  rounded-sm border border-slate-200 
+                  bg-white
+                  text-[10px] sm:text-[11px] font-bold text-slate-400 font-manrope tracking-widest 
+                  hover:text-slate-900 hover:border-slate-300
+                  transition-all active:scale-[0.98]
+                "
               >
                 Cancel
               </button>
+
+              {/* DESTRUCTIVE ACTION: Clear progress and edit email */}
               <button
+                type="button"
                 onClick={() => {
                   localStorage.removeItem('forgot_password_step');
                   setShowConfirm(false);
                   setCurrentStep('email');
                   setResetCode(['', '', '', '', '', '']);
                 }}
-                className="flex-1 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-colors"
+                className="
+                  flex-1 
+                  h-10 sm:h-11
+                  bg-red-600 hover:bg-red-700 
+                  rounded-sm 
+                  text-[10px] sm:text-[11px] font-bold text-white font-manrope tracking-widest 
+                  shadow-sm transition-all active:scale-[0.98]
+                "
               >
                 Yes, Edit Email
               </button>

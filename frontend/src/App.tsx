@@ -68,24 +68,23 @@ function AppRoutes() {
           This may be due to a temporary network issue.
         </p>
 
-        {/* Primary Action */}
+       {/* Primary Action */}
         <button
           onClick={() => window.location.reload()}
           className="
             w-full
             flex items-center justify-center gap-2
-            rounded-lg
-            bg-slate-900
-            hover:bg-slate-800
+            h-10 px-6
+            rounded-sm
+            bg-slate-900 hover:bg-slate-800
             text-white
-            text-sm
-            font-medium
-            py-2.5
-            transition
+            text-[13px] font-bold tracking-widest font-manrope
+            transition-all
             active:scale-[0.98]
+            shadow-sm
           "
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-3.5 h-3.5 stroke-[3]" />
           Retry
         </button>
 

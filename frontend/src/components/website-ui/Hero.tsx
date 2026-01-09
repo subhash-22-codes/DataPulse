@@ -119,31 +119,9 @@ const Hero = () => {
           {/* === LEFT COLUMN: COPYWRITING === */}
           <div className="max-w-2xl text-center lg:text-left mx-auto lg:mx-0">
             
-            {/* Badge */}
-            <div
-              className="
-                inline-flex items-center gap-2 
-                px-2.5 py-0.5 
-                rounded-full 
-                bg-blue-50 border border-blue-100 
-                text-blue-700 
-                text-[10px] sm:text-xs md:text-sm 
-                font-semibold 
-                mb-6 sm:mb-8
-                animate-fadeInUp
-              "
-              style={getAnimStyle(100)}
-            >
-              <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-full w-full bg-blue-600"></span>
-              </span>
-
-                <span className="text-xs leading-none tracking-wide font-manrope">
+                <span className="text-xs leading-none tracking-wider font-manrope">
                 DataPulse v1.1.0 — Academic Prototype (Live)
                 </span>
-            </div>
-
 
             {/* Headline */}
             <h1 
@@ -163,26 +141,42 @@ const Hero = () => {
               Monitor PostgreSQL, APIs, and files in one secure dashboard without the enterprise bloat.
             </p>
 
-            {/* CTA Buttons */}
             <div 
-              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-12 animate-fadeInUp"
+              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 mb-12 animate-fadeInUp"
               style={getAnimStyle(400)}
             >
-              <Link to="/register">
-                <button className="group relative h-12 px-8 rounded-full bg-blue-600 text-white font-bold text-sm shadow-lg shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/30 transition-all hover:-translate-y-0.5 flex items-center gap-2">
+              {/* PRIMARY ACTION: Launch Dashboard */}
+              <Link to="/register" className="w-full sm:w-auto">
+                <button className="
+                  group relative 
+                  w-full sm:w-auto
+                  h-11 px-8 
+                  rounded-sm bg-blue-600 
+                  text-white font-bold text-[13px] font-manrope tracking-wider
+                  transition-all hover:bg-blue-700 active:scale-[0.98]
+                  flex items-center justify-center gap-2
+                ">
                   Launch Dashboard
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5] transition-transform group-hover:translate-x-1" />
                 </button>
               </Link>
               
-              
-                <button
+              {/* SECONDARY ACTION: Watch Demo */}
+              <button
                 onClick={handleWatchDemo}
-                className="h-12 px-8 rounded-full bg-white text-slate-700 border border-slate-200 font-bold text-sm hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center gap-2">
-                  <Play className="w-4 h-4 fill-current text-slate-400" />
-                  Watch Demo
-                </button>
-              
+                className="
+                  w-full sm:w-auto
+                  h-11 px-8 
+                  rounded-sm border border-slate-200 bg-white
+                  text-slate-600 font-bold text-[13px] font-manrope tracking-wider
+                  hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 
+                  transition-all active:scale-[0.98]
+                  flex items-center justify-center gap-2
+                "
+              >
+                <Play className="w-3.5 h-3.5 fill-slate-400 text-slate-400 group-hover:fill-slate-600 transition-colors" />
+                Watch Demo
+              </button>
             </div>
 
             {/* Trust Stats */}

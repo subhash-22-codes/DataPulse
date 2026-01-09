@@ -181,17 +181,27 @@ const Login: React.FC = () => {
                 </Link>
               </div>
 
-              {/* Login Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed text-sm"
+                className="
+                  w-full 
+                  flex justify-center items-center
+                  h-10 sm:h-11 
+                  bg-blue-600 hover:bg-blue-700 
+                  text-white 
+                  rounded-sm 
+                  text-[11px] sm:text-[12px] font-bold font-manrope tracking-widest
+                  shadow-sm 
+                  transition-all active:scale-[0.98]
+                  disabled:opacity-20 disabled:cursor-not-allowed
+                "
               >
                 {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Signing in…
-                  </>
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Signing in…</span>
+                  </div>
                 ) : (
                   'Sign In'
                 )}

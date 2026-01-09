@@ -607,9 +607,6 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
               <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
                 <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-xl bg-white p-6 text-left align-middle shadow-2xl transition-all border border-slate-100 ring-1 ring-black/5">
                   <div className="flex flex-col items-center">
-                    <div className="h-10 w-10 bg-red-50 rounded-full flex items-center justify-center mb-4 ring-1 ring-red-100">
-                        <Trash2 className="h-5 w-5 text-red-600" />
-                    </div>
                     <Dialog.Title as="h3" className="text-base font-bold text-slate-900">Delete Dataset?</Dialog.Title>
                     <div className="mt-2 text-center">
                         <p className="text-sm text-slate-500">
@@ -618,11 +615,41 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({ workspace, isP
                         </p>
                     </div>
                   </div>
-                  <div className="mt-6 flex gap-3">
-                    <button type="button" className="flex-1 justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors" onClick={() => setUploadToDelete(null)}>Cancel</button>
-                    <button type="button" className="flex-1 justify-center rounded-lg border border-transparent bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition-colors" onClick={handleDeleteUpload}>Delete</button>
-                  </div>
-                </Dialog.Panel>
+                  <div className="mt-6 flex w-full gap-2">
+                      {/* LEFT SIDE: Cancel */}
+                      <button
+                        type="button"
+                        onClick={() => setUploadToDelete(null)}
+                        className="
+                          flex-1 
+                          h-8
+                          rounded-sm border border-slate-200 
+                          bg-white
+                          text-[10px] font-bold text-slate-400 font-manrope tracking-widest 
+                          hover:bg-slate-50 hover:text-slate-900 
+                          transition-all
+                        "
+                      >
+                        Cancel
+                      </button>
+                      
+                      {/* RIGHT SIDE: Delete Action */}
+                      <button
+                        type="button"
+                        onClick={handleDeleteUpload}
+                        className="
+                          flex-1 
+                          h-8
+                          bg-red-600 hover:bg-red-700 
+                          rounded-sm 
+                          text-[10px] font-bold text-white font-manrope tracking-widest 
+                          shadow-sm transition-all active:scale-95
+                        "
+                      >
+                        Delete
+                      </button>
+                    </div>
+                                    </Dialog.Panel>
               </Transition.Child>
             </div>
           </div>
