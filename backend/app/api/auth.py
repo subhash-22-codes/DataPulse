@@ -33,12 +33,6 @@ from app.models.workspace import workspace_team
 from app.core.guard import send_telegram_alert
 from app.core.database import SessionLocal
 import time
-
-t0 = time.perf_counter()
-def log(step):
-    elapsed = time.perf_counter() - t0
-    logger.info(f"[LOGIN TIMING] {step}: +{elapsed:.3f}s")
-
     
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
@@ -555,10 +549,8 @@ def login_email(
         detail="Invalid email or password"
     )
 
-    log("start")
     email = req.email.lower()
     user = db.query(User).filter(User.email == email).first()
-    log("after db user lookup")
     
     if not user:
         bcrypt.verify(req.password, DUMMY_HASH)
@@ -575,9 +567,7 @@ def login_email(
         )
 
     if not bcrypt.verify(req.password, user.password_hash):
-        log("after bcrypt verify (fail)")
         raise auth_err
-    log("after bcrypt verify (success)")
 
     if bcrypt.needs_update(user.password_hash):
         user.password_hash = bcrypt.hash(req.password)
@@ -585,12 +575,9 @@ def login_email(
     logger.info(f"✅ Email login success: {user.email}")
 
     create_tokens_and_set_cookies(request, response, user, db, 'email', background_tasks)
-    log("after token creation")
 
     db.commit()
-    log("after db commit")
     db.refresh(user)
-    log("after db refresh")
 
     return {
         "message": "Login successful",
