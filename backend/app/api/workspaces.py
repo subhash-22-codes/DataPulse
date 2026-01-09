@@ -178,6 +178,18 @@ def create_workspace(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    
+    existing_name = db.query(Workspace).filter(
+        Workspace.owner_id == current_user.id,
+        Workspace.name == workspace.name,
+        Workspace.is_deleted == False
+    ).first()
+
+    if existing_name:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"You already have a workspace named '{workspace.name}'."
+            )
  
     active_workspace_count = db.query(func.count(Workspace.id)).filter(
         Workspace.owner_id == current_user.id,

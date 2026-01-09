@@ -32,11 +32,19 @@ from app.services.email_service import send_farewell_email
 from app.models.workspace import workspace_team
 from app.core.guard import send_telegram_alert
 from app.core.database import SessionLocal
+import time
 
+t0 = time.perf_counter()
+def log(step):
+    elapsed = time.perf_counter() - t0
+    logger.info(f"[LOGIN TIMING] {step}: +{elapsed:.3f}s")
+
+    
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
 
 logger = logging.getLogger(__name__)
+
 APP_MODE = os.getenv("APP_MODE", "development")
 
 
@@ -143,6 +151,8 @@ def create_tokens_and_set_cookies(
         "sub": str(user.id), 
         "type": "access",
         "ver": user.token_version,
+        "iss": "datapulse-auth", 
+        "iat": dt.datetime.now(dt.timezone.utc),
         "exp": dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     }, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -184,14 +194,21 @@ def get_or_create_social_user(
     current_user: Optional[User] = None
 ):
     
-
     provider_map = {
-        "google": User.google_id,
-        "github": User.github_id
+        "google": "google_id",
+        "github": "github_id"
     }
     
-    field_attr = "google_id" if provider == "google" else "github_id"
-    existing_social_owner = db.query(User).filter(provider_map[provider] == provider_id).first()
+    # Now field_attr will be "google_id" (a string)
+    field_attr = provider_map.get(provider) 
+    
+    if not field_attr:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
+    
+    # ✅ Now getattr(User, "google_id") will work perfectly
+    existing_social_owner = db.query(User).filter(
+        getattr(User, field_attr) == provider_id 
+    ).with_for_update().first()
 
     if current_user:
         if existing_social_owner and existing_social_owner.id != current_user.id:
@@ -218,7 +235,7 @@ def get_or_create_social_user(
         
         return existing_social_owner
 
-    user_by_email = db.query(User).filter(User.email == email).first()
+    user_by_email = db.query(User).filter(User.email == email).with_for_update().first()
     
     if user_by_email:
         if user_by_email.is_verified:     
@@ -227,7 +244,6 @@ def get_or_create_social_user(
                     setattr(user_by_email, field_attr, provider_id)
                     return user_by_email
                 else:
-                    # Email belongs to User A, but User B is trying to link it.
                     raise HTTPException(status_code=400, detail="This email is associated with another account.")
 
             logger.warning(f"🛡️ Security Block: {email} exists via {user_by_email.signup_method}. Denying {provider}.")
@@ -305,17 +321,23 @@ class VerifyOtpRequest(BaseModel):
     otp: str
     password: str
 
-    @field_validator('email')
+    @field_validator('email', mode='before')
+    @classmethod
     def normalize_email(cls, v):
         return v.lower().strip()
 
     @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
-        if len(v) < 8: 
-            raise ValueError('Password must be at least 8 characters long')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one number')
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            raise ValueError("Password must contain at least one special character")
+
         return v
+
+    
 class LoginEmailRequest(BaseModel):
     email: EmailStr; password: str
     @field_validator('password')
@@ -518,6 +540,7 @@ def google_login(
         logger.error(f"❌ Google Auth Critical Failure: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal authentication server error")
     
+    
 @router.post("/login-email", response_model=AuthResponse)
 @limiter.limit("5/minute")
 def login_email(
@@ -532,14 +555,17 @@ def login_email(
         detail="Invalid email or password"
     )
 
-    user = db.query(User).filter(User.email == req.email).first()
-
+    log("start")
+    email = req.email.lower()
+    user = db.query(User).filter(User.email == email).first()
+    log("after db user lookup")
+    
     if not user:
         bcrypt.verify(req.password, DUMMY_HASH)
         raise auth_err
 
     if not user.is_verified:
-        raise HTTPException(status_code=403, detail="Email not verified.")
+        raise auth_err
 
     if not user.password_hash:
         provider = user.signup_method or "social provider"
@@ -549,17 +575,22 @@ def login_email(
         )
 
     if not bcrypt.verify(req.password, user.password_hash):
+        log("after bcrypt verify (fail)")
         raise auth_err
+    log("after bcrypt verify (success)")
 
     if bcrypt.needs_update(user.password_hash):
         user.password_hash = bcrypt.hash(req.password)
-    
+
     logger.info(f"✅ Email login success: {user.email}")
 
     create_tokens_and_set_cookies(request, response, user, db, 'email', background_tasks)
+    log("after token creation")
 
     db.commit()
+    log("after db commit")
     db.refresh(user)
+    log("after db refresh")
 
     return {
         "message": "Login successful",
@@ -574,11 +605,12 @@ def login_email(
         }
     }
 
+
     
 @router.post("/send-otp", response_model=OtpResponse)
 @limiter.limit("5/minute")
 def send_otp(request: Request, req: SendOtpRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    email_normalized = req.email.lower()
+    email_normalized = req.email.lower().strip()
     
     user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
 
@@ -619,12 +651,15 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
 
 @router.post("/verify-otp")
 @limiter.limit("5/minute")
-def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
-    email_normalized = req.email.lower()
+def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: BackgroundTasks ,db: Session = Depends(get_db)):
+    logger.info("✅ verify_otp endpoint HIT")
+    email_normalized = req.email.lower().strip()
     user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
+    
+    generic_err = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP request")
 
     if not user or not user.otp_code:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active OTP request found")
+        raise generic_err
 
     if user.otp_attempts >= 5:
         user.otp_code = None
@@ -632,21 +667,22 @@ def verify_otp(request: Request, req: VerifyOtpRequest, db: Session = Depends(ge
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Too many failed attempts. Request a new OTP.")
 
     if not user.otp_expiry or dt.datetime.now(dt.timezone.utc) >= user.otp_expiry:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
+        raise generic_err
 
     if not bcrypt.verify(req.otp, user.otp_code):
         user.otp_attempts += 1
         db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP")
+        raise generic_err
+
+    user.otp_code = None 
+    user.otp_expiry = None
+    user.otp_attempts = 0
+    user.last_otp_requested_at = None
+    db.flush() # Push changes to DB but keep transaction open
 
     user.name = req.name
     user.password_hash = bcrypt.hash(req.password)
     user.is_verified = True
-    
-    user.otp_code = None
-    user.otp_expiry = None
-    user.otp_attempts = 0
-    user.last_otp_requested_at = None
     
     db.commit()
 
@@ -786,7 +822,7 @@ def get_login_history(
         raise HTTPException(status_code=500, detail="Could not retrieve security activity.")
 
 @router.post("/refresh")
-@limiter.limit('5/minute')
+@limiter.limit('10/minute')
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
     old_rt_value = request.cookies.get("refresh_token")
     if not old_rt_value:
@@ -823,12 +859,15 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     db_token.revoked = True
     db_token.last_used_at = now
     db_token.replaced_by_token = new_rt_value
+    
 
     access_exp = now + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user.id),  
         "type": "access", 
         "ver": user.token_version,
+        "iss": "datapulse-auth",
+        "iat": now,
         "exp": access_exp
     }
     new_at = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
