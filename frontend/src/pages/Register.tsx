@@ -114,7 +114,11 @@ const Register: React.FC = () => {
       if (waitTime > 0) await new Promise(resolve => setTimeout(resolve, waitTime));
       
       if (success) {
-        toast.success(isFromResend ? 'New OTP on its way.' : 'OTP on its way.');
+        toast.success(
+          isFromResend
+            ? 'A new OTP has been sent to your email.'
+            : 'We’ve sent an OTP to your email.'
+        );
         setStep('otp'); 
         setOtp(['', '', '', '', '', '']);
         localStorage.removeItem('register-email'); 
