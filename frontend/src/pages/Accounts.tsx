@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Github, Link as LinkIcon, 
-  Link2Off, AlertTriangle, 
+  Link2Off,
   Loader2, Mail, Fingerprint,
   ShieldCheck, ShieldAlert,
   History,
@@ -38,7 +38,6 @@ interface UserProfile {
   google_id?: string;
   github_id?: string;
   created_at?: string;
-  login_history?: LoginHistory[]; // Linked from Step 3
 }
 
 interface ResultModalState {
@@ -154,6 +153,9 @@ export const Account: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<WorkspaceExportSummary[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isFetchingList, setIsFetchingList] = useState(false);
+  const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [hasFetchedLogs, setHasFetchedLogs] = useState(false); 
 
  useEffect(() => {
   if (isSyncing) return; // ⬅️ IMPORTANT
@@ -175,18 +177,36 @@ export const Account: React.FC = () => {
   resolveAccountState();
 }, [user, checkSession, isSyncing]);
 
+  const fetchSecurityLogs = useCallback(async () => {
+      setIsLoadingLogs(true);
+      try {
+        const res = await api.get('auth/security/login-history');
+        // In Step 4, we designed the backend to return { status: 'success', history: [...] }
+        setLoginHistory(res.data.history || []);
+        setHasFetchedLogs(true);
+      } catch (err) {
+        console.error("Failed to fetch security logs:", err);
+        // Don't show a toast here every time, as it might annoy users
+      } finally {
+        setIsLoadingLogs(false);
+      }
+    }, []);
 
   useEffect(() => {
     const status = searchParams.get('status');
-    const errorParam = searchParams.get('error'); // FIXED: Capture error param
+    const errorParam = searchParams.get('error');
     const providerParam = searchParams.get('provider');
 
-    // Handle Success
     if (status === 'success') {
       const syncOAuthSession = async () => {
         setIsSyncing(true);
         try {
+          // 1. Sync the Identity (Updates google_id/github_id in the user object)
           await checkSession(); 
+          
+          // 2. NEW: Sync the Security Logs (Fetches the new linking event logs)
+          await fetchSecurityLogs(); // ⬅️ ADD THIS LINE
+
           setResultModal({
             type: 'success',
             message: 'Account identity successfully synchronized.',
@@ -203,22 +223,39 @@ export const Account: React.FC = () => {
       syncOAuthSession();
     }
 
-    // FIXED: Handle Errors from URL (like the one you experienced)
+    // Error handling stays exactly the same as you have it
     if (errorParam) {
       setResultModal({
         type: 'error',
-        message: errorParam.replace(/_/g, ' '), // Cleans the "already_linked" string
+        message: errorParam.replace(/_/g, ' '),
         provider: (providerParam as 'google' | 'github' | null) || null
       });
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, checkSession, setSearchParams]);
+  }, [searchParams, checkSession, setSearchParams, fetchSecurityLogs]);
 
-  // Find the last login time for a specific service
+
+
+  useEffect(() => {
+    // Only fetch if the logs are showing and we haven't fetched them yet
+    if (showSecurityLogs && !hasFetchedLogs) {
+      fetchSecurityLogs();
+    }
+  }, [showSecurityLogs, hasFetchedLogs, fetchSecurityLogs]);
+
+  
   const getLastUsed = (provider: string) => {
-    return user?.login_history?.find(log => log.provider === provider)?.created_at;
-  };
+  return loginHistory?.find(log => log.provider === provider)?.created_at;
+};
 
+  const toggleSecurityLogs = () => {
+    const nextState = !showSecurityLogs;
+    setShowSecurityLogs(nextState);
+    
+    if (nextState && loginHistory.length === 0) {
+      fetchSecurityLogs();
+    }
+  };
   const handleLink = () => {
     if (!pendingLink) return;
     setLoadingAction(`link-${pendingLink}`);
@@ -487,189 +524,197 @@ if (pageState === 'error') {
                       </div>
 
                       {/* Right */}
-                      <div className="shrink-0">
+                     <div className="shrink-0 ml-4">
                         {service.active ? (
+                          /* DISCONNECT: Same width as Connect, centered text */
                           <button
                             onClick={() => setUnlinkProvider(service.id)}
                             className="
-                              rounded-md
-                              px-2.5 py-1.5
-                              text-xs font-medium
-                              text-slate-500
-                              hover:text-red-600 hover:bg-red-50
-                              transition
+                              w-24 flex justify-center items-center
+                              rounded-sm 
+                              border border-slate-200 
+                              bg-white 
+                              py-1.5 
+                              text-[10px] font-bold font-manrope tracking-widest
+                              text-slate-400 
+                              hover:text-black hover:bg-black/5
+                              transition-all 
+                              active:scale-95
                             "
                           >
                             Disconnect
                           </button>
                         ) : (
+                          /* CONNECT: SaaS Blue - Perfectly matching the width above */
                           <button
                             onClick={() => setPendingLink(service.id)}
                             className="
-                              rounded-md
-                              px-3 py-1.5
-                              text-xs font-semibold
-                              bg-slate-900 text-white
-                              hover:bg-slate-800
-                              transition
+                              w-24 flex justify-center items-center
+                              rounded-sm 
+                              bg-blue-600 
+                              py-1.5 
+                              text-[10px] font-bold font-manrope tracking-widest
+                              text-white 
+                              hover:bg-blue-700 
+                              shadow-sm
+                              transition-all 
+                              active:scale-95
                             "
                           >
                             Connect
                           </button>
                         )}
                       </div>
-                    </div>
+                  </div>
                   );
                 })}
               </div>
             </section>
 
            {/* SECURITY ACTIVITY */}
-              <section className="space-y-4">
-
-                {/* Summary Header */}
-                <button
-                  type="button"
-                  onClick={() => setShowSecurityLogs(v => !v)}
-                  className="
-                    w-full flex items-center justify-between
-                    rounded-xl border border-slate-200 bg-white
-                    px-4 py-3 sm:px-5
-                    transition
-                    hover:bg-slate-50
-                  "
-                >
-                  {/* Left */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-9 w-9 rounded-md bg-slate-100 flex items-center justify-center">
-                      <History className="h-4 w-4 text-slate-600" />
-                    </div>
-
-                    <div className="min-w-0 text-left">
-                      <p className="text-sm font-medium text-slate-900">
-                        Security activity
-                      </p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {user?.login_history?.length
-                          ? `${user.login_history.length} recent events`
-                          : 'No recent events'}
-                      </p>
-                    </div>
+             <section className="space-y-4">
+              {/* Summary Header */}
+              <button
+                type="button"
+                onClick={toggleSecurityLogs} 
+                className="
+                  w-full flex items-center justify-between
+                  rounded-xl border border-slate-200 bg-white
+                  px-4 py-3 sm:px-5
+                  transition
+                  hover:bg-slate-50
+                "
+              >
+                {/* Left */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-9 w-9 rounded-md bg-slate-100 flex items-center justify-center">
+                    <History className="h-4 w-4 text-slate-600" />
                   </div>
 
-                  {/* Right */}
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    {!showSecurityLogs && user?.login_history?.length ? (
-                      <span className="hidden sm:inline">
-                        Last activity{' '}
-                        <FormattedDate
-                          dateString={user.login_history[0].created_at}
-                          showTime
-                        />
-                      </span>
-                    ) : null}
-
-                    <ChevronDown
-                      className={`h-4 w-4 transition-transform duration-200 ${
-                        showSecurityLogs ? 'rotate-180' : ''
-                      }`}
-                    />
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium text-slate-900">
+                      Security activity
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {loginHistory?.length
+                        ? `${loginHistory.length} recent events`
+                        : 'No recent events'}
+                    </p>
                   </div>
-                </button>
+                </div>
 
-                {/* Collapsible Content */}
-                {showSecurityLogs && (
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                {/* Right */}
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  {!showSecurityLogs && loginHistory?.length ? (
+                    <span className="hidden sm:inline">
+                      Last activity{' '}
+                      <FormattedDate
+                        dateString={loginHistory[0].created_at}
+                        showTime
+                      />
+                    </span>
+                  ) : null}
 
-                    <div className="divide-y divide-slate-100">
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform duration-200 ${
+                      showSecurityLogs ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+              </button>
 
-                      {/* Syncing state */}
-                      {isSyncing ? (
-                        <div className="px-4 py-8 flex items-center justify-center gap-2 text-slate-500">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-xs font-medium">
-                            Syncing security activity…
-                          </span>
-                        </div>
-                      ) : user?.login_history && user.login_history.length > 0 ? (
+              {/* Collapsible Content */}
+              {showSecurityLogs && (
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div className="divide-y divide-slate-100">
 
-                        user.login_history.map((log) => (
-                          <div
-                            key={log.id}
-                            className="
-                              flex items-start justify-between gap-4
-                              px-4 py-3 sm:px-5 sm:py-4
-                              transition-colors
-                              hover:bg-slate-50
-                            "
-                          >
-                            {/* LEFT */}
-                            <div className="flex gap-3 min-w-0">
-                              <div className="h-9 w-9 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0">
-                                {log.provider === 'google' ? <GoogleIcon className="h-4 w-4" /> :
-                                log.provider === 'github' ? <Github className="h-4 w-4" /> :
-                                log.provider === 'security_reset' ? <ShieldAlert className="h-4 w-4 text-slate-600" /> :
-                                <Mail className="h-4 w-4 text-slate-400" />}
-                              </div>
+                    {/* Syncing state - Now uses independent isLoadingLogs */}
+                    {isLoadingLogs ? (
+                      <div className="px-4 py-8 flex items-center justify-center gap-2 text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-xs font-medium">
+                          Syncing security activity…
+                        </span>
+                      </div>
+                    ) : loginHistory && loginHistory.length > 0 ? (
 
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-slate-900 truncate">
-                                  {log.provider === 'security_reset'
-                                    ? 'Global security reset'
-                                    : parseUA(log.user_agent)}
-                                </p>
-
-                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                  <span className="flex items-center gap-1">
-                                    <Monitor className="h-3 w-3 text-slate-400" />
-                                    {log.ip_address === 'system'
-                                      ? 'Account-wide'
-                                      : log.ip_address}
-                                  </span>
-
-                                  <span>•</span>
-
-                                  <span>
-                                    via {log.provider.replace('_', ' ')}
-                                  </span>
-
-                                  <span>•</span>
-
-                                  <span>
-                                    <FormattedDate
-                                      dateString={log.created_at}
-                                      showTime
-                                    />
-                                  </span>
-                                </div>
-                              </div>
+                      loginHistory.map((log) => (
+                        <div
+                          key={log.id}
+                          className="
+                            flex items-start justify-between gap-4
+                            px-4 py-3 sm:px-5 sm:py-4
+                            transition-colors
+                            hover:bg-slate-50
+                          "
+                        >
+                          {/* LEFT */}
+                          <div className="flex gap-3 min-w-0">
+                            <div className="h-9 w-9 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0">
+                              {log.provider === 'google' ? <GoogleIcon className="h-4 w-4" /> :
+                              log.provider === 'github' ? <Github className="h-4 w-4" /> :
+                              log.provider === 'security_reset' ? <ShieldAlert className="h-4 w-4 text-slate-600" /> :
+                              <Mail className="h-4 w-4 text-slate-400" />}
                             </div>
 
-                            {/* RIGHT (desktop only) */}
-                            <div className="hidden sm:flex shrink-0 items-center">
-                              {log.provider === 'security_reset' ? (
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                                  System
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">
+                                {log.provider === 'security_reset'
+                                  ? 'Global security reset'
+                                  : parseUA(log.user_agent)}
+                              </p>
+
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                                <span className="flex items-center gap-1">
+                                  <Monitor className="h-3 w-3 text-slate-400" />
+                                  {log.ip_address === 'system'
+                                    ? 'Account-wide'
+                                    : log.ip_address}
                                 </span>
-                              ) : (
-                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  Verified
+
+                                <span>•</span>
+
+                                <span>
+                                  via {log.provider.replace('_', ' ')}
                                 </span>
-                              )}
+
+                                <span>•</span>
+
+                                <span>
+                                  <FormattedDate
+                                    dateString={log.created_at}
+                                    showTime
+                                  />
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        ))
 
-                      ) : (
-                        <div className="px-4 py-8 text-center text-xs text-slate-400">
-                          No recent security activity.
+                          {/* RIGHT (desktop only) */}
+                          <div className="hidden sm:flex shrink-0 items-center">
+                            {log.provider === 'security_reset' ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                                System
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                Verified
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      ))
 
-                    </div>
+                    ) : (
+                      <div className="px-4 py-8 text-center text-xs text-slate-400">
+                        No recent security activity.
+                      </div>
+                    )}
+
                   </div>
-                )}
-              </section>
+                </div>
+              )}
+            </section>
 
               {/* DATA & PRIVACY SECTION - The bridge to the Danger Zone */}
                   <section className="space-y-4">
@@ -696,20 +741,22 @@ if (pageState === 'error') {
                           className="
                             shrink-0
                             inline-flex items-center justify-center gap-2
-                            rounded-md border border-slate-300
-                            px-3.5 py-2
-                            text-xs font-medium text-slate-700
-                            hover:bg-slate-50
-                            transition
-                            disabled:opacity-50
+                            rounded-sm border border-slate-200
+                            bg-white
+                            px-3 py-1.5
+                            text-[10px] sm:text-[11px] font-bold font-manrope tracking-widest
+                            text-slate-500
+                            hover:bg-slate-900 hover:text-white hover:border-slate-900
+                            transition-all active:scale-95
+                            disabled:opacity-20
                           "
                         >
                           {isFetchingList ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin" />
                           ) : (
-                            <History className="h-3.5 w-3.5" />
+                            <History className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                           )}
-                          {isFetchingList ? 'Preparing ZIP...' : 'Export my data'}
+                          <span>{isFetchingList ? 'Preparing...' : 'Export data'}</span>
                         </button>
                       </div>
                     </div>
@@ -742,15 +789,17 @@ if (pageState === 'error') {
                       className="
                         shrink-0
                         inline-flex items-center gap-2
-                        rounded-md border border-slate-300
-                        px-3.5 py-2
-                        text-xs font-medium text-slate-700
+                        rounded-sm border border-slate-200
+                        bg-white
+                        px-3 py-1.5
+                        text-[10px] sm:text-[11px] font-bold font-manrope tracking-widest
+                        text-slate-500
                         hover:bg-slate-900 hover:text-white hover:border-slate-900
-                        transition
+                        transition-all active:scale-95
                       "
                     >
-                      <LogOut className="h-3.5 w-3.5" />
-                      Sign out everywhere
+                      <LogOut className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <span>Sign out everywhere</span>
                     </button>
                   </div>
                 </div>
@@ -768,19 +817,21 @@ if (pageState === 'error') {
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => setShowDeleteModal(true)}
-                      className="
-                        shrink-0
-                        rounded-md border border-red-300
-                        px-3.5 py-2
-                        text-xs font-semibold text-red-600
-                        hover:bg-red-600 hover:text-white hover:border-red-600
-                        transition
-                      "
-                    >
-                      Delete account
-                    </button>
+                   <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="
+                      shrink-0
+                      rounded-sm border border-slate-200
+                      bg-white
+                      px-3 py-1.5
+                      text-[10px] sm:text-[11px] font-bold font-manrope tracking-widest
+                      text-slate-400
+                      hover:border-red-600 hover:bg-red-600 hover:text-white
+                      transition-all active:scale-95
+                    "
+                  >
+                    Delete account
+                  </button>
                   </div>
                 </div>
 
@@ -790,59 +841,88 @@ if (pageState === 'error') {
 
       {/* --- MODALS --- */}
 
-      {showExportModal && (
-        <ModalShell>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Choose Workspace</h3>
-              <button onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="h-5 w-5" />
+     {showExportModal && (
+      <ModalShell>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-md bg-white shadow-2xl border border-slate-300 flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* HEADER: Clear & Simple */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
+                Download your data
+              </h3>
+              <button 
+                onClick={() => setShowExportModal(false)} 
+                className="text-slate-400 hover:text-slate-900 transition-colors"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
             
-            <p className="text-sm text-slate-500 mb-6">
-              Select a workspace to generate a portable .zip archive.
-            </p>
+            {/* BODY */}
+            <div className="p-5">
+              <p className="text-xs text-slate-600 mb-5 leading-relaxed">
+                Select a workspace to download as a <span className="font-bold text-slate-900">.zip file</span>. This file contains all your saved information and activity logs.
+              </p>
 
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {isFetchingList ? (
-                <div className="flex justify-center py-8"><Loader2 className="animate-spin h-6 w-6 text-indigo-500" /></div>
-              ) : workspaces.length === 0 ? (
-                <p className="text-center py-4 text-xs text-slate-400 italic">No workspaces found</p>
-              ) : workspaces.map((ws) => (
-                <div key={ws.workspace_id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50">
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">{ws.name}</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-tight">
-                      {ws.total_size_bytes < 1024 * 1024 
-                        ? `${(ws.total_size_bytes / 1024).toFixed(1)} KB` 
-                        : `${(ws.total_size_bytes / (1024 * 1024)).toFixed(1)} MB`} • {ws.file_count} files
-                    </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {isFetchingList ? (
+                  /* HUMAN LOADING STATE */
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <Loader2 className="animate-spin h-5 w-5 text-slate-900" />
+                    <span className="text-[11px] font-medium text-slate-500">Searching for your workspaces...</span>
                   </div>
-                  <button 
-                    onClick={() => downloadWorkspace(ws.workspace_id, ws.name)}
-                    disabled={exportingId !== null || ws.total_size_bytes === 0}
-                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition disabled:opacity-30"
+                ) : workspaces.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-slate-200 rounded-md">
+                    <p className="text-[11px] text-slate-500 font-medium">You don't have any workspaces yet.</p>
+                  </div>
+                ) : workspaces.map((ws) => (
+                  <div 
+                    key={ws.workspace_id} 
+                    className="flex items-center justify-between p-3 rounded-md border border-slate-200 bg-white hover:border-slate-400 transition-all"
                   >
-                    {exportingId === ws.workspace_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  </button>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{ws.name}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                        {ws.total_size_bytes < 1024 * 1024 
+                          ? `${(ws.total_size_bytes / 1024).toFixed(1)} KB` 
+                          : `${(ws.total_size_bytes / (1024 * 1024)).toFixed(1)} MB`} 
+                        {" • "}{ws.file_count} items
+                      </p>
+                    </div>
+                    
+                    <button 
+                      onClick={() => downloadWorkspace(ws.workspace_id, ws.name)}
+                      disabled={exportingId !== null || ws.total_size_bytes === 0}
+                      className="ml-4 flex h-9 items-center gap-2 bg-slate-900 px-3 text-white rounded-md hover:bg-black disabled:opacity-20 transition-all"
+                    >
+                      {exportingId === ws.workspace_id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Download className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            {/* FOOTER */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button 
                 onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+                className="px-4 py-2 text-[11px] font-bold text-slate-500 hover:text-slate-900 font-manrope tracking-widest transition-colors"
               >
-                Close
+                Cancel
               </button>
             </div>
+
           </div>
         </div>
-       </ModalShell>
-      )}
+      </ModalShell>
+    )}
 
       {/* GLOBAL LOGOUT MODAL */}
         {showLogoutAllModal && (
@@ -871,20 +951,39 @@ if (pageState === 'error') {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 px-5 py-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 px-4 pb-4">
+                {/* SECONDARY: Low priority, clean text */}
                 <button
                   onClick={() => setShowLogoutAllModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-md transition"
+                  className="
+                    w-full sm:w-auto 
+                    px-5 py-2 
+                    text-[11px] font-bold text-slate-500 font-manrope tracking-widest
+                    hover:text-slate-900 hover:bg-slate-100 
+                    rounded-sm transition-all
+                  "
                 >
                   Cancel
                 </button>
 
+                {/* PRIMARY: Serious maintenance action */}
                 <button
                   onClick={processGlobalLogout}
-                  className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition flex items-center justify-center min-w-[140px]"
+                  disabled={loadingAction === 'logout-all'}
+                  className="
+                    w-full sm:w-auto 
+                    min-w-[160px] 
+                    bg-slate-900 hover:bg-black 
+                    px-6 py-2.5 
+                    text-[11px] font-bold text-white font-manrope tracking-widest 
+                    rounded-sm shadow-sm 
+                    transition-all active:scale-[0.98]
+                    disabled:opacity-20 
+                    flex items-center justify-center gap-2
+                  "
                 >
                   {loadingAction === 'logout-all' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     'Sign out everywhere'
                   )}
@@ -946,7 +1045,7 @@ if (pageState === 'error') {
           <div className="px-6 py-4 border-t border-slate-100">
             <button
               onClick={() => setResultModal(null)}
-              className="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition"
+              className="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white font-manrope hover:bg-slate-800 transition"
             >
               Continue
             </button>
@@ -959,254 +1058,293 @@ if (pageState === 'error') {
 
 
     {unlinkProvider && (
-  <ModalShell>
-    <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden transition-all">
-        
-        {/* Header - Consistent with Connect Modal */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Security & Identity
-          </h2>
-          <button 
-            onClick={() => setUnlinkProvider(null)}
-            className="text-slate-400 hover:text-slate-600 transition"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Body - Balanced White Space */}
-        <div className="p-8 text-center">
-          
-          {/* Visual Hub - The "Disconnect" Look */}
-          <div className="flex items-center justify-center gap-6 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm opacity-60">
-              <img
-                src="/DPLogo.png"
-                alt="DataPulse"
-                className="h-7 w-auto object-contain"
-              />
+      <ModalShell>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden transition-all">
+            
+            {/* Header - Consistent with Connect Modal */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Security & Identity
+              </h2>
+              <button 
+                onClick={() => setUnlinkProvider(null)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="relative flex items-center justify-center">
-              <div className="h-8 w-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center shadow-sm z-10">
-                <Link2Off className="h-4 w-4 text-rose-500" />
+            {/* Body - Balanced White Space */}
+            <div className="p-8 text-center">
+              
+              {/* Visual Hub - The "Disconnect" Look */}
+              <div className="flex items-center justify-center gap-6 mb-8">
+                <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm opacity-60">
+                  <img
+                    src="/DPLogo.png"
+                    alt="DataPulse"
+                    className="h-7 w-auto object-contain"
+                  />
+                </div>
+
+                <div className="relative flex items-center justify-center">
+                  <div className="h-8 w-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center shadow-sm z-10">
+                    <Link2Off className="h-4 w-4 text-rose-500" />
+                  </div>
+                </div>
+
+                <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                  {unlinkProvider === 'google' ? (
+                    <GoogleIcon className="h-6 w-6" />
+                  ) : (
+                    <Github className="h-6 w-6 text-slate-900" />
+                  )}
+                </div>
               </div>
+
+              {/* Copy - Direct & Professional */}
+              <h3 className="text-base font-semibold text-slate-900 tracking-tight">
+                Disconnect {unlinkProvider.charAt(0).toUpperCase() + unlinkProvider.slice(1)}?
+              </h3>
+
+              <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-[300px] mx-auto">
+                This will revoke DataPulse's access to your account. You'll need to use another method to sign in.
+              </p>
             </div>
 
-            <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-              {unlinkProvider === 'google' ? (
-                <GoogleIcon className="h-6 w-6" />
+            {/* Footer - Consistent High-Quality Buttons */}
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 px-4 pb-4">
+            {/* SECONDARY: Friendly and subtle */}
+            <button
+              onClick={() => setUnlinkProvider(null)}
+              className="
+                w-full sm:w-auto 
+                px-5 py-2 
+                text-[11px] font-bold text-slate-500 font-manrope tracking-widest
+                hover:text-slate-900 hover:bg-slate-100 
+                rounded-sm transition-all
+              "
+            >
+              Stay connected
+            </button>
+
+            {/* PRIMARY: Serious and solid */}
+            <button
+              onClick={processUnlink}
+              disabled={loadingAction?.startsWith('unlink')}
+              className="
+                w-full sm:w-auto 
+                min-w-[140px] 
+                bg-slate-900 hover:bg-black 
+                px-6 py-2 
+                text-[11px] font-bold text-white font-manrope tracking-widest 
+                rounded-sm shadow-sm 
+                transition-all active:scale-[0.98]
+                disabled:opacity-20 
+                flex items-center justify-center gap-2
+              "
+            >
+              {loadingAction?.startsWith('unlink') ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Github className="h-6 w-6 text-slate-900" />
+                'Disconnect'
+              )}
+            </button>
+          </div>
+
+          </div>
+        </div>
+      </ModalShell>
+    )}
+
+      {showDeleteModal && (
+        <ModalShell>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">
+            {/* Container: max-h for mobile safety, sharper corners */}
+            <div className="w-full max-w-md bg-white rounded-sm border border-slate-400 shadow-2xl flex flex-col max-h-[95vh] animate-in fade-in zoom-in-95 duration-100">
+              
+              {!isDeleted ? (
+                <>
+                  {/* HEADER: No soft colors, just high-contrast text */}
+                  <div className="px-5 py-4 border-b border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <ShieldAlert className="h-5 w-5 text-red-600 shrink-0" />
+                      <h2 className="text-base font-bold text-slate-900 uppercase tracking-tight">
+                        Confirm Account Deletion
+                      </h2>
+                    </div>
+                  </div>
+
+                  {/* BODY: Tightened padding for mobile */}
+                  <div className="p-5 overflow-y-auto">
+                    <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-5">
+                      <p className="text-xs font-bold text-red-800 leading-relaxed">
+                        WARNING: This is a permanent system action. 
+                      </p>
+                      <p className="text-[11px] text-red-700 mt-1">
+                        All associated workspaces, API keys, and logs will be purged from DataPulse nodes immediately.
+                      </p>
+                    </div>
+
+                    {/* INPUT SECTION */}
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-600 leading-normal">
+                        To verify, please type <span className="font-mono font-bold text-slate-900 select-all">{user?.email}</span> below.
+                      </p>
+                      <input
+                        type="text"
+                        value={confirmEmail}
+                        onChange={(e) => setConfirmEmail(e.target.value)}
+                        placeholder="Verify email address"
+                        disabled={loadingAction === 'deleting'}
+                        className="w-full rounded-sm border border-slate-400 bg-white px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all placeholder:text-slate-300 font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* FOOTER: Professional gray bar with stacked buttons on mobile */}
+                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2">
+                    <button
+                      onClick={() => setShowDeleteModal(false)}
+                      className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-slate-700 border border-slate-300 bg-white hover:bg-slate-100 transition-colors font-manrope"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={processDelete}
+                      disabled={confirmEmail !== user?.email || loadingAction === 'deleting'}
+                      className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-red-700 hover:bg-red-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all font-manrope flex items-center justify-center min-w-[140px]"
+                    >
+                      {loadingAction === 'deleting' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Delete Identity'
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* SUCCESS: Serious, no "happy" green colors */
+                <div className="p-8 text-center bg-white">
+                  <div className="mx-auto h-10 w-10 border-2 border-slate-900 flex items-center justify-center mb-4">
+                    <Check className="h-6 w-6 text-slate-900" />
+                  </div>
+                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Deletion Initiated</h2>
+                  <p className="text-[11px] text-slate-500 mt-2 font-medium">
+                    DataPulse identity is being scrubbed. Redirecting...
+                  </p>
+                  <div className="mt-6 h-1 w-full bg-slate-100 overflow-hidden">
+                    <div className="h-full bg-slate-900 animate-[progress_3s_linear]" />
+                  </div>
+                </div>
               )}
             </div>
           </div>
-
-          {/* Copy - Direct & Professional */}
-          <h3 className="text-base font-semibold text-slate-900 tracking-tight">
-            Disconnect {unlinkProvider.charAt(0).toUpperCase() + unlinkProvider.slice(1)}?
-          </h3>
-
-          <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-[300px] mx-auto">
-            This will revoke DataPulse's access to your account. You'll need to use another method to sign in.
-          </p>
-        </div>
-
-        {/* Footer - Consistent High-Quality Buttons */}
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-          <button
-            onClick={() => setUnlinkProvider(null)}
-            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition"
-          >
-            Stay connected
-          </button>
-
-          <button
-            onClick={processUnlink}
-            className="px-5 py-2.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition flex items-center justify-center min-w-[140px]"
-          >
-            {loadingAction?.startsWith('unlink') ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              'Disconnect'
-            )}
-          </button>
-        </div>
-
-      </div>
-    </div>
-  </ModalShell>
-)}
-
-
-     {showDeleteModal && (
-  <ModalShell>
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden transition-all">
-        
-        {!isDeleted ? (
-          <>
-            {/* HEADER */}
-            <div className="p-5 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-md bg-rose-50 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="h-4 w-4 text-rose-600" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Delete Account</h2>
-                  <p className="text-xs text-slate-500 font-medium">This action is permanent</p>
-                </div>
-              </div>
-            </div>
-
-            {/* BODY */}
-            <div className="p-5 space-y-5">
-              <p className="text-sm text-slate-600 leading-relaxed">
-                This will permanently scrub your <span className="font-semibold text-slate-900">DataPulse</span> identity. All workspaces, encrypted keys, and history will be erased.
-              </p>
-
-              {/* CONFIRM INPUT */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">
-                  Confirm email to proceed
-                </label>
-                <input
-                  type="text"
-                  value={confirmEmail}
-                  onChange={(e) => setConfirmEmail(e.target.value)}
-                  placeholder={user?.email}
-                  disabled={loadingAction === 'deleting'}
-                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono focus:bg-white focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 outline-none transition-all placeholder:opacity-50"
-                />
-              </div>
-            </div>
-
-            {/* FOOTER - Responsive Alignment */}
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-5 py-4 bg-slate-50/50 border-t border-slate-100">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={processDelete}
-                disabled={confirmEmail !== user?.email || loadingAction === 'deleting'}
-                className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:hover:bg-rose-600 rounded-md transition flex items-center justify-center min-w-[140px]"
-              >
-                {loadingAction === 'deleting' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Delete Account'
-                )}
-              </button>
-            </div>
-          </>
-        ) : (
-          /* SUCCESS VIEW - Modern & Minimal */
-          <div className="p-10 text-center">
-            <div className="mx-auto h-12 w-12 bg-emerald-50 rounded-full flex items-center justify-center mb-4">
-              <Check className="h-6 w-6 text-emerald-600" />
-            </div>
-            <h2 className="text-sm font-semibold text-slate-900">Identity Scrubbed</h2>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Your data has been removed. Redirecting to portal...
-            </p>
-            <div className="mt-6 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 animate-[progress_3s_linear]" />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  </ModalShell>
-)}
+        </ModalShell>
+      )}
 
      {pendingLink && (
-  <ModalShell>
-    <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden transition-all">
-        
-        {/* Header - Simple & Clean */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Security & Identity
-          </h2>
-          <button 
-            onClick={() => setPendingLink(null)}
-            className="text-slate-400 hover:text-slate-600 transition"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Body - Amazon/Google Minimalist Style */}
-        <div className="p-8 text-center">
-          
-          {/* Visual Connection Hub */}
-          <div className="flex items-center justify-center gap-5 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm">
-              <img
-                src="/DPLogo.png"
-                alt="DataPulse"
-                className="h-7 w-auto object-contain"
-              />
-            </div>
-
-            <div className="relative flex items-center justify-center">
-              <div className="absolute w-12 border-t border-dashed border-slate-300"></div>
-              <div className="relative z-10 h-7 w-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                <LinkIcon className="h-3 w-3 text-slate-400" />
+        <ModalShell>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden transition-all">
+              
+              {/* Header - Simple & Clean */}
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Security & Identity
+                </h2>
+                <button 
+                  onClick={() => setPendingLink(null)}
+                  className="text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-            </div>
 
-            <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-              {pendingLink === 'google' ? (
-                <GoogleIcon className="h-6 w-6" />
-              ) : (
-                <Github className="h-6 w-6 text-slate-900" />
-              )}
-            </div>
+              {/* Body - Amazon/Google Minimalist Style */}
+              <div className="p-8 text-center">
+                
+                {/* Visual Connection Hub */}
+                <div className="flex items-center justify-center gap-5 mb-8">
+                  <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm">
+                    <img
+                      src="/DPLogo.png"
+                      alt="DataPulse"
+                      className="h-7 w-auto object-contain"
+                    />
+                  </div>
+
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute w-12 border-t border-dashed border-slate-300"></div>
+                    <div className="relative z-10 h-7 w-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                      <LinkIcon className="h-3 w-3 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                    {pendingLink === 'google' ? (
+                      <GoogleIcon className="h-6 w-6" />
+                    ) : (
+                      <Github className="h-6 w-6 text-slate-900" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Copy - High Readability */}
+                <h3 className="text-base font-semibold text-slate-900 tracking-tight">
+                  Connect {pendingLink.charAt(0).toUpperCase() + pendingLink.slice(1)} to DataPulse?
+                </h3>
+
+                <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-[280px] mx-auto">
+                  This links your identity and enables single sign-on. No data will be shared without your permission.
+                </p>
+              </div>
+
+              {/* Footer - Consistent Action Area */}
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 px-4 pb-4">
+                  {/* SECONDARY: Friendly and low-pressure */}
+                  <button
+                    onClick={() => setPendingLink(null)}
+                    className="
+                      w-full sm:w-auto 
+                      px-5 py-2 
+                      text-[11px] font-bold text-slate-500 font-manrope tracking-widest
+                      hover:text-slate-900 hover:bg-slate-100 
+                      rounded-sm transition-all
+                    "
+                  >
+                    Not now
+                  </button>
+
+                  {/* PRIMARY: SaaS Blue - The "Growth" action */}
+                  <button
+                    onClick={handleLink}
+                    disabled={loadingAction?.startsWith('link')}
+                    className="
+                      w-full sm:w-auto 
+                      min-w-[140px] 
+                      bg-blue-600 hover:bg-blue-700 
+                      px-6 py-2.5 
+                      text-[11px] font-bold text-white font-manrope tracking-widest 
+                      rounded-sm shadow-sm 
+                      transition-all active:scale-[0.98]
+                      disabled:opacity-20 
+                      flex items-center justify-center gap-2
+                    "
+                  >
+                    {loadingAction?.startsWith('link') ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      'Connect account'
+                    )}
+                  </button>
+                </div>
+              </div>
           </div>
-
-          {/* Copy - High Readability */}
-          <h3 className="text-base font-semibold text-slate-900 tracking-tight">
-            Connect {pendingLink.charAt(0).toUpperCase() + pendingLink.slice(1)} to DataPulse?
-          </h3>
-
-          <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-[280px] mx-auto">
-            This links your identity and enables single sign-on. No data will be shared without your permission.
-          </p>
-        </div>
-
-        {/* Footer - Consistent Action Area */}
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-          <button
-            onClick={() => setPendingLink(null)}
-            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleLink}
-            className="px-5 py-2.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition flex items-center justify-center min-w-[140px]"
-          >
-            {loadingAction?.startsWith('link') ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              'Connect account'
-            )}
-          </button>
-        </div>
-
-      </div>
-    </div>
-  </ModalShell>
-)}
+        </ModalShell>
+      )}
 
     </div>
   );

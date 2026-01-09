@@ -137,8 +137,17 @@ export const WhatNewModal: React.FC<WhatNewModalProps> = ({
                 <div className="border-t border-gray-200 bg-gray-50 px-4 py-2.5 flex justify-end">
                   <button
                     type="button"
-                    className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-gray-200 focus:ring-offset-1"
                     onClick={onClose}
+                    className="
+                      inline-flex items-center justify-center
+                      h-8 sm:h-9 px-4
+                      rounded-sm border border-slate-200 bg-white
+                      text-[10px] font-bold text-slate-500 font-manrope tracking-[0.15em]
+                      shadow-sm transition-all
+                      hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300
+                      active:scale-[0.95]
+                      focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-300
+                    "
                   >
                     Close
                   </button>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import { useNavigate } from "react-router-dom";
-import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, LayoutGrid, ArrowRight, Clock, Lock, Check, Database, Activity } from "lucide-react";
+import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, LayoutGrid, ArrowRight, Clock, Lock, Check, Database, Activity, Loader2 } from "lucide-react";
 import { AxiosError } from "axios";
 import { Workspace } from "../types";
 import { CreateWorkspaceModal } from "../components/CreateWorkspaceModal";
@@ -298,12 +298,22 @@ const Home: React.FC = () => {
                     <div className="mt-2 flex w-full flex-row items-center justify-between gap-3 md:mt-0 md:w-auto md:flex-col md:items-end md:justify-start">
   
                         {canCreateWorkspace ? (
-                            <button
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="order-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 md:order-1 md:w-auto"
+                           <button
+                              onClick={() => setIsCreateModalOpen(true)}
+                              className="
+                                order-2 md:order-1
+                                w-full md:w-auto
+                                inline-flex items-center justify-center gap-2
+                                rounded-sm 
+                                bg-blue-600 
+                                px-4 py-2 
+                                text-[11px] font-bold text-white tracking-widest
+                                shadow-sm hover:bg-blue-700 font-manrope hover:shadow-md
+                                transition-all active:scale-[0.98]
+                              "
                             >
-                            <Plus className="h-3.5 w-3.5" />
-                            New workspace
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>New workspace</span>
                             </button>
                         ) : (
                             <div className="order-2 inline-flex items-center gap-1.5 text-sm text-gray-500 md:order-1">
@@ -365,18 +375,28 @@ const Home: React.FC = () => {
 
                         {/* Action */}
                         <button
-                            onClick={fetchData}
-                            disabled={loading}
-                            className="mt-4 inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={fetchData}
+                          disabled={loading}
+                          className="
+                            mt-6 
+                            inline-flex items-center justify-center gap-2
+                            h-9 sm:h-10 px-6
+                            rounded-sm border border-slate-200 bg-white
+                            text-[10px] sm:text-[11px] font-bold text-slate-600 font-manrope tracking-[0.15em]
+                            transition-all 
+                            hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300
+                            active:scale-[0.98]
+                            disabled:opacity-20 disabled:cursor-not-allowed
+                          "
                         >
-                            {loading ? (
+                          {loading ? (
                             <>
-                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-                                Retrying…
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+                              <span>Retrying...</span>
                             </>
-                            ) : (
+                          ) : (
                             "Retry"
-                            )}
+                          )}
                         </button>
                         </div>
 

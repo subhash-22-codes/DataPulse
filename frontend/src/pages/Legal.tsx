@@ -79,37 +79,42 @@ export const Legal: React.FC = () => {
           </div>
 
           {/* Right */}
-          <div className="flex items-center gap-2 sm:gap-3">
+         <div className="flex items-center gap-2 sm:gap-3">
+            {/* PRINT: Utility Secondary Action */}
             <button
               onClick={handlePrint}
-              className="hidden sm:inline-flex items-center gap-2
-                text-xs font-medium text-slate-500
-                hover:text-slate-900
-                transition-colors
-                px-3 py-1.5
-                border border-slate-200 rounded-md
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              className="
+                hidden sm:inline-flex items-center gap-2
+                h-9 px-4 tracking-widest
+                rounded-sm border border-slate-200 bg-white
+                text-[11px] font-bold font-manrope text-slate-500
+                hover:text-slate-900 hover:border-slate-300
+                transition-all active:scale-[0.95]
+                focus-visible:ring-slate-300
+              "
             >
-              <Printer className="w-4 h-4" />
-              Print
+              <Printer className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Print</span>
             </button>
 
+            {/* RETURN: Primary System Navigation */}
             <Link
               to="/home"
               className="
-                inline-flex items-center gap-1.5
-                text-[13px] sm:text-xs
-                font-medium
-                text-white bg-slate-900
-                hover:bg-slate-800
-                transition-colors
-                rounded-md
-                px-3 py-1.5
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300
+                inline-flex items-center gap-2
+                h-9 px-4
+                bg-slate-900 text-white tracking-widest
+                rounded-sm 
+                text-[11px] font-bold font-manrope
+                transition-all hover:bg-slate-800 active:scale-[0.95]
+                shadow-sm
+                focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-300
               "
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
               <span className="hidden sm:inline">Return to App</span>
+              {/* Mobile Only Label - Minimalist */}
+              <span className="inline sm:hidden">Return</span>
             </Link>
           </div>
 

@@ -29,18 +29,27 @@ const GitHubLoginButton: React.FC = () => {
         onClick={handleGitHubLogin}
         disabled={isLoading}
         className="
-          relative w-full flex items-center justify-center gap-3
-          px-4 py-2.5 rounded-md border border-slate-200 bg-white
-          text-sm font-medium text-slate-700 shadow-sm transition
-          hover:bg-slate-50 active:scale-[0.98]
-          disabled:opacity-60 disabled:cursor-not-allowed
+          relative w-full 
+          flex items-center justify-center gap-3
+          h-10 sm:h-11 
+          px-4 
+          rounded-sm border border-slate-200 bg-white
+          text-[10px] sm:text-[11px] font-manrope font-bold text-slate-600 tracking-widest
+          shadow-sm transition-all
+          hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300
+          active:scale-[0.98]
+          disabled:opacity-20 disabled:cursor-not-allowed
         "
       >
         {isLoading ? (
-          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+          <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
         ) : (
-          <GitHubLogo />
+          /* Fix: Wrap the icon in a div to handle sizing/styling */
+          <div className="flex shrink-0 items-center justify-center w-4 h-4 opacity-70">
+            <GitHubLogo /> 
+          </div>
         )}
+        
         <span>{isLoading ? "Connecting..." : "Sign in with GitHub"}</span>
       </button>
     </div>

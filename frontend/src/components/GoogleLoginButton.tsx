@@ -124,60 +124,55 @@ const GoogleLoginButton: React.FC = () => {
   return (
     <div className="w-full relative group">
       <button
-        type="button"
-        onClick={handleCustomButtonClick}
-        disabled={isLoading || !isGsiReady || scriptError}
-        title={
-          !isGsiReady
-            ? "Initializing Google Sign-In..."
-            : scriptError
-            ? "Google Sign-In is unavailable"
-            : "Sign in with Google"
-        }
-        className="
-          relative w-full flex items-center justify-center gap-3
-          px-4 py-2.5
-          rounded-md
-          border border-slate-200
-          bg-white
-          text-sm font-medium text-slate-700
-          shadow-sm
+          type="button"
+          onClick={handleCustomButtonClick}
+          disabled={isLoading || !isGsiReady || scriptError}
+          title={
+            !isGsiReady
+              ? "Initializing Google Sign-In..."
+              : scriptError
+              ? "Google Sign-In is unavailable"
+              : "Sign in with Google"
+          }
+          className="
+            relative w-full 
+            flex items-center justify-center gap-3
+            h-10 sm:h-11 
+            px-4 
+            rounded-sm border border-slate-200 bg-white
+            text-[10px] sm:text-[11px] font-manrope font-bold text-slate-600 tracking-widest
+            shadow-sm transition-all
+            
+            hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300
+            active:scale-[0.98]
+            
+            focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-400
+            
+            disabled:opacity-20 disabled:cursor-not-allowed
+          "
+        >
+          {/* ICON LOGIC */}
+          <div className="flex shrink-0 items-center justify-center w-4 h-4">
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+            ) : scriptError ? (
+              <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+            ) : (
+              <GoogleLogo />
+            )}
+          </div>
 
-          hover:bg-slate-50
-          transition
-
-          outline-none
-          focus:outline-none
-          focus-visible:ring-2
-          focus-visible:ring-slate-300
-          focus-visible:ring-offset-2
-          focus-visible:ring-offset-white
-
-          active:scale-[0.98]
-
-          disabled:opacity-60
-          disabled:cursor-not-allowed
-          disabled:shadow-none
-        "
-      >
-        {isLoading ? (
-          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-        ) : scriptError ? (
-          <AlertCircle className="h-5 w-5 text-red-500" />
-        ) : (
-          <GoogleLogo />
-        )}
-
-        <span>
-          {isLoading
-            ? "Signing in..."
-            : !isGsiReady
-            ? "Loading..."
-            : scriptError
-            ? "Unavailable"
-            : "Sign in with Google"}
-        </span>
-      </button>
+          {/* TEXT LOGIC */}
+          <span>
+            {isLoading
+              ? "Signing in..."
+              : !isGsiReady
+              ? "Loading..."
+              : scriptError
+              ? "Unavailable"
+              : "Sign in with Google"}
+          </span>
+        </button>
 
       
       {/* Hidden Container for the actual Google One Tap Button */}

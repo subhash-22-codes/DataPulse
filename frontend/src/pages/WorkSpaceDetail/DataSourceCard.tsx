@@ -118,12 +118,22 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                </p>
                {isOwner && (
                  <button 
-                   onClick={() => setIsModalOpen(true)}
-                   className="mt-5 flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-black transition-all shadow-sm hover:shadow-md active:transform active:scale-95"
-                 >
-                   <Upload className="w-3.5 h-3.5" />
-                   Configure Source
-                 </button>
+                  onClick={() => setIsModalOpen(true)}
+                  className="
+                    mt-5 
+                    flex items-center gap-2 
+                    bg-blue-600 hover:bg-blue-700 
+                    text-white 
+                    px-4 py-2 
+                    rounded-sm 
+                    text-[10px] sm:text-[11px] font-bold font-manrope tracking-widest
+                    transition-all shadow-sm hover:shadow-md 
+                    active:scale-95
+                  "
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Configure Source</span>
+                </button>
                )}
             </div>
 

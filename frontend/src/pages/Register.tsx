@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Mail, Lock, Eye, EyeOff, Check, BarChart3, BellRing, Database, ShieldCheck, UserIcon, AlertCircle } from 'lucide-react';
+import { Activity, Mail, Lock, Eye, EyeOff, Check, BarChart3, BellRing, Database, ShieldCheck, UserIcon, Loader2 } from 'lucide-react';
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import GitHubButton from '../components/GitHubButton'; // Added Import
 import { useAuth } from '../context/AuthContext';
@@ -264,8 +264,30 @@ const Register: React.FC = () => {
                   </div>
                 </div>
 
-                <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed text-sm">
-                  {isLoading ? 'Sending code...' : 'Verify Email'}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="
+                    w-full 
+                    flex justify-center items-center
+                    h-10 sm:h-11 
+                    bg-blue-600 hover:bg-blue-700 
+                    text-white 
+                    rounded-sm 
+                    text-[11px] sm:text-[12px] font-manrope font-bold tracking-widest
+                    shadow-sm 
+                    transition-all active:scale-[0.98]
+                    disabled:opacity-20 disabled:cursor-not-allowed
+                  "
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Sending code...</span>
+                    </div>
+                  ) : (
+                    'Verify Email'
+                  )}
                 </button>
               </form>
 
@@ -312,7 +334,7 @@ const Register: React.FC = () => {
                         type="button" 
                         onClick={() => sendOtp(true)} 
                         disabled={isResending || resendTimer > 0} 
-                        className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="text-xs font-bold font-manrope text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isResending ? (
                           'Resending code...'
@@ -407,25 +429,49 @@ const Register: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                    <button type="button" onClick={() => setShowConfirm(true)} className="py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-semibold text-sm">Back</button>
-                    <button
-                      type="submit"
-                      disabled={isLoading || !isStrong || !isMatching}
-                      className="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold text-sm disabled:opacity-70 flex items-center justify-center gap-2"
-                    >
-                      {isLoading ? (
-                        <>
-                          <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                          </svg>
-                          Creating…
-                        </>
-                      ) : (
-                        "Create Account"
-                      )}
-                    </button>
+               <div className="grid grid-cols-2 gap-3 pt-4">
+                  {/* BACK: Neutral Maintenance Action */}
+                  <button 
+                    type="button" 
+                    onClick={() => setShowConfirm(true)} 
+                    className="
+                      flex items-center justify-center
+                      h-10 sm:h-11
+                      bg-white border border-slate-200
+                      rounded-sm 
+                      text-[10px] sm:text-[11px] font-bold text-slate-400 font-manrope tracking-widest
+                      hover:text-slate-900 hover:border-slate-300
+                      transition-all active:scale-[0.98]
+                    "
+                  >
+                    Back
+                  </button>
+
+                  {/* CREATE: Primary Growth Action */}
+                  <button
+                    type="submit"
+                    disabled={isLoading || !isStrong || !isMatching}
+                    className="
+                      flex items-center justify-center gap-2
+                      h-10 sm:h-11
+                      bg-blue-600 hover:bg-blue-700 
+                      text-white 
+                      rounded-sm 
+                      text-[10px] sm:text-[11px] font-manrope font-bold tracking-widest
+                      shadow-sm 
+                      transition-all active:scale-[0.98]
+                      disabled:opacity-20 disabled:cursor-not-allowed
+                    "
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      "Create Account"
+                    )}
+                  </button>
                 </div>
               </form>
             </div>
@@ -485,11 +531,6 @@ const Register: React.FC = () => {
       {showConfirm && (
         <div className="fixed inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center border border-slate-100 animate-fade-in">
-            
-            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="h-6 w-6 text-red-600" />
-            </div>
-
             <h2 className="text-lg font-bold text-slate-900 mb-2">
               Cancel account creation?
             </h2>
@@ -498,15 +539,27 @@ const Register: React.FC = () => {
               If you <strong>go back</strong>, your current verification code will be invalidated and you’ll need to request a new one.
             </p>
 
-            <div className="flex gap-3">
+            <div className="flex gap-2 w-full pt-2">
+              {/* SAFE ACTION: Keep going */}
               <button
+                type="button"
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-sm"
+                className="
+                  flex-1 
+                  h-10 sm:h-11
+                  rounded-sm border border-slate-200 
+                  bg-white
+                  text-[10px] sm:text-[11px] font-manrope font-bold text-slate-400  tracking-widest 
+                  hover:text-slate-900 hover:border-slate-300
+                  transition-all active:scale-[0.98]
+                "
               >
                 No, keep going
               </button>
 
+              {/* DESTRUCTIVE ACTION: Cancel/Reset */}
               <button
+                type="button"
                 onClick={() => {
                   localStorage.removeItem('register-step');
                   localStorage.removeItem('register-email');
@@ -515,7 +568,14 @@ const Register: React.FC = () => {
                   setOtp(["", "", "", "", "", ""]);
                   setShowConfirm(false);
                 }}
-                className="flex-1 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
+                className="
+                  flex-1 
+                  h-10 sm:h-11
+                  bg-red-600 hover:bg-red-700 
+                  rounded-sm 
+                  text-[10px] sm:text-[11px] font-manrope font-bold text-white tracking-widest 
+                  shadow-sm transition-all active:scale-[0.98]
+                "
               >
                 Yes, cancel
               </button>

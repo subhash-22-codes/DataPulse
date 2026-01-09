@@ -6,7 +6,6 @@ import {
   Trash2, 
   RotateCcw, 
   Loader2, 
-  AlertOctagon, 
   Calendar, 
   Archive,
   ArrowLeft,
@@ -211,52 +210,88 @@ export const Trash: React.FC = () => {
             <div className="fixed inset-0 bg-slate-950/20 backdrop-blur-sm" />
           </Transition.Child>
 
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-200"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-150"
-              >
-                <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-xl bg-white p-6 shadow-2xl border border-slate-100">
-                  <div className="text-center">
-                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-                      <AlertOctagon className="w-6 h-6 text-red-600" />
-                    </div>
-                    <Dialog.Title as="h3" className="text-[16px] font-bold text-slate-900">
-                      Delete permanently?
+         <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-200"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-150"
+            >
+              {/* Box Model: Professional rounded-md, Slate-300 border, Sharp shadow */}
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-md bg-white border border-slate-300 shadow-2xl transition-all">
+                
+                {/* HEADER: Direct and descriptive */}
+                <div className="px-6 py-4 border-b border-slate-200 bg-white">
+                  <div className="flex items-center gap-3">
+                    <Dialog.Title as="h3" className="text-sm font-bold text-slate-900 uppercase tracking-tight">
+                      Delete Workspace
                     </Dialog.Title>
-                    <p className="text-[13px] text-slate-500 mt-2 px-2">
-                      You are about to delete <span className="font-bold text-slate-900">"{selectedWorkspace?.name}"</span>. 
-                      This action cannot be undone.
-                    </p>
                   </div>
+                </div>
 
-                  <div className="mt-8 flex gap-3">
-                    <button
-                      type="button"
-                      className="flex-1 px-4 py-2.5 text-[12px] font-bold text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all"
-                      onClick={() => setDeleteModalOpen(false)}
-                      disabled={isDeleting}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="flex-1 inline-flex justify-center items-center gap-2 px-4 py-2.5 text-[12px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-all shadow-lg shadow-red-100"
-                      onClick={confirmDeleteForever}
-                      disabled={isDeleting}
-                    >
-                      {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      Delete forever
-                    </button>
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
+                {/* BODY: Human wording, no technical jargon */}
+                <div className="p-6">
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Are you sure you want to delete <span className="font-bold text-slate-900">"{selectedWorkspace?.name}"</span>?
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500 font-medium bg-red-50/50 border-l-2 border-red-200 p-3">
+                    This will permanently remove all files and information saved in this workspace. You will not be able to recover this data later.
+                  </p>
+                </div>
+
+                {/* FOOTER: Structured Action Bar (Amazon Style) */}
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 px-4 pb-4">
+                  {/* SECONDARY: Minimal and safe */}
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalOpen(false)}
+                    disabled={isDeleting}
+                    className="
+                      w-full sm:w-auto 
+                      px-5 py-2 
+                      text-[11px] font-bold text-slate-500 font-manrope tracking-widest
+                      hover:text-slate-900 hover:bg-slate-100 
+                      rounded-sm transition-all
+                      disabled:opacity-20
+                    "
+                  >
+                    Cancel
+                  </button>
+
+                  {/* PRIMARY: Destructive Danger action */}
+                  <button
+                    type="button"
+                    onClick={confirmDeleteForever}
+                    disabled={isDeleting}
+                    className="
+                      w-full sm:w-auto 
+                      min-w-[160px] 
+                      bg-red-600 hover:bg-red-700 
+                      px-6 py-2.5 
+                      text-[11px] font-bold text-white font-manrope tracking-widest 
+                      rounded-sm shadow-sm 
+                      transition-all active:scale-[0.98]
+                      disabled:opacity-50 
+                      flex items-center justify-center gap-2
+                    "
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="h-3.5 h-3.5 animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      'Delete permanently'
+                    )}
+                  </button>
+                </div>
+
+              </Dialog.Panel>
+            </Transition.Child>
           </div>
+        </div>
         </Dialog>
       </Transition>
 

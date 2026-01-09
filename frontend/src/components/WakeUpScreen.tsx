@@ -170,7 +170,17 @@ const messages = [
         </p>
         <button
           onClick={handleRetryAction}
-          className="mt-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium rounded-md transition"
+          className="
+            mt-4 
+            inline-flex items-center justify-center
+            h-9 sm:h-10 px-8
+            bg-slate-900 hover:bg-slate-800 
+            text-white 
+            rounded-sm 
+            text-[11px] sm:text-[12px] font-bold font-manrope tracking-widest
+            transition-all active:scale-[0.98]
+            shadow-sm
+          "
         >
           Try again
         </button>

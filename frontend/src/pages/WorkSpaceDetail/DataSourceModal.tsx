@@ -436,36 +436,73 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                   </div>
                 </div>
                 
-                {/* Footer */}
-                <div className="px-6 py-4 bg-white border-t border-slate-100 flex justify-end gap-3 z-10">
+                <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 px-4 pb-4 bg-white">
+                  {/* SECONDARY: Neutral and low-pressure */}
                   <button 
                     type="button" 
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:text-slate-800 transition-colors" 
                     onClick={() => !isSaving && setIsOpen(false)} 
                     disabled={isSaving}
+                    className="
+                      w-full sm:w-auto 
+                      px-5 py-2 
+                      text-[11px] font-bold text-slate-400 font-manrope tracking-widest
+                      hover:text-slate-900 hover:bg-slate-100 hover:bg-black/5
+                      rounded-sm transition-all
+                      disabled:opacity-20
+                    "
                   >
                     Cancel
                   </button>
+
+                  {/* PRIMARY: SaaS Blue - The Growth Action (Heart of DataPulse) */}
                   {dataSource === 'CSV' ? (
-                      <button 
-                        type="button" 
-                        className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md disabled:opacity-50 flex items-center gap-2 shadow-sm transition-transform active:scale-95" 
-                        onClick={handleCsvUpload} 
-                        disabled={isSaving || !selectedFile}
-                      >
-                          {isSaving ? <Loader2 className="animate-spin h-3.5 w-3.5"/> : <UploadCloud className="h-3.5 w-3.5"/>}
-                          {isSaving ? 'Uploading...' : 'Upload & Process'}
-                      </button>
+                    <button 
+                      type="button" 
+                      onClick={handleCsvUpload} 
+                      disabled={isSaving || !selectedFile}
+                      className="
+                        w-full sm:w-auto 
+                        min-w-[160px] 
+                        bg-blue-600 hover:bg-blue-700 
+                        px-6 py-2.5 
+                        text-[11px] font-bold text-white font-manrope tracking-widest 
+                        rounded-sm shadow-sm 
+                        transition-all active:scale-[0.98]
+                        disabled:opacity-20 disabled:cursor-not-allowed
+                        flex items-center justify-center gap-2
+                      "
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isSaving ? 'Uploading...' : 'Upload & Process'}</span>
+                    </button>
                   ) : (
-                      <button 
-                        type="button" 
-                        className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-black rounded-md disabled:opacity-50 flex items-center gap-2 shadow-sm transition-transform active:scale-95" 
-                        onClick={handleSaveConfiguration} 
-                        disabled={isSaving}
-                      >
-                          {isSaving ? <Loader2 className="animate-spin h-3.5 w-3.5"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}
-                          {isSaving ? 'Saving...' : 'Save Configuration'}
-                      </button>
+                    <button 
+                      type="button" 
+                      onClick={handleSaveConfiguration} 
+                      disabled={isSaving}
+                      className="
+                        w-full sm:w-auto 
+                        min-w-[160px] 
+                        bg-blue-600 hover:bg-blue-700 
+                        px-6 py-2.5 
+                        text-[11px] font-bold text-white font-manrope tracking-widest 
+                        rounded-sm shadow-sm 
+                        transition-all active:scale-[0.98]
+                        disabled:opacity-20 disabled:cursor-not-allowed
+                        flex items-center justify-center gap-2
+                      "
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isSaving ? 'Saving...' : 'Save Configuration'}</span>
+                    </button>
                   )}
                 </div>
 

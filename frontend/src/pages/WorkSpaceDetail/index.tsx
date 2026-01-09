@@ -222,28 +222,39 @@ const WorkspaceDetail: React.FC = () => {
 }
 
 
-  if (error) {
+if (error) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="flex max-w-md flex-col items-center rounded-lg border border-gray-200 bg-white px-6 py-10 text-center">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="flex w-full max-w-[320px] flex-col items-center rounded-sm border border-slate-200 bg-white p-8 shadow-sm">
         
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-          <AlertCircle className="h-6 w-6" />
+        {/* Soft, simple icon */}
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-sm bg-slate-50 text-slate-400">
+          <AlertCircle className="h-5 w-5 stroke-[1.5]" />
         </div>
 
-        <h2 className="text-sm font-semibold text-gray-900">
-          Unable to load workspace
+        {/* Minimal Header - Easy to read */}
+        <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+          We couldn't load that
         </h2>
 
-        <p className="mt-1 text-sm text-gray-500">
-          {error}
+        {/* Helpful description - Sentence case for empathy */}
+        <p className="mt-2 text-[12px] font-medium text-slate-500 leading-relaxed">
+          {error || "There was a temporary problem connecting to this workspace. Please try again."}
         </p>
 
+        {/* Action Button - Caps stay here for "Industrial" Authority */}
         <button
           onClick={() => navigate("/home")}
-          className="mt-4 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+          className="
+            mt-8 w-full
+            h-10
+            flex items-center justify-center
+            rounded-sm bg-blue-600 
+            text-[10px] font-bold text-white font-manrope tracking-[0.15em]
+            transition-all hover:bg-blue-700 active:scale-[0.98]
+          "
         >
-          Return to dashboard
+          Back to Home
         </button>
       </div>
     </div>
