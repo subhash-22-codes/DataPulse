@@ -31,6 +31,7 @@ from app.models.user import LoginHistory
 from app.services.email_service import send_farewell_email
 from app.models.workspace import workspace_team
 from app.core.guard import send_telegram_alert
+from app.core.database import SessionLocal
 
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
@@ -88,39 +89,58 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 def generate_otp(length=6):
     return ''.join(secrets.choice(string.digits) for _ in range(length))
 
+
+def record_login_history_task(
+    user_id: int, 
+    provider: str, 
+    ip_address: str, 
+    user_agent: str
+):
+    db = SessionLocal() # 🛡️ Independent session
+    try:
+        new_log = LoginHistory(
+            user_id=user_id,
+            provider=provider,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            created_at=dt.datetime.now(dt.timezone.utc)
+        )
+        db.add(new_log)
+        
+        old_logs_query = db.query(LoginHistory.id).filter(
+            LoginHistory.user_id == user_id
+        ).order_by(LoginHistory.created_at.desc()).offset(MAX_LOGIN_HISTORY)
+        
+        db.query(LoginHistory).filter(
+            LoginHistory.id.in_(old_logs_query)
+        ).delete(synchronize_session=False)
+
+        db.commit() 
+        logger.info(f"🛡️ Security audit completed for User ID: {user_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"⚠️ Background Audit Failed: {str(e)}")
+    finally:
+        db.close() # 🛡️ Always close the background connection
+
 def create_tokens_and_set_cookies(
     request: Request, 
     response: Response, 
     user: User, 
     db: Session, 
-    provider: str  
+    provider: str,
+    background_tasks: BackgroundTasks 
 ):
-    try:
-        new_log = LoginHistory(
-            user_id=user.id,
-            provider=provider,
-            ip_address=request.client.host if request.client else "unknown",
-            user_agent=request.headers.get("user-agent", "unknown"),
-            created_at=dt.datetime.now(dt.timezone.utc)
-        )
-        db.add(new_log)
-        old_logs_to_delete = db.query(LoginHistory.id).filter(
-            LoginHistory.user_id == user.id
-        ).order_by(LoginHistory.created_at.desc()).offset(MAX_LOGIN_HISTORY).all()
-
-        if old_logs_to_delete:
-            ids_to_del = [log.id for log in old_logs_to_delete]
-            db.query(LoginHistory).filter(
-                LoginHistory.id.in_(ids_to_del)
-            ).delete(synchronize_session=False)
-
-    except Exception as e:
-        # We log but don't stop the login process if auditing fails
-        logger.error(f"⚠️ Audit Log/Pruning Failed: {str(e)}")
+    background_tasks.add_task(
+        record_login_history_task,
+        user.id,
+        provider,
+        request.client.host if request.client else "unknown",
+        request.headers.get("user-agent", "unknown")
+    )
 
     access_token = jwt.encode({
         "sub": str(user.id), 
-        "user_id": str(user.id), 
         "type": "access",
         "ver": user.token_version,
         "exp": dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -135,13 +155,13 @@ def create_tokens_and_set_cookies(
 
     cookie_params = {
         "secure": True, 
-        "samesite": "none",
+        "samesite": "none", 
         "httponly": True,
     }
 
     response.set_cookie(
         key="access_token", 
-        value=f"Bearer {access_token}", 
+        value=access_token, 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60, 
         **cookie_params
     )
@@ -152,7 +172,6 @@ def create_tokens_and_set_cookies(
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
         **cookie_params
     )
-    # db.commit() is NOT here. It's handled by other endpoints.
 
 
 def get_or_create_social_user(
@@ -161,8 +180,8 @@ def get_or_create_social_user(
     name: str, 
     provider: str, 
     provider_id: str,
-    current_user: Optional[User] = None,
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks,
+    current_user: Optional[User] = None
 ):
     
 
@@ -252,8 +271,11 @@ class LoginHistorySchema(BaseModel):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     created_at: datetime 
-
     model_config = ConfigDict(from_attributes=True)
+
+class LoginHistoryListResponse(BaseModel):
+    status: str = "success"
+    history: List[LoginHistorySchema]
 
 class UserResponse(BaseModel):
     id: Union[UUID, str]
@@ -263,8 +285,6 @@ class UserResponse(BaseModel):
     github_id: Optional[str] = None
     signup_method: str = "email" 
     created_at: Optional[datetime] = None
-    login_history: List[LoginHistorySchema] = []
-
     model_config = ConfigDict(from_attributes=True)
 
 class AuthResponse(BaseModel):
@@ -330,7 +350,11 @@ async def google_link_redirect(request: Request, return_to: str = "/home"):
 
 @router.get("/google/callback")
 @limiter.limit("5/minute")
-async def google_callback(request: Request, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+async def google_callback(
+    request: Request, 
+    background_tasks: BackgroundTasks, # ⬅️ 1. Moved here and removed '= None'
+    db: Session = Depends(get_db)
+):
     try:
         destination = request.session.pop("post_oauth_redirect", "/home")
         current_user = None
@@ -338,6 +362,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db), backg
             current_user = get_current_user(request, db)
         except HTTPException:
             current_user = None
+
         token = await oauth.google.authorize_access_token(request)
         user_info = token.get('userinfo')
         
@@ -363,7 +388,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db), backg
             return RedirectResponse(url=f"{FRONTEND_URL}/account?error={e.detail.replace(' ', '_')}")
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
-        create_tokens_and_set_cookies(request, response, user, db, 'google')      
+
+        create_tokens_and_set_cookies(request, response, user, db, 'google', background_tasks)       
+        
         logger.info(f"🚀 [GOOGLE] Success: {user.email} landed at {destination}")
         
         db.commit()      
@@ -390,7 +417,7 @@ async def github_link(request: Request, return_to: str = "/home"):
 
 @router.get("/github/callback")
 @limiter.limit("5/minute")
-async def github_callback(request: Request, db: Session = Depends(get_db),background_tasks: BackgroundTasks = None):
+async def github_callback( request: Request, background_tasks: BackgroundTasks,  db: Session = Depends(get_db)):
     destination = request.session.pop("post_oauth_redirect", "/home")
     
     current_user = None
@@ -428,26 +455,31 @@ async def github_callback(request: Request, db: Session = Depends(get_db),backgr
             )
             
         except HTTPException as e:
-
             error_msg = e.detail.replace(' ', '_')
             return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error={error_msg}")
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
-        create_tokens_and_set_cookies(request, response, user, db, 'github')
+        
+        # 🛡️ Audit happens in background before redirect
+        create_tokens_and_set_cookies(request, response, user, db, 'github', background_tasks)
+        
         db.commit()      
         return response
 
     except Exception as e:
         logger.error(f"❌ GitHub Callback Failed: {str(e)}", exc_info=True)
         return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error=github_auth_failed")
-    
 
 @router.post("/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
-def google_login(request: Request, response: Response, req: GoogleLoginRequest, db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
-  
+def google_login(
+    request: Request, 
+    response: Response, 
+    req: GoogleLoginRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     try:
-        
         try:
             idinfo = id_token.verify_oauth2_token(req.token, google_requests.Request(), GOOGLE_CLIENT_ID)
         except ValueError:
@@ -457,32 +489,15 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
         if not email or not idinfo.get('email_verified'):
             raise HTTPException(status_code=400, detail="Verified Google account required.")
 
-        user = get_or_create_social_user(db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'),background_tasks=background_tasks)
+        user = get_or_create_social_user(
+            db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'), background_tasks
+        )
         logger.info(f"✅ Google login success: {user.email}")
-        
-        create_tokens_and_set_cookies(request, response, user, db, 'google')
+     
+        create_tokens_and_set_cookies(request, response, user, db, 'google', background_tasks)
 
         db.commit()
         db.refresh(user) 
-
-        recent_logs = (
-            db.query(LoginHistory)
-            .filter(LoginHistory.user_id == user.id)
-            .order_by(LoginHistory.created_at.desc())
-            .limit(5)
-            .all()
-        )
-
-        history = [
-            {
-                "id": str(log.id),
-                "provider": log.provider,
-                "ip_address": log.ip_address,
-                "user_agent": log.user_agent,
-                "created_at": log.created_at
-            }
-            for log in recent_logs
-        ]
 
         return {
             "message": "Login successful", 
@@ -493,8 +508,7 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
                 "google_id": user.google_id,
                 "github_id": user.github_id,
                 "signup_method": user.signup_method,
-                "created_at": user.created_at,
-                "login_history": history
+                "created_at": user.created_at
             }
         }
         
@@ -504,15 +518,13 @@ def google_login(request: Request, response: Response, req: GoogleLoginRequest, 
         logger.error(f"❌ Google Auth Critical Failure: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal authentication server error")
     
-# ==========================
-#   EMAIL / OTP ROUTES
-# ==========================
 @router.post("/login-email", response_model=AuthResponse)
 @limiter.limit("5/minute")
 def login_email(
     request: Request,
     response: Response,
     req: LoginEmailRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     auth_err = HTTPException(
@@ -541,20 +553,13 @@ def login_email(
 
     if bcrypt.needs_update(user.password_hash):
         user.password_hash = bcrypt.hash(req.password)
+    
     logger.info(f"✅ Email login success: {user.email}")
 
-    create_tokens_and_set_cookies(request, response, user, db, 'email')
+    create_tokens_and_set_cookies(request, response, user, db, 'email', background_tasks)
 
     db.commit()
     db.refresh(user)
-
-    recent_logs = (
-        db.query(LoginHistory)
-        .filter(LoginHistory.user_id == user.id)
-        .order_by(LoginHistory.created_at.desc())
-        .limit(5)
-        .all()
-    )
 
     return {
         "message": "Login successful",
@@ -565,8 +570,7 @@ def login_email(
             "google_id": user.google_id,
             "github_id": user.github_id,
             "signup_method": user.signup_method,
-            "created_at": user.created_at,
-            "login_history": recent_logs
+            "created_at": user.created_at
         }
     }
 
@@ -733,23 +737,6 @@ def check_session(
     db: Session = Depends(get_db)
 ):
 
-    recent_logs = db.query(LoginHistory)\
-        .filter(LoginHistory.user_id == current_user.id)\
-        .order_by(LoginHistory.created_at.desc())\
-        .limit(5)\
-        .all()
-
-    history = [
-        {
-            "id": str(log.id),
-            "provider": log.provider,
-            "ip_address": log.ip_address,
-            "user_agent": log.user_agent,
-            "created_at": log.created_at
-        }
-        for log in recent_logs
-    ]
-
     return {
         "message": "Session active",
         "user": {
@@ -759,10 +746,44 @@ def check_session(
             "google_id": current_user.google_id,
             "github_id": current_user.github_id,
             "signup_method": current_user.signup_method,
-            "created_at": current_user.created_at,
-            "login_history": history 
+            "created_at": current_user.created_at
         }
     }
+    
+@router.get("/security/login-history")
+def get_login_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
+    try:
+        recent_logs = (
+            db.query(LoginHistory)
+            .filter(LoginHistory.user_id == current_user.id)
+            .order_by(LoginHistory.created_at.desc())
+            .limit(10) 
+            .all()
+        )
+
+        history = [
+            {
+                "id": str(log.id),
+                "provider": log.provider,
+                "ip_address": log.ip_address,
+                "user_agent": log.user_agent,
+                "created_at": log.created_at
+            }
+            for log in recent_logs
+        ]
+
+        return {
+            "status": "success",
+            "history": history
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch login history for user {current_user.id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not retrieve security activity.")
 
 @router.post("/refresh")
 @limiter.limit('5/minute')
@@ -805,8 +826,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
     access_exp = now + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
-        "sub": str(user.id), 
-        "user_id": str(user.id),  
+        "sub": str(user.id),  
         "type": "access", 
         "ver": user.token_version,
         "exp": access_exp
@@ -823,7 +843,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     
     response.set_cookie(
         key="access_token", 
-        value=f"Bearer {new_at}", 
+        value=f"{new_at}", 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         **cookie_params
     )
