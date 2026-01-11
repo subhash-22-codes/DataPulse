@@ -525,7 +525,7 @@ const Register: React.FC = () => {
              ))}
            </div>
            <div className="pt-8 border-t border-white/10 flex justify-between items-center text-xs text-blue-200/60">
-             <p>© 2025 DataPulse. Built with care and transparency.</p>
+             <p>© 2026 DataPulse. Built with care and transparency.</p>
              <div className="flex gap-4"><span>v1.1.0</span><span>System Normal</span></div>
            </div>
         </div>

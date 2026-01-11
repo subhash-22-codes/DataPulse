@@ -269,7 +269,7 @@ const Login: React.FC = () => {
             </div>
            {/* Brand Footer Section */}
            <div className="pt-8 border-t border-white/10 flex justify-between items-center text-[11px] text-blue-200/60 tracking-wide">
-            <p>© 2025 DataPulse</p>
+            <p>© 2026 DataPulse</p>
 
             <div className="flex items-center gap-4">
               <span>v1.1.0</span>
