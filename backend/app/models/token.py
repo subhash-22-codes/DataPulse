@@ -10,6 +10,8 @@ class RefreshToken(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, index=True)
+    session_id = Column(String, index=True, nullable=False)
+    user_agent_hash = Column(String, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(
         DateTime(timezone=True), 

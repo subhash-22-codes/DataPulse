@@ -32,7 +32,7 @@ from app.services.email_service import send_farewell_email
 from app.models.workspace import workspace_team
 from app.core.guard import send_telegram_alert
 from app.core.database import SessionLocal
-import time
+from app.utils.security import hash_ua
     
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
@@ -150,10 +150,13 @@ def create_tokens_and_set_cookies(
         "exp": dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     }, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+    session_id = str(uuid.uuid4())
     refresh_token_str = str(uuid.uuid4())
     db.add(RefreshToken(
         token=refresh_token_str,
         user_id=user.id,
+        session_id=session_id,
+        user_agent_hash=hash_ua(request),
         expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     ))
 
@@ -174,6 +177,12 @@ def create_tokens_and_set_cookies(
         key="refresh_token", 
         value=refresh_token_str, 
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        **cookie_params
+    )
+    
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
         **cookie_params
     )
 
@@ -743,14 +752,12 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         "samesite": "none",
         "secure": True,
         "httponly": True,
-        "path": "/" # Adding path is safer to ensure it clears everywhere
+        "path": "/"
     }
 
     response.delete_cookie("access_token", **cookie_params)
     response.delete_cookie("refresh_token", **cookie_params)
-
-    # CRITICAL: Do NOT return a new JSONResponse. 
-    # Just return a dict or update the response object.
+    response.delete_cookie("session_id", **cookie_params)
     return {"message": "Logged out successfully"}
 
 
@@ -815,14 +822,37 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if not old_rt_value:
         raise HTTPException(status_code=401, detail="No refresh token provided")
 
-    db_token = db.query(RefreshToken).filter(RefreshToken.token == old_rt_value).with_for_update().first()
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Missing session context")
+
+    db_token = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token == old_rt_value)
+        .with_for_update()
+        .first()
+    )
     
     if not db_token:
         raise HTTPException(status_code=401, detail="Invalid refresh session")
 
+    # Session + device binding check
+    if (
+        db_token.session_id != session_id
+        or db_token.user_agent_hash != hash_ua(request)
+    ):
+        db.query(RefreshToken).filter(
+            RefreshToken.user_id == db_token.user_id
+        ).delete()
+        db_token.user.token_version += 1
+        db.commit()
+        raise HTTPException(status_code=401, detail="Session mismatch. Please login again.")
+
     if db_token.revoked:
         # Security Action: Revoke every single token this user has
-        db.query(RefreshToken).filter(RefreshToken.user_id == db_token.user_id).delete()
+        db.query(RefreshToken).filter(
+            RefreshToken.user_id == db_token.user_id
+        ).delete()
         # Increment token version to invalidate existing Access Tokens (JWTs)
         db_token.user.token_version += 1
         db.commit()
@@ -830,7 +860,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
     now = dt.datetime.now(dt.timezone.utc)
     if db_token.expires_at < now:
-        db_token.revoked = True # Clean up DB state
+        db_token.revoked = True
         db.commit()
         raise HTTPException(status_code=401, detail="Refresh session expired")
 
@@ -840,18 +870,20 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     new_refresh_token = RefreshToken(
         token=new_rt_value,
         user_id=user.id,
+        session_id=db_token.session_id,
+        user_agent_hash=db_token.user_agent_hash,
         expires_at=now + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     )
     db.add(new_refresh_token)
+
     db_token.revoked = True
     db_token.last_used_at = now
     db_token.replaced_by_token = new_rt_value
-    
 
     access_exp = now + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
-        "sub": str(user.id),  
-        "type": "access", 
+        "sub": str(user.id),
+        "type": "access",
         "ver": user.token_version,
         "iss": "datapulse-auth",
         "iat": now,
@@ -868,20 +900,21 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     }
     
     response.set_cookie(
-        key="access_token", 
-        value=f"{new_at}", 
+        key="access_token",
+        value=new_at,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         **cookie_params
     )
     
     response.set_cookie(
-        key="refresh_token", 
-        value=new_rt_value, 
+        key="refresh_token",
+        value=new_rt_value,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
         **cookie_params
     )
 
     return {"message": "Tokens rotated successfully"}
+
 
 
 @router.delete("/me")
@@ -913,6 +946,7 @@ async def delete_account(
         }
         response.delete_cookie("access_token", **cookie_params)
         response.delete_cookie("refresh_token", **cookie_params)
+        response.delete_cookie("session_id", **cookie_params)
 
         background_tasks.add_task(send_farewell_email, user_email, user_name)
         background_tasks.add_task(
@@ -1027,6 +1061,7 @@ def logout_from_all_devices(
         
         response.delete_cookie(key="access_token", **cookie_settings)
         response.delete_cookie(key="refresh_token", **cookie_settings)
+        response.delete_cookie("session_id", **cookie_settings)
         
         return response
 
