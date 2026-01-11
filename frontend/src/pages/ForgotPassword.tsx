@@ -572,7 +572,7 @@ const ForgotPassword: React.FC = () => {
 
            {/* Footer Note */}
            <div className="pt-8 border-t border-white/10 flex justify-between items-center text-xs text-blue-200/60">
-              <p>© 2025 DataPulse</p>
+              <p>© 2026 DataPulse</p>
               <div className="flex gap-4">
                 <span>v1.1.0</span>
                 <span>Account services available</span>
