@@ -3,47 +3,64 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>DataPulse | Real-Time Schema Monitoring & Data Alerts</title>
+  
+  <meta name="description" content="Monitoring system for schema changes and data anomalies, built with FastAPI, PostgreSQL, and React. Engineered by Subhash Yaganti and Siri Mahalaxmi Vemula." />
+  <link rel="canonical" href="https://data-pulse-eight.vercel.app" />
 
-  <!-- Project Title -->
-  <title>DataPulse – Real-Time Data Monitoring & Alerts</title>
-
-  <!-- Favicons -->
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-96x96.png" />
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-
-  <!-- Apple Touch Icon -->
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#0d1117" />
-
-  <!-- SEO / Abstract -->
-  <meta name="description" content="DataPulse is a full-stack, scalable platform for real-time data ingestion, live metrics, and intelligent alerts. Built with FastAPI, PostgreSQL, React, and Celery." />
-
-  <!-- Open Graph / Social Media -->
-  <meta property="og:title" content="DataPulse – Real-Time Analytics Platform" />
-  <meta property="og:description" content="Ingest, visualize, and monitor real-time data with intelligent alerting. FastAPI + PostgreSQL + React + Celery." />
-  <meta property="og:image" content="/favicon-96x96.png" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://your-production-url.com" />
-
-  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="DataPulse – Real-Time Analytics Platform" />
-  <meta name="twitter:description" content="Unified solution for live metrics, anomaly detection, and alerting." />
-  <meta name="twitter:image" content="/favicon-96x96.png" />
+  <meta name="twitter:title" content="DataPulse | Real-Time Monitoring" />
+  <meta name="twitter:description" content="Track schema changes and data issues with background workers and real-time alerts." />
+  <meta name="twitter:image" content="https://data-pulse-eight.vercel.app/og-image.png" />
 
-  <!-- In your index.html <head> -->
-  <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://data-pulse-eight.vercel.app" />
+  <meta property="og:title" content="DataPulse: Data Monitoring for Modern Applications" />
+  <meta property="og:description" content="Detect schema changes and data issues early with automated alerts." />
+  <meta property="og:image" content="https://data-pulse-eight.vercel.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "DataPulse",
+      "url": "https://data-pulse-eight.vercel.app",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Web",
+      "softwareVersion": "beta",
+      "description": "Web application for monitoring schema changes and data anomalies in relational databases.",
+      "author": [
+        {
+          "@type": "Person",
+          "name": "Subhash Yaganti",
+          "jobTitle": "Co-Founder & Lead Software Engineer (System Architecture)",
+          "url": "https://github.com/subhash-22-codes"
+        },
+        {
+          "@type": "Person",
+          "name": "Siri Mahalaxmi Vemula",
+          "jobTitle": "Co-Founder & Software Engineer",
+          "url": "https://github.com/armycodes"
+        }
+      ]
+    }
+  </script>
+
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600&display=swap" rel="stylesheet"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +69,6 @@
 <body>
   <div id="root"></div>
   <div id="modal-root"></div>
-  <!-- Main Script -->
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
