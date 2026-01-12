@@ -1,8 +1,12 @@
 {
-  "name": "vite-react-typescript-starter",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "datapulse", 
+  "private": true, 
+  "version": "1.1.0", 
+  "type": "module", 
+  "description": "Real-time schema monitoring and data alerts system.", 
+  "author": "Subhash Yaganti", 
+  "contributors": 
+    [ "Siri Mahalaxmi Vemula" ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
