@@ -13,6 +13,8 @@ import os
 import asyncio 
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+import json 
+from app.core.connection_manager import manager 
 
 load_dotenv()
 
@@ -35,8 +37,46 @@ origins = [
 
 scheduler = AsyncIOScheduler(timezone="UTC")
 
+async def redis_listener(): 
+    import redis.asyncio as aioredis
+    r = aioredis.from_url("redis://redis:6379/0", decode_responses=True) 
+    pubsub = r.pubsub() 
+    
+    try: 
+        await pubsub.subscribe("workspace_updates") 
+        logger.info("🟢 [LOCAL] API Redis Listener subscribed and active.") 
+        
+        while True: 
+            try: 
+                # Wait for a message with a 1-second timeout to keep the loop alive
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                
+                if message is not None: 
+                    data = json.loads(message["data"]) 
+                    workspace_id = data.get("workspace_id") 
+                    
+                    # Relay the message to the actual browser connections
+                    await manager.broadcast_to_workspace(str(workspace_id), json.dumps(data)) 
+                    logger.info(f"✅ [RELAY] Signal sent to UI: {data['type']} for {workspace_id}") 
+                
+                await asyncio.sleep(0.1) 
+                
+            except Exception as e: 
+                logger.error(f"❌ [REDIS-LOOP] Error: {e}") 
+                await asyncio.sleep(1) 
+                
+    except asyncio.CancelledError: 
+        logger.info("🟡 [LOCAL] Redis Listener shutting down.") 
+    finally: 
+        await pubsub.unsubscribe("workspace_updates") 
+        await r.close() 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.getenv("APP_MODE") != "production": 
+        app.state.redis_listener_task = asyncio.create_task(redis_listener()) 
+        logger.info("🟢 [LOCAL] Starting Redis Listener for UI Sync.") 
+
     if os.getenv("APP_MODE") == "production":
         logger.info("Application starting in PRODUCTION mode.")
         asyncio.create_task(send_telegram_alert("🚀 System Online: DataPulse (Production)"))
@@ -56,7 +96,10 @@ async def lifespan(app: FastAPI):
         logger.info("Application starting in DEVELOPMENT mode.")
     
     yield
-    
+  
+    if hasattr(app.state, "redis_listener_task"): 
+        app.state.redis_listener_task.cancel()
+        
     if scheduler.running:
         scheduler.shutdown()
         logger.info("[APScheduler] 'Smart Watch' shut down.")

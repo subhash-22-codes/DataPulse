@@ -1,37 +1,35 @@
 services:
-  # The Redis service (our message broker)
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
-  # The FastAPI service
   api:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      # This links your local code to the container for live updates
       - .:/app
     env_file:
       - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # The Celery worker service
   worker:
     build: .
     volumes:
       - .:/app
     env_file:
       - .env
-    # This command starts the celery worker. Note the path to your celery_app!
     command: celery -A app.services.celery_worker.celery_app worker --loglevel=info
     depends_on:
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-   # --- NEW: The Celery Beat Scheduler Service ---
   beat:
     build: .
     volumes:
@@ -41,3 +39,5 @@ services:
     command: celery -A app.services.celery_worker.celery_app beat -l info
     depends_on:
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
