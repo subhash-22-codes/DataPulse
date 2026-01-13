@@ -52,29 +52,30 @@ This project was built to explore **how real data systems behave as data changes
 ## High-Level Architecture
 
 ```
-┌────────────┐
-│  Frontend  │  React + TypeScript
-└─────┬──────┘
-      │
-      │ Authenticated API calls
-      ▼
+┌──────────────┐
+│   Frontend   │  React + TypeScript
+└──────┬───────┘
+       │
+       │ Authenticated API calls
+       ▼
 ┌──────────────┐
 │  FastAPI API │
 │ (Auth + Core)│
-└─────┬────────┘
-      │
-      │ Background jobs
-      ▼
+└──────┬───────┘
+       │
+       │ Background execution
+       ▼
 ┌──────────────┐
-│ Celery Worker│
-│  + Redis     │
-└─────┬────────┘
-      │
-      │ Schema / data comparison
-      ▼
+│  Background  │
+│  Execution   │
+│ (Env-Aware)  │
+└──────┬───────┘
+       │
+       │ Schema / data comparison
+       ▼
 ┌──────────────┐
-│  PostgreSQL  │
-│  (Supabase)  │
+│ PostgreSQL   │
+│ (Supabase)   │
 └──────────────┘
 ```
 
@@ -117,10 +118,10 @@ This is a **core feature** of DataPulse.
 ### Design Goals
 
 * Never mutate external data
-* Never expose credentials in plaintext
-* Avoid SQL injection risks
-* Keep schema inspection isolated
+* Avoid exposing credentials in plaintext
 * Fail safely by surfacing errors and preserving system usability
+* Reduce SQL injection risk through strict query validation
+* Keep schema inspection isolated from source systems
 
 ### How It Works (Conceptual)
 
@@ -170,23 +171,25 @@ Authentication is treated as a **core system**, not a bolt-on.
 
 ## Background Processing & Async Execution
 
-DataPulse avoids blocking user requests by offloading all heavy work to background execution.
+DataPulse avoids blocking user requests by offloading all heavy work
+to background execution outside the request lifecycle.
 
 ### Local / Controlled Environments
 
-* **Celery + Redis**
-* Each dataset processed in isolation
+* Celery + Redis
+* Worker-based execution with isolated jobs
 * Failure in one job does not affect others
 
 ### Cloud-Constrained Environments
 
 * Execution adapts using:
+  * a process-level scheduler (APScheduler) backed by database state
+  * bounded in-process execution (ThreadPool)
+* Job execution is state-gated and failure-aware
+* Same functional guarantees, different runtime model
 
-  * schedulers
-  * async background tasks
-* Same guarantees, different execution strategy
-
-This dual approach allows the system to remain usable even on limited free-tier infrastructure.
+This dual approach allows the system to remain usable
+even on limited free-tier infrastructure.
 
 ### Performance & Safety Considerations
 
@@ -267,27 +270,28 @@ system-driven and deterministic.
 
 ### Backend
 
-* Python
-* FastAPI
-* SQLAlchemy
-* Celery
-* Redis
+* Python – core language for data processing and job orchestration
+* FastAPI – thin API layer with strict request validation and auth
+* SQLAlchemy – ORM and schema inspection for versioned comparisons
+* Celery – worker-based execution for local / controlled environments
+* Redis – broker and transient state store for Celery jobs
 
 ### Frontend
 
-* React
-* TypeScript
-* Recharts
+* React – authenticated UI and async job state handling
+* TypeScript – strict API contracts and state safety
+* Recharts – focused visualizations for change deltas and trends
 
 ### Database & Storage
 
-* PostgreSQL (Supabase)
-* Encrypted fields for sensitive data
+* PostgreSQL (Supabase) – source of truth for users, datasets, and job state
+* Encrypted fields – credential and secret storage at rest
 
-### Infra
+### Infrastructure
 
-* Docker (local orchestration)
-* Vercel (frontend)
+* Docker – local orchestration of API, workers, and Redis
+* APScheduler – process-level scheduling in cloud environments
+* Vercel – frontend hosting
 * Environment-based configuration
 
 ---
