@@ -87,9 +87,9 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
           {!workspace.is_polling_active && workspace.last_failure_reason && (
             <div className="bg-red-50/60 border-b border-red-100 px-5 py-2 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-300">
               <div className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]" />
-                <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.1em]">
-                  System Alert: Sync Halted
+                <div className="w-1 h-1 rounded-full bg-red-500" />
+                <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.2em]">
+                  Action required:
                 </span>
               </div>
               
