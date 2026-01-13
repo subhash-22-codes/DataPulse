@@ -5,9 +5,11 @@ import redis
 import requests
 import logging
 import datetime as dt
+import json
+import re 
 from celery import Celery
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text  
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import google.generativeai as genai
@@ -17,6 +19,9 @@ from urllib.parse import quote_plus
 from io import StringIO 
 import numpy as np
 import operator
+from typing import Coroutine, Any 
+
+# Project Imports
 from app.core.database import SessionLocal
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload
@@ -24,40 +29,48 @@ from app.models.user import User
 from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
+from app.core.connection_manager import manager
+from app.models.token import RefreshToken
 
-# --- Setup ---
+# --- Setup & Safety Config ---
 logger = logging.getLogger(__name__)
 redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+APP_MODE = os.getenv("APP_MODE", "development") 
 
-# Initialize Gemini model if API key is provided
+# Initialize Gemini model (Defensive initialization)
 gemini_model = None
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info("✅ Gemini AI model initialized globally.")
+        logger.info(f"✅ Gemini AI model initialized (Mode: {APP_MODE})")
     except Exception as e:
         logger.error(f"⚠️ Failed to initialize Gemini AI: {e}")
 
 # Define the Celery app
 celery_app = Celery("tasks", broker=redis_url, backend=redis_url)
 
-# --- (CRITICAL FIX) ADD THE BEAT SCHEDULE CONFIGURATION ---
-# This tells the local scheduler to actually run the job
+# --- (PROD-READY) CELERY CONFIGURATION ---
+celery_app.conf.update(
+    task_track_started=True,
+    timezone='UTC',
+    task_serializer='json',
+    accept_content=['json'],  # Strict content type for safety
+    result_serializer='json',
+    task_time_limit=300,      # Hard limit: tasks can't run forever (Survival)
+    task_soft_time_limit=240  # Soft limit: allows cleanup before being killed
+)
+
 celery_app.conf.beat_schedule = {
     "trigger-smart-watch-every-minute": {
-        "task": "schedule_data_fetches",  # Name of the task function below
-        "schedule": 60.0,                 # Run every 60 seconds
+        "task": "schedule_data_fetches",
+        "schedule": 60.0,
     },
 }
-celery_app.conf.timezone = 'UTC'
-# ---------------------------------------------------------
+redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-celery_app.conf.update(task_track_started=True)
-redis_client = redis.from_url(redis_url)
-
-
+# Utility - Identical Parity
 def convert_utc_to_ist_str(utc_dt):
     if not utc_dt: return "N/A"
     try:
@@ -68,8 +81,28 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
+# Move this to the top of your celery_service.py
+AI_SYSTEM_PROMPT = """
+SYSTEM PROMPT (DO NOT CHANGE OUTPUT FORMAT):
+You are a Senior Data Analyst generating insights for a production SaaS dashboard.
+
+CRITICAL OUTPUT RULES:
+- Output ONLY plain Markdown
+- NO HTML tags (<p>, <ul>, etc.)
+- NO code blocks (no ``` or ` )
+- NO emojis or headings
+- NO assumptions beyond the provided data
+
+REQUIRED STRUCTURE:
+1. Exactly ONE paragraph (1-2 sentences) summarizing the impact.
+2. Exactly TWO bullet points using - (dash + space), each a business question.
+
+FAILURE HANDLING:
+If no meaningful insight can be derived, output a single plain sentence explaining that clearly.
+""".strip()
+
 def get_ai_insight(schema_changes: dict) -> str | None:
-    # 1. Fast Exit: If setup failed or key is missing, return immediately.
+    # 1. Fast Exit: Mirroring both versions
     if not gemini_model:
         logger.warning("Gemini model not available. Skipping AI insight.")
         return None
@@ -77,63 +110,57 @@ def get_ai_insight(schema_changes: dict) -> str | None:
     added = schema_changes.get('added', [])
     removed = schema_changes.get('removed', [])
     
-    # 2. Logic Check: If nothing changed, don't waste an API call.
+    # 2. Logic Check: Save API costs/quota
     if not added and not removed:
-        return "<p>No significant schema changes detected.</p>"
+        # We use the tasks.py plain text version here, not the HTML version
+        return "No significant schema changes were detected to analyze."
 
-    # 3. Optimized Prompt: Explicitly asks for HTML to reduce parsing errors.
-    prompt = (
-        f"Act as a Data Analyst. Analyze this schema change:\n"
+    # 3. Defensive Prompting: Use the strict Cloud prompt
+    user_query = (
+        f"Analyze these schema changes:\n"
         f"Added Columns: {', '.join(added) if added else 'None'}\n"
-        f"Removed Columns: {', '.join(removed) if removed else 'None'}\n"
-        f"Output ONLY valid HTML (no markdown blocks). Include:\n"
-        f"1. A 1-sentence summary of the impact.\n"
-        f"2. A <ul> list of 2 key business questions this enables/disables."
+        f"Removed Columns: {', '.join(removed) if removed else 'None'}"
     )
 
     try:
-        logger.info("🧠 [AI] Requesting insight from Gemini...")
+        logger.info("🧠 [AI] Requesting strict markdown insight (Prod Guardrails)...")
         
-        # 4. Timeout Protection: Don't let the worker hang forever.
-        # Using a simpler call structure that usually respects underlying socket timeouts,
-        # but wrapping it in a standard try/except is the safest portable way without extra libs.
-        response = gemini_model.generate_content(prompt)
+        # Merge the System Prompt with the User Query
+        full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
         
-        # 5. Clean Output: Strip any markdown quotes if the AI adds them
+        # 4. Execution
+        response = gemini_model.generate_content(full_prompt)
+        
+        # 5. Strict Cleaning: Ported from tasks.py
+        # This removes any potential Markdown wrappers the AI might hallucinate
         raw_text = response.text.strip()
-        if raw_text.startswith("```html"):
-            raw_text = raw_text.replace("```html", "").replace("```", "")
-            
+        clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
+        
         logger.info("✨ [AI] Insight generated successfully.")
-        return raw_text
+        return clean_text
 
     except Exception as e:
-        # This catches Quota limits (429), Network errors, etc.
+        # 6. Graceful Degradation: Ported from tasks.py
         logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
-        return "<p>AI analysis currently unavailable (Rate Limit or Network Error).</p>"
-    
+        return "AI analysis is currently unavailable due to a technical error."
 
 # --- TASKS ---
 
 @celery_app.task(name="schedule_data_fetches")
 def schedule_data_fetches():
-    logger.info("⏰ [BEAT] Waking up to check for scheduled data fetches...")
+    logger.info("⏰ [BEAT] Checking for due data fetches (Mirroring Cloud Logic)...")
     
     db: Session = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
         
-        # 1. Optimization: Fetch only necessary columns as tuples
-        # This is faster and uses less memory than full ORM objects
+        # Mirroring Cloud Query: Fetch only what we need
         workspaces = db.query(
             Workspace.id,
             Workspace.name,
             Workspace.polling_interval,
             Workspace.last_polled_at,
-            Workspace.data_source,
-            Workspace.api_url,
-            Workspace.db_host,
-            Workspace.db_query
+            Workspace.data_source
         ).filter(
             Workspace.is_polling_active == True
         ).all()
@@ -141,289 +168,450 @@ def schedule_data_fetches():
         if not workspaces:
             logger.info("-> No active workspaces found.")
             return
-
-        logger.info(f"-> Analyzing {len(workspaces)} active workspace(s)...")
+        
+        buffer = timedelta(seconds=150)
         triggered_count = 0
 
         for ws in workspaces:
-            # 2. Error Isolation: Protect the loop
             try:
                 is_due = False
                 last_polled = ws.last_polled_at
                 interval = ws.polling_interval
 
-                # 3. Logic Check: Determine if due
+                # PORTED FROM CLOUD: Strict Interval Matching
                 if not last_polled:
-                    is_due = True # First run
-                elif interval == 'every_minute':
-                    if (now - last_polled) > timedelta(minutes=1): is_due = True
+                    is_due = True
+                elif interval == '15min':
+                    if (now - last_polled) >= (timedelta(minutes=15) - buffer): 
+                        is_due = True
                 elif interval == 'hourly':
-                    if (now - last_polled) > timedelta(hours=1): is_due = True
+                    if (now - last_polled) >= (timedelta(hours=1) - buffer): 
+                        is_due = True
+                elif interval == '3hours':
+                    if (now - last_polled) >= (timedelta(hours=3) - buffer): 
+                        is_due = True
+                elif interval == '12hours':
+                    if (now - last_polled) >= (timedelta(hours=12) - buffer): 
+                        is_due = True
                 elif interval == 'daily':
-                    if (now - last_polled) > timedelta(days=1): is_due = True
+                    if (now - last_polled) >= (timedelta(days=1) - buffer): 
+                        is_due = True
+                elif interval == 'every_minute': # Keeping your local dev interval too
+                    if (now - last_polled) > timedelta(minutes=1): 
+                        is_due = True
 
                 if is_due:
-                    if ws.data_source == 'API' and ws.api_url:
-                        logger.info(f"✅ API DUE! Triggering fetch for '{ws.name}' ({ws.id})")
+                    # Offload directly to Celery (No need for 'process_data_fetch_task' gate)
+                    if ws.data_source == 'API':
                         fetch_api_data.delay(str(ws.id))
                         triggered_count += 1
-                    elif ws.data_source == 'DB' and ws.db_host and ws.db_query:
-                        logger.info(f"✅ DB DUE! Triggering fetch for '{ws.name}' ({ws.id})")
+                    elif ws.data_source == 'DB':
                         fetch_db_data.delay(str(ws.id))
                         triggered_count += 1
                         
             except Exception as e:
-                logger.error(f"⚠️ Error scheduling workspace {ws.id}: {e}", exc_info=True)
+                logger.error(f"⚠️ Error analyzing workspace {ws.id}: {e}")
                 continue
         
         if triggered_count > 0:
-            logger.info(f"🚀 Triggered {triggered_count} fetch jobs.")
+            logger.info(f"🚀 Offloaded {triggered_count} jobs to Celery workers.")
 
     except Exception as e:
         logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
     finally:
         db.close()
 
+# --- HELPER FOR ASYNC BROADCASTS IN CELERY ---
+def run_sync(coro):
+    """
+    Glue logic: Safely runs async broadcast logic inside sync Celery workers.
+    This is required to prevent 'RuntimeError: No running event loop'.
+    """
+    try:
+        # Check if a loop already exists for this thread
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        # If no loop exists (standard for Celery workers), create a new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    # Run the async function and wait for it to finish before moving to the next line
+    return loop.run_until_complete(coro)
+
+# --- PORTED: KILL_POLLER ---
+def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reason: str, is_hard_fail: bool = True):
+    try:
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not ws: return
+
+        now = datetime.now(timezone.utc)
+
+        if is_hard_fail:
+            if ws.is_polling_active:
+                ws.is_polling_active = False
+                ws.last_failure_reason = user_message   
+                ws.auto_disabled_at = now
+                ws.failure_count = 0
+                db.commit()
+                logger.warning(f"🛑 [HARD KILL] '{ws.name}': {internal_reason}")
+        else:
+            ws.failure_count += 1
+            ws.last_failure_reason = user_message
+            if ws.failure_count >= 3:
+                ws.is_polling_active = False
+                ws.auto_disabled_at = now
+                logger.error(f"🚨 [SOFT KILL] '{ws.name}' | {internal_reason}")
+            db.commit()
+
+        # Broadcast to UI
+        payload = {
+            "type": "job_error", 
+            "workspace_id": str(workspace_id),
+            "error": user_message,
+            "is_hard_fail": is_hard_fail
+        }
+        
+        # We use run_sync to bridge Celery -> WebSockets
+        redis_client.publish("workspace_updates", json.dumps(payload))
+        logger.info(f"📡 Published 'job_error' to Redis for {workspace_id}")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"🔥 [KILL_POLLER] DB Update Failed: {e}")
+
+# --- PORTED: FETCH_API_DATA ---
 @celery_app.task(name="fetch_api_data")
 def fetch_api_data(workspace_id: str):
-    logger.info(f"🤖 [API FETCHER] Starting API fetch for workspace: {workspace_id}")
+    logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
     db: Session = SessionLocal()
+    MAX_BYTES = 5 * 1024 * 1024
+    
     try:
-        # 1. Optimization: Fetch ONLY necessary columns
-        # This saves memory. SQLAlchemy still handles the decryption automatically.
-        workspace = db.query(
-            Workspace.id,
-            Workspace.api_url,
-            Workspace.api_header_name,
-            Workspace.api_header_value
-        ).filter(Workspace.id == workspace_id).first()
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not workspace or not workspace.is_polling_active:
+            return
+            
+        header_name = workspace.api_header_name
+        header_value = workspace.api_header_value
 
-        if not workspace or not workspace.api_url:
-            logger.warning(f"-> [API FETCHER] Workspace or API URL not found for {workspace_id}. Aborting.")
+        if header_name == "Authorization":
+            if not header_value or not header_value.startswith(("Bearer ", "Basic ")):
+                kill_poller(db, workspace_id, user_message="The Authorization header is missing or invalid. Please provide a valid Bearer or Basic token.", internal_reason="Hard Fail: Malformed Authorization header", is_hard_fail=True)
+                return
+        
+        if not workspace.api_url or not workspace.api_url.startswith("http"):
+            kill_poller(db, workspace_id, user_message="The API URL is missing or invalid. Please provide a valid HTTP or HTTPS endpoint.", internal_reason="Hard Fail: Invalid API URL", is_hard_fail=True)
             return
 
-        # --- KEYRING LOGIC ---
-        headers = {}
-        if workspace.api_header_name and workspace.api_header_value:
-            headers[workspace.api_header_name] = workspace.api_header_value
-            logger.info(f"🔑 Using API Key Header: {workspace.api_header_name}")
-        # ---------------------
+        headers = {header_name: header_value} if header_name and header_value else {}
+        
+        try:
+            response = requests.get(workspace.api_url, headers=headers, timeout=(10, 30), stream=True)
+            
+            cl = response.headers.get('Content-Length')
+            if cl and int(cl) > MAX_BYTES:
+                kill_poller(db, workspace_id, user_message="The data source is too large (>5MB). Please reduce the payload size.", internal_reason="Hard Fail: Payload exceeds 5MB limit", is_hard_fail=True)
+                return
+            
+            if response.status_code in [401, 403]:
+                kill_poller(db, workspace_id, user_message="The API rejected the request due to invalid or missing credentials. Please verify your API key or token.", internal_reason=f"API Auth Failed ({response.status_code})", is_hard_fail=True)
+                return
 
-        # 2. Optimization: Add TIMEOUT
-        # (10s to connect, 30s to read data). Prevents infinite hangs.
-        response = requests.get(workspace.api_url, headers=headers, timeout=(10, 30))
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # 3. Optimization: Fail fast if data is empty
+            response.raise_for_status()
+            
+            content = b""
+            for chunk in response.iter_content(chunk_size=8192):
+                content += chunk
+                if len(content) > MAX_BYTES:
+                    kill_poller(db, workspace_id, user_message="Data stream exceeds the 5MB limit allowed on this plan.", internal_reason="Hard Fail: Stream exceeded 5MB limit", is_hard_fail=True)
+                    return
+
+        except requests.exceptions.HTTPError as http_err:
+            kill_poller(db, workspace_id, user_message="The API responded with an error while processing the request. We'll retry automatically.", internal_reason=f"HTTP Error: {http_err}", is_hard_fail=False)
+            return
+        except requests.Timeout:
+            kill_poller(db, workspace_id, user_message="The API took too long to respond. We'll retry automatically.", internal_reason="Network Timeout while calling API", is_hard_fail=False)
+            return
+        except requests.RequestException as req_err:
+            kill_poller(db, workspace_id, user_message="We couldn't reach the API due to a network issue. We'll retry automatically.", internal_reason=f"Request error: {str(req_err)[:120]}", is_hard_fail=False)
+            return
+
+        data = json.loads(content)
+        del content
         if not data:
-            logger.warning(f"-> [API FETCHER] API returned empty data for {workspace_id}.")
+            kill_poller(db, workspace_id, user_message="The API request succeeded but returned no data. Please check filters or response format.", internal_reason="Soft Fail: API returned empty response", is_hard_fail=False)
             return
 
         df = pd.json_normalize(data)
-        
         csv_content = df.to_csv(index=False)
+        del data     
+        del df
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_api_poll.csv"
-
         new_upload = DataUpload(
             workspace_id=workspace.id, 
-            file_path=file_name,
+            file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_api.csv",
             file_content=csv_content,
             upload_type='api_poll'
         )
         db.add(new_upload)
-        
-        # Efficiently update the last_polled_at timestamp
-        db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
-        )
+
+        workspace.last_polled_at = datetime.now(timezone.utc)
+        workspace.failure_count = 0 
         
         db.commit()
         db.refresh(new_upload)
-
-        logger.info("-> [API FETCHER] Handing off to the analyzer task...")
+        
         process_csv_task.delay(str(new_upload.id))
 
-    except requests.Timeout:
-        logger.error(f"❌ [API FETCHER] Timeout connecting to API.")
     except Exception as e:
-        logger.error(f"❌ [API FETCHER] An error occurred: {e}", exc_info=True)
+        logger.error(f"🔥 [API FETCHER] Unexpected Engine Crash: {e}", exc_info=True)
+        kill_poller(db, workspace_id, user_message="Something went wrong while fetching data from the API. We've stopped this task to prevent further issues.", internal_reason=f"API Fetcher Crash: {str(e)[:120]}", is_hard_fail=False)
     finally:
         db.close()
-        
+
+# --- PORTED: FETCH_DB_DATA ---
 @celery_app.task(name="fetch_db_data")
 def fetch_db_data(workspace_id: str):
+    MAX_ROWS = 25000
     logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
     db: Session = SessionLocal()
-    engine = None # Initialize engine variable for safe cleanup
-
+    engine = None
+    
     try:
-        # 1. Optimization: Fetch ONLY necessary config columns as a tuple
-        ws_config = db.query(
-            Workspace.id,
-            Workspace.db_host,
-            Workspace.db_user,
-            Workspace.db_password,
-            Workspace.db_name,
-            Workspace.db_port,
-            Workspace.db_query
-        ).filter(Workspace.id == workspace_id).first()
-
-        # Check if config exists and has all required fields
-        if not ws_config or not all([ws_config.db_host, ws_config.db_user, ws_config.db_password, ws_config.db_name, ws_config.db_query]):
-            logger.warning(f"-> [DB FETCHER] Incomplete DB config for {workspace_id}. Aborting.")
+        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        
+        if not workspace:
+            logger.warning(f"-> [DB FETCHER] Workspace {workspace_id} not found.")
             return
-        
-        # 2. Safe Connection String Construction
-        encoded_password = quote_plus(ws_config.db_password)
-        port = ws_config.db_port or 5432 # Default to 5432 if None
-        connection_url = f"postgresql://{ws_config.db_user}:{encoded_password}@{ws_config.db_host}:{port}/{ws_config.db_name}"
-        
-        logger.info(f"-> [DB FETCHER] Connecting to {ws_config.db_host}...")
-        
-        # 3. Optimization: Create Engine with timeouts & pre-ping
-        # pool_pre_ping=True checks if the connection is alive before using it
-        # connect_args sets a command timeout (e.g., 30 seconds) so we don't hang forever
-        engine = create_engine(
-            connection_url, 
-            pool_pre_ping=True,
-            connect_args={"options": "-c statement_timeout=30000"} # 30s timeout
-        )
-        
-        with engine.connect() as connection:
-            # Pandas reads directly from the active connection
-            df = pd.read_sql(ws_config.db_query, connection)
 
-        # 4. Optimization: Check for empty data early
+        if not workspace.is_polling_active:
+            logger.warning(f"-> [DB FETCHER] Polling disabled for {workspace.name}. Aborting.")
+            return
+
+        if not all([workspace.db_host, workspace.db_user, workspace.db_password, workspace.db_name, workspace.db_query]):
+            kill_poller(db, workspace_id, user_message="Database connection details are missing or incomplete. Please review your database settings.", internal_reason="Hard Fail: Incomplete DB configuration", is_hard_fail=True)
+            return
+
+        # Ported SQL Shield Logic
+        raw_query = workspace.db_query.strip()
+        clean_query = raw_query.rstrip(';')
+        query_no_comments = re.sub(r'(--.*)|(/\*[\s\S]*?\*/)', ' ', clean_query)
+        lower_query = query_no_comments.lower()
+
+        if not lower_query.strip().startswith("select"):
+            kill_poller(db, workspace_id, user_message="Only read-only SELECT queries are allowed.", internal_reason="Security: Non-SELECT start", is_hard_fail=True)
+            return
+
+        if ";" in clean_query:
+            kill_poller(db, workspace_id, user_message="Multiple statements are not permitted.", internal_reason="Security: Semicolon detected", is_hard_fail=True)
+            return
+
+        forbidden_keywords = {
+            'insert', 'update', 'delete', 'drop', 'truncate', 'alter', 'create', 
+            'grant', 'revoke', 'vacuum', 'copy', 'pg_read_file', 'pg_write_file', 
+            'lo_export', 'lo_import', 'dblink', 'program', 'pg_sleep'
+        }
+        query_words = set(lower_query.replace('(', ' ').replace(')', ' ').replace(',', ' ').split())
+        found_forbidden = query_words.intersection(forbidden_keywords)
+
+        if found_forbidden:
+            kill_poller(db, workspace_id, user_message=f"Restricted keywords detected: {', '.join(found_forbidden)}", internal_reason="Security: Forbidden keywords", is_hard_fail=True)
+            return
+
+        try:
+            encoded_password = quote_plus(workspace.db_password)
+            port = workspace.db_port or 5432 
+            connection_url = f"postgresql://{workspace.db_user}:{encoded_password}@{workspace.db_host}:{port}/{workspace.db_name}"
+            
+            engine = create_engine(
+                connection_url, 
+                pool_pre_ping=True,
+                connect_args={"options": "-c statement_timeout=30000"} 
+            )
+            
+            with engine.connect() as connection:
+                # Ported Sandbox Logic
+                connection.execute(text("SET work_mem = '4MB';"))
+                connection.execute(text("SET temp_buffers = '2MB';"))
+                
+                # Ported Row-Limit Logic
+                safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
+                df = pd.read_sql(text(safe_query), connection)
+
+            if len(df) > MAX_ROWS:
+                kill_poller(db, workspace_id, user_message=f"Query result too large (Max {MAX_ROWS} rows).", internal_reason="Hard Fail: SQL row limit exceeded", is_hard_fail=True)
+                return
+
+        except Exception as conn_err:
+            err_msg = str(conn_err).lower()
+            # Ported intelligent error parsing
+            auth_patterns = ["authentication failed", "login failed", "password"]
+            if any(p in err_msg for p in auth_patterns):
+                kill_poller(db, workspace_id, user_message="We couldn't connect to your database. Please verify the username and password.", internal_reason="Auth failure", is_hard_fail=True)
+            else:
+                kill_poller(db, workspace_id, user_message="We're having trouble reaching your database right now.", internal_reason="Temporary DB issue", is_hard_fail=False)
+            return
+
         if df.empty:
-             logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace_id}.")
-             return
+            kill_poller(db, workspace_id, user_message="Your query ran successfully but didn't return any data.", internal_reason="Soft Fail: Query returned 0 rows", is_hard_fail=False)
+            return
 
         csv_content = df.to_csv(index=False)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{timestamp}_db_query.csv"
-
         new_upload = DataUpload(
-            workspace_id=ws_config.id, 
-            file_path=file_name,
+            workspace_id=workspace.id, 
+            file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_db.csv",
             file_content=csv_content,
             upload_type='db_query'
         )
         db.add(new_upload)
-        
-        # Efficient update for last_polled_at
-        db.query(Workspace).filter(Workspace.id == workspace_id).update(
-            {"last_polled_at": dt.datetime.now(dt.timezone.utc)}
-        )
-        
+        workspace.last_polled_at = datetime.now(timezone.utc)
+        workspace.failure_count = 0
         db.commit()
         db.refresh(new_upload)
 
-        logger.info("-> [DB FETCHER] Handing off to the analyzer task...")
         process_csv_task.delay(str(new_upload.id))
 
     except Exception as e:
-        logger.error(f"❌ [DB FETCHER] An error occurred: {e}", exc_info=True)
+        logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
+        kill_poller(db, workspace_id, user_message="Something went wrong while processing your data.", internal_reason=f"Engine Crash: {str(e)[:120]}", is_hard_fail=False)
+        
     finally:
-        # Dispose the temporary engine to free up the connection pool immediately
-        if engine:
-            engine.dispose()
+        if engine: engine.dispose()
         db.close()
 
-  
+def check_alert_rules(
+    db: Session, 
+    workspace: Workspace, 
+    current_upload: DataUpload, 
+    analysis_results: dict
+) -> None:
+    """
+    PORTED FROM CLOUD: Evaluates alert rules with Idempotency and Batching.
+    Now optimized for Celery workers.
+    """
+    logger.info(f"🔍 [ENGINE] Scanning rules for Workspace: {workspace.name}...")
 
-def check_alert_rules(db: Session, workspace: Workspace, current_upload: DataUpload, analysis_results: dict):
-    # 1. Fast Exit: Fetch rules first
+    # 1. Fetch Active Rules
     rules = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id, 
         AlertRule.is_active == True
     ).all()
     
     if not rules:
+        logger.info("-> No active alert rules found.")
         return
 
-    # 2. Pre-calculate Context
     stats = analysis_results.get("summary_stats", {})
     if not stats:
+        logger.warning("-> Engine aborted: No statistics found in upload.")
         return
 
-    # Operator Map for cleaner logic
+    # 2. IDEMPOTENCY GUARD (Prevents duplicate alerts for the same upload)
+    execution_fingerprint = f"upload_{current_upload.id}_ws_{workspace.id}"
+    already_processed = db.query(Notification).filter(
+        Notification.workspace_id == workspace.id,
+        Notification.idempotency_key == execution_fingerprint
+    ).first()
+
+    if already_processed:
+        logger.info(f"🛡️ [GUARD] Already processed {execution_fingerprint}. Skipping.")
+        return
+
     ops = {
         'greater_than': operator.gt,
         'less_than': operator.lt,
-        'equals': operator.eq
+        'equals': operator.eq,
+        'not_equals': operator.ne
     }
 
+    triggered_alerts = []
     users_to_notify = list(set(workspace.team_members + [workspace.owner]))
-    recipients = [user.email for user in users_to_notify]
 
-    alerts_triggered = False
-
+    # 3. Process Rules and Collect (Batching)
     for rule in rules:
         try:
-            # 3. Safe Data Access
             col_stats = stats.get(rule.column_name)
             if not col_stats:
-                continue
+                continue 
             
-            actual_value = col_stats.get(rule.metric)
-            
-            # 4. Logic Check (Skip None/NaN)
-            if actual_value is None:
+            actual_value_raw = col_stats.get(rule.metric)
+            if actual_value_raw is None:
                 continue
 
-            # 5. Comparison Logic
+            # Strict Precision Logic from Cloud
+            actual_value = round(float(actual_value_raw), 4)
+            threshold_value = round(float(rule.value), 4)
+
             compare_func = ops.get(rule.condition)
-            if not compare_func:
+            if not compare_func or not compare_func(actual_value, threshold_value):
                 continue
 
-            if compare_func(actual_value, rule.value):
-                alerts_triggered = True
-                message = (
-                    f"Smart Alert: '{rule.column_name}' {rule.metric} was {actual_value:.2f}, "
-                    f"triggering rule '{rule.condition.replace('_', ' ')} {rule.value}'."
-                )
-                
-                logger.info(f"🚨 [WORKER] Alert Triggered: {message}")
-                
-                # Create Notification
-                # (In Celery worker, we add to session but commit happens at end of task)
-                notification = Notification(
-                    user_id=workspace.owner_id, 
-                    workspace_id=workspace.id, 
-                    message=message
-                )
-                db.add(notification)
-                
-                email_context = {
-                    "workspace_name": workspace.name,
-                    "rule": { 
-                        "column_name": rule.column_name, 
-                        "metric": rule.metric, 
-                        "condition": rule.condition, 
-                        "value": rule.value 
-                    },
-                    "actual_value": actual_value,
-                    "file_name": current_upload.file_path,
-                    "upload_time": convert_utc_to_ist_str(current_upload.uploaded_at),
-                }
-                
-                # Async Email Call (Correct for Celery)
-                asyncio.run(send_threshold_alert_email(recipients, email_context))
-                
-        except (KeyError, TypeError, Exception) as e:
-            logger.warning(f"Error checking rule {rule.id}: {e}")
+            # Rule triggered - Add to the batch
+            triggered_alerts.append({
+                "rule_id": str(rule.id),
+                "column_name": rule.column_name,
+                "metric": rule.metric.replace('50%', 'median').upper(),
+                "condition": rule.condition.replace('_', ' '),
+                "threshold": threshold_value,
+                "actual": actual_value
+            })
+
+        except Exception as e:
+            logger.error(f"⚠️ Error evaluating rule {rule.id}: {e}")
             continue
+        
+    # 4. Handle Triggered Alerts (Side Effects)
+    if triggered_alerts:
+        try:
+            summary_msg = f"Alert: {len(triggered_alerts)} violations detected in '{workspace.name}'."
             
-    # Note: No db.commit() here because the main task function commits everything at once.
+            # Create DB notifications for all users
+            for user in users_to_notify:
+                new_notif = Notification(
+                    user_id=user.id,
+                    workspace_id=workspace.id,
+                    message=summary_msg,
+                    idempotency_key=execution_fingerprint 
+                )
+                db.add(new_notif)
+            
+            db.commit()
+            logger.info(f"💾 Records committed for fingerprint: {execution_fingerprint}")
 
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Database error, aborting alerts: {e}")
+            return
 
-# ------------------------------------------------------------
-# Helper to clean NaN, inf, -inf recursively for PostgreSQL JSON
-# ------------------------------------------------------------
+        # Prepare Email Context
+        recipients = [user.email for user in users_to_notify]
+        timestamp_to_use = current_upload.uploaded_at or datetime.now(timezone.utc)
+        email_context = { 
+            "workspace_name": workspace.name, 
+            "triggered_alerts": triggered_alerts, 
+            "file_name": current_upload.file_path,
+            "upload_time": convert_utc_to_ist_str(timestamp_to_use),
+            "workspace_id": str(workspace.id),
+            "idempotency_key": execution_fingerprint
+        }
+
+        # 5. ASYNC BROADCASTS (UI + Email)
+        # Using run_sync helper to manage loops within the Celery worker
+        for user in users_to_notify:
+            run_sync(
+                manager.push_to_user(
+                    user_id=str(user.id),
+                    message={"type": "NEW_NOTIFICATION_ALERT", "count": len(triggered_alerts)}
+                )
+            )
+
+        # Batch Email: One email with ALL violations (Cloud Standard)
+        run_sync(send_threshold_alert_email(recipients, email_context))
+        
+        logger.info(f"✅ Side effects sent for {len(triggered_alerts)} alerts.")
+    else:
+        logger.info("✅ Scan complete: No violations found.")
+            
 def clean_nan(obj):
     if isinstance(obj, dict):
         return {k: clean_nan(v) for k, v in obj.items()}
@@ -438,204 +626,155 @@ def clean_nan(obj):
 def process_csv_task(upload_id: str):
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
-
-    workspace_id = None  # Track early so we can publish job_error without re-querying
-
+    workspace_id_str = None
+    status_message = "job_error"
+    new_notifications_created = False
+    
+    # PORTED FROM CLOUD: The RAM Bouncer (Strict 25k limit)
+    MAX_ROWS = 25000 
+    
     try:
-        # STEP 1: Fetch current upload
-        logger.debug("🔍 STEP 1: Fetching current upload...")
-        current_upload: DataUpload | None = (
-            db.query(DataUpload)
-            .filter(DataUpload.id == upload_id)
-            .first()
-        )
-
-        if not current_upload:
-            logger.error("❌ Upload not found in DB!")
-            return {"status": "error", "message": "Upload not found"}
-
-        workspace_id = current_upload.workspace_id
-
+        current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
+        if not current_upload: 
+            logger.warning(f"[WORKER] Upload ID {upload_id} not found.")
+            return
+        
+        workspace_id_str = str(current_upload.workspace_id)
         csv_content = current_upload.file_content
-        if not csv_content:
-            logger.error("❌ CSV content is EMPTY! Aborting processing.")
-            return {"status": "error", "message": "Empty CSV content"}
+        if not csv_content: 
+            logger.warning(f"[WORKER] No content for upload {upload_id}.")
+            return
 
-        # STEP 2: Load CSV into Pandas
-        logger.debug("🔍 STEP 2: Loading CSV into Pandas...")
+        is_truncated = False
         try:
-            # low_memory=False avoids mixed-type inference issues on large CSVs
-            df = pd.read_csv(StringIO(csv_content), low_memory=False)
+            # PORTED FROM CLOUD: nrows logic to protect RAM
+            df = pd.read_csv(StringIO(csv_content), nrows=MAX_ROWS + 1)
+            original_row_count = len(df)
+            
+            if original_row_count > MAX_ROWS:
+                is_truncated = True
+                logger.warning(f"⚠️ [WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
+                df = df.head(MAX_ROWS)
 
-            # --- FIX FOR "0 0 0" STATS ---
-            # Vectorized numeric conversion for better performance than looping columns
-            df = df.apply(lambda col: pd.to_numeric(col, errors="ignore"))
-            # -----------------------------
-            logger.debug(f"📊 DataFrame loaded successfully with shape {df.shape}.")
+            # PORTED FROM CLOUD: Fixed column-by-column numeric conversion
+            for col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='ignore')
+                
         except Exception as e:
-            logger.error(f"❌ Pandas failed to read CSV: {e}", exc_info=True)
-            return {"status": "error", "message": "Failed to parse CSV"}
+            logger.error(f"❌ Failed to parse CSV: {e}")
+            status_message = "job_error"
+            return {"status": "error"}
 
-        # STEP 3: Schema & row count
-        logger.debug("🔍 STEP 3: Extracting new schema...")
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         new_row_count = len(df)
-        logger.debug(f"📊 New schema has {len(new_schema)} columns and {new_row_count} rows.")
-
-        # STEP 4: Find previous upload for comparison
-        logger.debug("🔍 STEP 4: Looking for previous upload...")
-        previous_upload: DataUpload | None = (
-            db.query(DataUpload)
-            .filter(
-                DataUpload.workspace_id == workspace_id,
-                DataUpload.upload_type == current_upload.upload_type,
-                DataUpload.id != current_upload.id,
-            )
-            .order_by(DataUpload.uploaded_at.desc())
-            .first()
-        )
-
-        schema_has_changed = False
-        row_count_has_changed = False
-        new_cols = set(new_schema.keys())
-        old_cols: set[str] = set()
-        old_row_count: int = 0
-
+        
+        # Comparison logic (Identical to tasks.py)
+        previous_upload = db.query(DataUpload).filter(
+            DataUpload.workspace_id == current_upload.workspace_id, 
+            DataUpload.upload_type == current_upload.upload_type, 
+            DataUpload.id != current_upload.id
+        ).order_by(DataUpload.uploaded_at.desc()).first()
+        
+        schema_has_changed, row_count_has_changed = False, False
+        new_cols, old_cols = set(new_schema.keys()), set()
+        old_row_count = 0
+        
         if previous_upload and previous_upload.analysis_results:
-            logger.debug("🔍 STEP 5: Comparing schema & row counts with previous upload...")
-            if previous_upload.upload_type == current_upload.upload_type:
-                old_schema = previous_upload.schema_info or {}
-                old_cols = set(old_schema.keys())
+            old_schema = previous_upload.schema_info or {}
+            old_cols = set(old_schema.keys())
+            if old_cols != new_cols: schema_has_changed = True
+            
+            old_row_count = previous_upload.analysis_results.get("row_count", 0)
+            if old_row_count != new_row_count: row_count_has_changed = True
 
-                if old_cols != new_cols:
-                    schema_has_changed = True
-                    logger.debug(f"⚠ Schema change detected! Added: {new_cols - old_cols}, Removed: {old_cols - new_cols}")
-
-                old_row_count = previous_upload.analysis_results.get("row_count", 0)
-                if old_row_count != new_row_count:
-                    row_count_has_changed = True
-                    logger.debug(f"⚠ Row count change detected! Old: {old_row_count}, New: {new_row_count}")
-
-        # STEP 6: Generate stats
-        logger.debug("🔍 STEP 6: Generating describe() stats...")
-        try:
-            # include='all' => numeric + categorical stats
-            stats_df = df.describe(include="all")
-        except Exception as e:
-            logger.error(f"❌ df.describe() failed: {e}", exc_info=True)
-            return {"status": "error", "message": "Failed to generate summary stats"}
-
-        # STEP 7: Clean NaN/Inf from stats for JSON/PG safety
-        logger.debug("🔍 STEP 7: Cleaning NaN/Inf values from stats...")
+        # Generate and Clean Stats
+        stats_df = df.describe(include='all')
         raw_summary = stats_df.to_dict()
-        summary_stats = clean_nan(raw_summary)
-
+        summary_stats = clean_nan(raw_summary) 
+        
         analysis_results = {
-            "row_count": new_row_count,
-            "column_count": len(df.columns),
+            "row_count": new_row_count, 
+            "column_count": len(df.columns), 
             "summary_stats": summary_stats,
+            "is_truncated": is_truncated
         }
-
-        # STEP 8: Save analysis on upload
-        logger.debug("🔍 STEP 8: Saving results into DB...")
+        
         current_upload.schema_info = new_schema
         current_upload.analysis_results = analysis_results
         current_upload.schema_changed_from_previous = schema_has_changed
+        
+        # PORTED FROM CLOUD: FORCE RELEASE RAM immediately
+        del df
+        del stats_df
 
-        # STEP 9: Workspace-level processing
-        logger.debug("🔍 STEP 9: Fetching workspace...")
-        workspace: Workspace | None = (
-            db.query(Workspace)
-            .filter(Workspace.id == workspace_id)
-            .first()
-        )
-
+        workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
-            # Structural/row changes => notifications + email + AI insight
             if schema_has_changed or row_count_has_changed:
-                logger.debug("🔔 Structural or row-count change detected — preparing notifications & email...")
-
-                schema_changes_dict = {
-                    "added": list(new_cols - old_cols),
-                    "removed": list(old_cols - new_cols),
-                }
-                ai_insight_text = get_ai_insight(schema_changes_dict)
-
-                users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+                ai_insight_text = None
+                schema_changes_dict = {}
+                
+                if schema_has_changed:
+                    schema_changes_dict = {'added': list(new_cols - old_cols), 'removed': list(old_cols - new_cols)}
+                    ai_insight_text = get_ai_insight(schema_changes_dict)
+                
                 notification_message = f"Structural change detected in workspace '{workspace.name}'."
-
+                users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+                
                 for user in users_to_notify:
-                    db.add(
-                        Notification(
-                            user_id=user.id,
-                            workspace_id=workspace.id,
-                            message=notification_message,
-                            ai_insight=ai_insight_text,
-                        )
-                    )
-
-                # compute old_row_count safely (in case previous_upload was None)
-                if not previous_upload or not previous_upload.analysis_results:
-                    old_row_count = 0  # already defined above, but explicit
-
-                percent_change = (
-                    f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
-                    if old_row_count != 0 and row_count_has_changed
-                    else "0.0%"
-                )
-
-                email_context = {
-                    "workspace_name": workspace.name,
-                    "upload_type": current_upload.upload_type,
-                    "new_file_name": current_upload.file_path,
-                    "old_file_name": previous_upload.file_path if previous_upload else "N/A",
+                    db.add(Notification(
+                        user_id=user.id, 
+                        workspace_id=workspace.id, 
+                        message=notification_message, 
+                        ai_insight=ai_insight_text
+                    ))
+                    new_notifications_created = True
+                
+                # Email preparation (Cloud Wording Identical)
+                percent_change = "0%"
+                if old_row_count > 0:
+                    percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
+                
+                email_context = { 
+                    "workspace_name": workspace.name, 
+                    "upload_type": current_upload.upload_type, 
+                    "new_file_name": current_upload.file_path, 
+                    "old_file_name": previous_upload.file_path if previous_upload else "N/A", 
                     "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at),
-                    "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email},
-                    "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members],
-                    "ai_insight": ai_insight_text,
-                    "schema_changes": schema_changes_dict,
-                    "metric_changes": {
-                        "old_rows": old_row_count,
-                        "new_rows": new_row_count,
-                        "percent_change": percent_change,
-                    }
-                    if row_count_has_changed
-                    else {},
+                    "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email}, 
+                    "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members], 
+                    "ai_insight": ai_insight_text, 
+                    "schema_changes": schema_changes_dict, 
+                    "metric_changes": {'old_rows': old_row_count, 'new_rows': new_row_count, 'percent_change': percent_change} if row_count_has_changed else {} 
                 }
-
+                
                 recipients = [user.email for user in users_to_notify]
-                # In a Celery worker, asyncio.run is fine for a one-off async function
-                asyncio.run(send_detailed_alert_email(recipients, email_context))
+                run_sync(send_detailed_alert_email(recipients, email_context))
 
-            # STEP 10: Alert rules
-            logger.debug("🔍 STEP 10: Checking alert rules...")
+            # Run Alert Rules
             check_alert_rules(db, workspace, current_upload, analysis_results)
-
-        # STEP 11: Commit
-        logger.debug("💾 STEP 11: Committing DB changes...")
+            
         db.commit()
+        status_message = "job_complete"
 
-        logger.info(f"✅ Upload {upload_id} processed successfully.")
-        if workspace_id is not None:
-            redis_client.publish(f"workspace:{workspace_id}", "job_complete")
+        # Signal UI update via WebSocket (Mirroring tasks.py push_to_user)
+        if new_notifications_created:
+            for user in users_to_notify:
+                run_sync(manager.push_to_user(str(user.id), {"type": "NEW_NOTIFICATION_ALERT"}))
 
         return {"status": "success"}
 
     except Exception as e:
-        logger.error("🔥 FATAL ERROR in process_csv_task!", exc_info=True)
-        # Always rollback on exception to avoid broken transactions
-        try:
-            db.rollback()
-        except Exception:
-            pass
-
-        if workspace_id is not None:
-            redis_client.publish(f"workspace:{workspace_id}", "job_error")
-
+        logger.error(f"❌ [WORKER] Error: {e}", exc_info=True)
+        status_message = "job_error"
         return {"status": "error", "message": str(e)}
-
+    
     finally:
-        logger.debug("🔚 STEP 12: Closing DB session.")
+        # FINAL BROADCAST: Signals the UI to stop the loading state (As is tasks.py)
+        if workspace_id_str:
+            payload = {"type": status_message, "workspace_id": workspace_id_str}
+            redis_client.publish("workspace_updates", json.dumps(payload))
+            logger.info(f"📡 Published '{status_message}' to Redis for {workspace_id_str}")
+        
         db.close()
 
 
@@ -650,4 +789,3 @@ def send_otp_email_task(to_email: str, otp: str, subject_type: str) -> None:
         logger.info(f"✅ [WORKER] Email sent successfully to {to_email}")
     except Exception as e:
         logger.error(f"❌ [WORKER] Failed to send OTP email: {e}", exc_info=True)
-        # Optional: Retry logic could go here (self.retry())

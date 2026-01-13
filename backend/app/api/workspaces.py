@@ -25,6 +25,7 @@ from app.models.alert_rule import AlertRule
 from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
 from app.services.tasks import executor
+from app.services.celery_worker import fetch_api_data, fetch_db_data
 
 # Services & Managers
 from app.api.alerts import AlertRuleResponse 
@@ -390,10 +391,14 @@ async def update_workspace(
     db.refresh(db_workspace)
     user_toggled_on = update_data.get("is_polling_active") is True
 
-    if user_toggled_on and db_workspace.is_polling_active:
-        current_loop = asyncio.get_running_loop()
-        logger.info(f"⚡ [UX KICKSTART] Triggering instant fetch for '{db_workspace.name}'")
-        executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
+    if APP_MODE == "production":
+            current_loop = asyncio.get_running_loop()
+            executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
+    else:
+        if db_workspace.data_source == 'API':
+            fetch_api_data.delay(str(db_workspace.id))
+        elif db_workspace.data_source == 'DB':
+            fetch_db_data.delay(str(db_workspace.id))
     
     if user_toggled_on:   
         if background_tasks:
