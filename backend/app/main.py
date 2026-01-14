@@ -109,72 +109,72 @@ app = FastAPI(lifespan=lifespan)
 # ---  THE GUARDIAN MIDDLEWARE ---
 @app.middleware("http")
 async def guardian_middleware(request: Request, call_next):
-    # 1. Health check bypass
-    if request.url.path == "/ping":
+    # 0. Fast bypasses
+    if request.url.path in {"/ping"}:
         return await call_next(request)
-    
-    # 2. CSRF Header Verification (Header-Only Strategy)
-    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
-        # Routes that don't need a CSRF token yet
-        CSRF_EXEMPT_PATHS = {
-            "/api/auth/login-email",
-            "/api/auth/send-otp",
-            "/api/auth/verify-otp",
-            "/api/auth/google",
-            "/api/auth/github/callback",
-            "/api/auth/google/callback",
-            "/",
-        }
 
-        csrf_header = request.headers.get("X-CSRF-Token")
-        origin = request.headers.get("Origin")
+    path = request.url.path
+    method = request.method
 
-        if not origin:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "CSRF blocked: Missing Origin"}
-            )
+    # 1. CSRF-exempt routes (AUTH + PUBLIC)
+    CSRF_EXEMPT_PATHS = {
+        "/api/auth/login-email",
+        "/api/auth/send-otp",
+        "/api/auth/verify-otp",
+        "/api/auth/google",
+        "/api/auth/github/callback",
+        "/api/auth/google/callback",
+        "/",
+    }
 
-        if origin not in origins:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "CSRF blocked: Invalid Origin"}
-            )
+    # 2. Enforce CSRF only for state-changing requests
+    if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        # 2.a Skip CSRF for exempt paths
+        if path not in CSRF_EXEMPT_PATHS:
+            origin = request.headers.get("Origin")
+            csrf_header = request.headers.get("X-CSRF-Token")
 
-        if not csrf_header:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "CSRF blocked: Missing X-CSRF-Token"}
-            )
+            # Origin check: only validate if present (mobile-safe)
+            if origin and origin not in origins:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF blocked: Invalid Origin"},
+                )
 
+            # CSRF header required for protected routes
+            if not csrf_header:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF blocked: Missing X-CSRF-Token"},
+                )
 
-    # 3. Process Request
+    # 3. Process request
     try:
         response = await call_next(request)
-        
+
         if response.status_code == 404:
-            asyncio.create_task(send_telegram_alert(
-                f"🟡 404 Warning (Not Found)\n"
-                f"Path: `{request.url.path}`\n"
-                f"Method: {request.method}"
-            ))
-            
+            asyncio.create_task(
+                send_telegram_alert(
+                    f"404 Not Found\nPath: {path}\nMethod: {method}"
+                )
+            )
+
         return response
 
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
 
-        error_type = type(e).__name__
-        alert_msg = (
-            f"🚨 **CRITICAL SERVER ERROR\n\n"
-            f"Type: `{error_type}`\n"
-            f"Endpoint: `{request.method} {request.url.path}`\n"
-            f"Error: `{str(e)}`"
+        asyncio.create_task(
+            send_telegram_alert(
+                f"CRITICAL ERROR\n"
+                f"Type: {type(e).__name__}\n"
+                f"Endpoint: {method} {path}\n"
+                f"Error: {str(e)}"
+            )
         )
-        asyncio.create_task(send_telegram_alert(alert_msg))
-        
         raise e
+
     
     
 app.add_middleware(
