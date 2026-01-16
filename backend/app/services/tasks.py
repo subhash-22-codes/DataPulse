@@ -21,6 +21,7 @@ from app.models.data_upload import DataUpload
 from app.models.user import User
 from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
+from app.models.feedback import Feedback
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
 import concurrent.futures

@@ -19,7 +19,7 @@ from app.core.connection_manager import manager
 load_dotenv()
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from app.api import auth, workspaces, notifications, uploads, alerts, chat, user_action
+from app.api import auth, workspaces, notifications, uploads, alerts, chat, user_action, feedbacks
 from app.models import user, workspace, data_upload, notification, alert_rule, token
 from app.core.guard import send_telegram_alert
 
@@ -208,6 +208,7 @@ app.include_router(notifications.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(feedbacks.router, prefix="/api")
 
 
 

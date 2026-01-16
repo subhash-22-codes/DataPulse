@@ -76,3 +76,9 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="desc(LoginHistory.created_at)"
     )
+    
+    feedbacks = relationship(
+        "Feedback", 
+        back_populates="user", 
+        cascade="all, delete-orphan"
+    )
