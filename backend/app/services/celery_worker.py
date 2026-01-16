@@ -31,6 +31,7 @@ from app.models.alert_rule import AlertRule
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
 from app.models.token import RefreshToken
+from app.models.feedback import Feedback
 
 # --- Setup & Safety Config ---
 logger = logging.getLogger(__name__)
