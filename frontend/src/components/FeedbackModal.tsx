@@ -179,7 +179,7 @@ return (
 
                 <div
                   className={`absolute -bottom-5 right-1 text-[9px] md:text-[10px] font-bold tracking-widest ${
-                    message.length > MAX_CHARS ? "text-red-500" : "text-slate-300"
+                    message.length > MAX_CHARS ? "text-red-500" : "text-slate-400"
                   }`}
                 >
                   {message.length} / {MAX_CHARS}
@@ -217,7 +217,7 @@ return (
             </div>
 
             <p className="text-[10px] md:text-[11px] text-slate-400 leading-relaxed text-center">
-              Don’t include passwords, tokens, or personal data.
+               Don’t share passwords or private keys.
             </p>
           </form>
         )}
