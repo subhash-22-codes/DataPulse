@@ -21,20 +21,25 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const isAccountPage = location.pathname === '/account';
 
-  useEffect(() => {
-    // Only show the 'New' badge if they haven't interacted with feedback yet
-    const hintStatus = localStorage.getItem('dp_feedback_hint_seen');
-    if (!hintStatus) {
-      setShowHint(true);
-    }
-  }, []);
+    useEffect(() => {
+      // Guard: if user isn't loaded yet, don't show anything
+      if (!user?.id) return;
 
-  const openFeedback = () => {
-    // Dismiss hint forever once they click
-    localStorage.setItem('dp_feedback_hint_seen', 'true');
-    setShowHint(false);
-    setShowFeedback(true);
-  };
+      const hintKey = `dp_hint_seen_${user.id}`;
+      const hasSeen = localStorage.getItem(hintKey);
+      
+      if (!hasSeen) {
+        setShowHint(true);
+      }
+    }, [user?.id]); // Re-runs if a different user logs in
+
+    const openFeedback = () => {
+      if (user?.id) {
+        localStorage.setItem(`dp_hint_seen_${user.id}`, 'true');
+      }
+      setShowHint(false);
+      setShowFeedback(true);
+    };
 
   const handleLogout = async () => {
     try {
@@ -118,8 +123,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                       <div className="flex items-start gap-2">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-900 uppercase tracking-tight">
-                            Feedback
+                          <p className="text-[10px] font-bold text-slate-900 tracking-wide">
+                           Quick Feedback
                           </p>
                           <p className="text-[10px] text-slate-500 mt-0.5 leading-normal">
                             Share feedback, ideas, or issues.
