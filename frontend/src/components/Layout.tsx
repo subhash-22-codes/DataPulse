@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, Trash2, ArrowLeft } from 'lucide-react'; 
+import { LogOut, Trash2, ArrowLeft, MessageSquarePlus } from 'lucide-react'; 
 import { Notifications } from './Notifications';
 import { Chatbot } from './Chatbot';
+import { FeedbackModal } from './FeedbackModal';
 import { WhatsNewTrigger } from './WhatsNewTrigger';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -13,10 +14,27 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const [showHint, setShowHint] = useState(false);
 
   const isAccountPage = location.pathname === '/account';
+
+  useEffect(() => {
+    // Only show the 'New' badge if they haven't interacted with feedback yet
+    const hintStatus = localStorage.getItem('dp_feedback_hint_seen');
+    if (!hintStatus) {
+      setShowHint(true);
+    }
+  }, []);
+
+  const openFeedback = () => {
+    // Dismiss hint forever once they click
+    localStorage.setItem('dp_feedback_hint_seen', 'true');
+    setShowHint(false);
+    setShowFeedback(true);
+  };
 
   const handleLogout = async () => {
     try {
@@ -83,6 +101,46 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </button>
                 <Notifications />
                 <WhatsNewTrigger />
+                <div className="relative">
+                  <button
+                    onClick={openFeedback}
+                    className="p-2 text-slate-400 hover:text-slate-900"
+                    aria-label="Send feedback"
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                  </button>
+
+                  {showHint && (
+                    <div className="absolute top-12 right-0 w-48 p-3 bg-white border border-slate-200 shadow-xl rounded-lg animate-in fade-in slide-in-from-top-2 z-[60]">
+  
+                      {/* Pointer */}
+                      <div className="absolute -top-2 right-3 h-4 w-4 rotate-45 bg-white border-l border-t border-slate-200" />
+
+                      <div className="flex items-start gap-2">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-900 uppercase tracking-tight">
+                            Feedback
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-normal">
+                            Share feedback, ideas, or issues.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          localStorage.setItem("dp_feedback_hint_seen", "true");
+                          setShowHint(false);
+                        }}
+                        className="mt-2 w-full text-[9px] font-bold text-slate-400 hover:text-slate-900 text-left uppercase tracking-widest"
+                      >
+                        Got it
+                      </button>
+                    </div>
+
+                  )}
+                </div>
+
               </div>
 
               <div className="h-4 w-px bg-slate-200 hidden sm:block mx-1"></div>
@@ -127,6 +185,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       </main>
 
       <Chatbot />
+
+      <FeedbackModal 
+        isOpen={showFeedback} 
+        onClose={() => setShowFeedback(false)}
+        userId={user?.id} // Fixed from .uid to .id
+        currentPath={location.pathname} 
+      />
 
       {/* --- MODAL --- */}
       {showConfirm && (
