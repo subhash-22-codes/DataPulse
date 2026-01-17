@@ -7,9 +7,21 @@ import os
 load_dotenv()  # Load variables from .env
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+connect_args = {"connect_timeout": 20}
+if os.getenv("APP_MODE") == "production":
+    connect_args["sslmode"] = "require"
 
-# Create engine with pre_ping to handle idle connections
-engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    future=True,
+    pool_pre_ping=True,
+    pool_recycle=180,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    connect_args=connect_args,
+)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
