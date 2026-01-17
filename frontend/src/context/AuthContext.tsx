@@ -220,6 +220,15 @@ const verifyOtp = useCallback(async (name: string, email: string, otp: string, p
             console.error("Logout API failure:", err);
         }
     }, [clearAuth, navigate]);
+    const setFeedbackSubmitted = useCallback(() => {
+        setUser(prev => {
+            if (!prev) return null;
+            const updatedUser = { ...prev, is_feedback_submitted: true };
+            // Sync with localStorage so it persists if they refresh immediately
+            localStorage.setItem("datapulse_user", JSON.stringify(updatedUser));
+            return updatedUser;
+        });
+    }, []);
 
 
     // --- 🛡️ 5. Final Context Value ---
@@ -233,7 +242,8 @@ const verifyOtp = useCallback(async (name: string, email: string, otp: string, p
         sendPasswordReset,
         resetPassword,
         logout,
-        checkSession, 
+        checkSession,
+        setFeedbackSubmitted, 
         loading,
         authPhase,
         isAuthResolved: authPhase === "resolved",
@@ -241,7 +251,7 @@ const verifyOtp = useCallback(async (name: string, email: string, otp: string, p
     }), [
         user, loginSuccess, loading, authPhase, 
         login, googleLogin, register, verifyOtp, 
-        sendPasswordReset, resetPassword, logout, checkSession
+        sendPasswordReset, resetPassword, logout, checkSession, setFeedbackSubmitted
     ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
