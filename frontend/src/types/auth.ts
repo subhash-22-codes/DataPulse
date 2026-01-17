@@ -7,6 +7,7 @@ export interface User {
   signup_method: 'email' | 'google' | 'github';
   created_at: string;
   profile_pic?: string | null;
+  is_feedback_submitted: boolean;
 }
 
 // UPDATE: Matches new backend response
@@ -40,6 +41,7 @@ export interface AuthContextType {
     sendPasswordReset: (email: string) => Promise<boolean>;
     resetPassword: (email: string, resetCode: string, newPassword: string) => Promise<void>;
     checkSession: () => Promise<User | null>;
+    setFeedbackSubmitted: () => void;
 }
 export interface OtpResponse {
   msg: string;
