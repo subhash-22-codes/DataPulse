@@ -27,6 +27,7 @@ from app.core.connection_manager import manager
 import concurrent.futures
 import json
 import re
+from sqlalchemy.exc import OperationalError, InterfaceError
 
 # Create a ThreadPool at the module level to reuse threads
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
@@ -525,31 +526,39 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             engine.dispose()
         db.close()
         
+
 def schedule_data_fetches() -> None:
- 
     logger.info("⏰ [SCHEDULER] Checking for due data fetches...")
-    
-    db: Session = SessionLocal()
+
+    try:
+        db: Session = SessionLocal()
+    except Exception as e:
+        logger.error(f"🔥 DB Session creation failed: {e}")
+        return
+
     try:
         now = datetime.now(timezone.utc)
-        
-        # 1. Only fetch active workspaces
-        workspaces = db.query(
-            Workspace.id,
-            Workspace.name,
-            Workspace.polling_interval,
-            Workspace.last_polled_at,
-            Workspace.data_source
-        ).filter(
-            Workspace.is_polling_active == True
-        ).all()
-        
+
+        try:
+            workspaces = db.query(
+                Workspace.id,
+                Workspace.name,
+                Workspace.polling_interval,
+                Workspace.last_polled_at,
+                Workspace.data_source
+            ).filter(
+                Workspace.is_polling_active == True
+            ).all()
+
+        except (OperationalError, InterfaceError) as e:
+            logger.error(f"🛑 DB unreachable. Skipping scheduler run: {e}")
+            return
+
         if not workspaces:
             logger.info("-> No active workspaces found.")
             return
 
         triggered_count = 0
-
         buffer = timedelta(seconds=150)
 
         for ws in workspaces:
@@ -560,32 +569,31 @@ def schedule_data_fetches() -> None:
 
                 if not last_polled:
                     is_due = True
-                elif interval == '15min':
-                    # Use the buffer: Check if it's been at least 14m 30s
-                    if (now - last_polled) >= (timedelta(minutes=15) - buffer): 
+                elif interval == "15min":
+                    if (now - last_polled) >= (timedelta(minutes=15) - buffer):
                         is_due = True
-                elif interval == 'hourly':
-                    if (now - last_polled) >= (timedelta(hours=1) - buffer): 
+                elif interval == "hourly":
+                    if (now - last_polled) >= (timedelta(hours=1) - buffer):
                         is_due = True
-                elif interval == '3hours':
-                    if (now - last_polled) >= (timedelta(hours=3) - buffer): 
+                elif interval == "3hours":
+                    if (now - last_polled) >= (timedelta(hours=3) - buffer):
                         is_due = True
-                elif interval == '12hours':
-                    if (now - last_polled) >= (timedelta(hours=12) - buffer): 
+                elif interval == "12hours":
+                    if (now - last_polled) >= (timedelta(hours=12) - buffer):
                         is_due = True
-                elif interval == 'daily':
-                    if (now - last_polled) >= (timedelta(days=1) - buffer): 
+                elif interval == "daily":
+                    if (now - last_polled) >= (timedelta(days=1) - buffer):
                         is_due = True
-                
+
                 if is_due:
                     logger.info(f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool...")
-                    
+
                     from app.services.tasks import process_data_fetch_task
-                    
+
                     executor.submit(
-                        process_data_fetch_task, 
-                        str(ws.id), 
-                        None  
+                        process_data_fetch_task,
+                        str(ws.id),
+                        None
                     )
                     triggered_count += 1
 
@@ -598,8 +606,13 @@ def schedule_data_fetches() -> None:
 
     except Exception as e:
         logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
+
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass
+
         
 def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🛡️ [GATE] Validating execution request for workspace: {workspace_id}")
