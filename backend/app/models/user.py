@@ -49,6 +49,7 @@ class User(Base):
     delete_confirmation_otp = Column(String(6), nullable=True)
     delete_confirmation_expiry = Column(DateTime(timezone=True), nullable=True)
     token_version = Column(Integer, default=1, nullable=False)
+    is_feedback_submitted = Column(Boolean, default=False, nullable=False)
 
     # --- Relationships ---
     workspaces = relationship(
