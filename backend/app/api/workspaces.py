@@ -728,13 +728,6 @@ async def request_delete_otp(
 
     await send_delete_otp_email(current_user.email, otp, workspace.name)
     
-    background_tasks.add_task(
-        send_telegram_alert,
-        f"Blue Alert: Workspace Delete Requested\n"
-        f"User: {current_user.email}\n"
-        f"Workspace ID: {workspace_id}"
-    )
-    
     return {"message": "OTP sent to your email."}
 
 

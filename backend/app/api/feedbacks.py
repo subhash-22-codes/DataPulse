@@ -2,7 +2,6 @@ import uuid
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -24,7 +23,6 @@ COOLDOWN_PERIOD = timedelta(hours=24)
 
 class FeedbackCreate(BaseModel):
     message: str = Field(..., min_length=5, max_length=5000)
-    page: Optional[str] = Field(None, description="The URL path where feedback was sent")
 
 class FeedbackResponse(BaseModel):
     id: uuid.UUID
@@ -53,8 +51,6 @@ async def create_feedback(
         if time_since_last < COOLDOWN_PERIOD:
             remaining = COOLDOWN_PERIOD - time_since_last
             
-            # Fix: Use math.ceil so "5 minutes left" shows as "1 hour" instead of "0 hours"
-            # Or better yet, show minutes if under an hour.
             hours_left = math.ceil(remaining.total_seconds() / 3600)
             
             time_msg = f"{hours_left} hours" if hours_left > 1 else "1 hour"
@@ -67,10 +63,8 @@ async def create_feedback(
     try:
         # 2. Hardened Creation
         new_feedback = Feedback(
-            id=uuid.uuid4(),
             user_id=current_user.id,
             message=payload.message,
-            page=payload.page or "unknown"
         )
         
         db.add(new_feedback)
