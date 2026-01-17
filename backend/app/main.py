@@ -20,7 +20,7 @@ load_dotenv()
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.api import auth, workspaces, notifications, uploads, alerts, chat, user_action, feedbacks
-from app.models import user, workspace, data_upload, notification, alert_rule, token
+from app.models import user, workspace, data_upload, notification, alert_rule, token, feedback
 from app.core.guard import send_telegram_alert
 
 setup_logging()
