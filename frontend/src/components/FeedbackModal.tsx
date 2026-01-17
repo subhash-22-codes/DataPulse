@@ -24,7 +24,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   isOpen,
   onClose,
   userId,
-  currentPath,
 }) => {
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'sent'>('idle');
@@ -79,8 +78,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
     try {
       await api.post('/feedback/', {
         message,
-        page: currentPath,
-        user_id: userId
       });
 
       localStorage.setItem(storageKey, Date.now().toString());
@@ -161,10 +158,6 @@ return (
                 <label className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                   Message
                 </label>
-
-                <span className="text-[9px] md:text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-sm">
-                  {currentPath}
-                </span>
               </div>
 
               <div className="relative group">
