@@ -15,6 +15,9 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import json 
 from app.core.connection_manager import manager 
+from sqlalchemy import text
+from app.core.database import engine
+
 
 load_dotenv()
 
@@ -227,7 +230,12 @@ async def ping():
         "status": "alive",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-
+    
+@app.get("/db-test")
+def db_test():
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    return {"ok": True}
 
 @app.get("/")
 def root():
