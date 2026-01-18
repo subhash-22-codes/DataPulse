@@ -300,105 +300,304 @@ def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reas
 
 def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
-    db: Session = SessionLocal()
+
     MAX_BYTES = 5 * 1024 * 1024
-    
+
+    # 1) DB: read workspace config fast, then CLOSE DB
+    db: Session = SessionLocal()
     try:
-        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        workspace = (
+            db.query(Workspace)
+            .filter(Workspace.id == workspace_id)
+            .first()
+        )
+
         if not workspace or not workspace.is_polling_active:
             return
+
+        api_url = workspace.api_url
         header_name = workspace.api_header_name
         header_value = workspace.api_header_value
 
-        if header_name == "Authorization":
-            if not header_value or not header_value.startswith(("Bearer ", "Basic ")):
-                kill_poller(db, workspace_id, user_message="The Authorization header is missing or invalid. Please provide a valid Bearer or Basic token.",internal_reason="Hard Fail: Malformed Authorization header", is_hard_fail=True,loop=loop)
-                return
-        
-        if not workspace.api_url or not workspace.api_url.startswith("http"):
-            kill_poller(db, workspace_id, user_message="The API URL is missing or invalid. Please provide a valid HTTP or HTTPS endpoint.",internal_reason="Hard Fail: Invalid API URL", is_hard_fail=True,loop=loop)
-            return
+    except Exception as e:
+        logger.error(f"🔥 [API FETCHER] Failed to read workspace: {e}", exc_info=True)
+        return
+    finally:
+        db.close()
 
-        headers = {header_name: header_value} if header_name and header_value else {}
-        
+    # Validation (no DB needed)
+    if not api_url or not api_url.startswith("http"):
+        db2: Session = SessionLocal()
         try:
-            response = requests.get(workspace.api_url, headers=headers, timeout=(10, 30), stream=True)
-            
-            cl = response.headers.get('Content-Length')
-            if cl and int(cl) > MAX_BYTES:
-                kill_poller(db, workspace_id, user_message="The data source is too large (>5MB). Please reduce the payload size.", internal_reason="Hard Fail: Payload exceeds 5MB limit", is_hard_fail=True, loop=loop)
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="The API URL is missing or invalid. Please provide a valid HTTP or HTTPS endpoint.",
+                internal_reason="Hard Fail: Invalid API URL",
+                is_hard_fail=True,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
+
+    if header_name == "Authorization":
+        if not header_value or not header_value.startswith(("Bearer ", "Basic ")):
+            db2: Session = SessionLocal()
+            try:
+                kill_poller(
+                    db2,
+                    workspace_id,
+                    user_message="The Authorization header is missing or invalid. Please provide a valid Bearer or Basic token.",
+                    internal_reason="Hard Fail: Malformed Authorization header",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
+            finally:
+                db2.close()
+            return
+
+    headers = {header_name: header_value} if header_name and header_value else {}
+
+    # 2) NETWORK: do the slow API call WITHOUT holding DB session
+    try:
+        response = requests.get(api_url, headers=headers, timeout=(10, 30), stream=True)
+
+        cl = response.headers.get("Content-Length")
+        if cl and int(cl) > MAX_BYTES:
+            db2: Session = SessionLocal()
+            try:
+                kill_poller(
+                    db2,
+                    workspace_id,
+                    user_message="The data source is too large (>5MB). Please reduce the payload size.",
+                    internal_reason="Hard Fail: Payload exceeds 5MB limit",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
+            finally:
+                db2.close()
+            return
+
+        if response.status_code in (401, 403):
+            db2: Session = SessionLocal()
+            try:
+                kill_poller(
+                    db2,
+                    workspace_id,
+                    user_message="The API rejected the request due to invalid or missing credentials. Please verify your API key or token.",
+                    internal_reason=f"API Auth Failed ({response.status_code})",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
+            finally:
+                db2.close()
+            return
+
+        response.raise_for_status()
+
+        content = b""
+        for chunk in response.iter_content(chunk_size=8192):
+            if not chunk:
+                continue
+            content += chunk
+            if len(content) > MAX_BYTES:
+                db2: Session = SessionLocal()
+                try:
+                    kill_poller(
+                        db2,
+                        workspace_id,
+                        user_message="Data stream exceeds the 5MB limit allowed on this plan.",
+                        internal_reason="Hard Fail: Stream exceeded 5MB limit",
+                        is_hard_fail=True,
+                        loop=loop,
+                    )
+                finally:
+                    db2.close()
                 return
-            
-            if response.status_code in [401, 403]:
-                kill_poller(db, workspace_id, user_message="The API rejected the request due to invalid or missing credentials. Please verify your API key or token.",internal_reason=f"API Auth Failed ({response.status_code})", is_hard_fail=True,loop=loop)
-                return
 
-            response.raise_for_status()
-            
-            content = b""
-            for chunk in response.iter_content(chunk_size=8192):
-                content += chunk
-                if len(content) > MAX_BYTES:
-                    kill_poller(db, workspace_id, user_message="Data stream exceeds the 5MB limit allowed on this plan.", internal_reason="Hard Fail: Stream exceeded 5MB limit", is_hard_fail=True, loop=loop)
-                    return
+    except requests.exceptions.HTTPError as http_err:
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="The API responded with an error while processing the request. We'll retry automatically.",
+                internal_reason=f"HTTP Error: {str(http_err)[:120]}",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
 
-        except requests.exceptions.HTTPError as http_err:
-            kill_poller(db, workspace_id,user_message="The API responded with an error while processing the request. We'll retry automatically.",internal_reason=f"HTTP Error: {http_err}- ({response.status_code})", is_hard_fail=False,loop=loop)
-            return
-        except requests.Timeout:
-            kill_poller(db, workspace_id, user_message="The API took too long to respond. We'll retry automatically.", internal_reason="Network Timeout while calling API", is_hard_fail=False,loop=loop)
-            return
-        except requests.RequestException as req_err:
-            kill_poller(db, workspace_id, user_message="We couldn't reach the API due to a network issue. We'll retry automatically.",internal_reason=f"Request error: {str(req_err)[:120]}", is_hard_fail=False,loop=loop)
-            return
+    except requests.Timeout:
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="The API took too long to respond. We'll retry automatically.",
+                internal_reason="Network Timeout while calling API",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
 
+    except requests.RequestException as req_err:
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="We couldn't reach the API due to a network issue. We'll retry automatically.",
+                internal_reason=f"Request error: {str(req_err)[:120]}",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
+
+    # 3) PARSE: still no DB needed
+    try:
         data = json.loads(content)
-        if not data:
-            logger.warning(f"-> [API FETCHER] Empty data for {workspace_id}")
-            kill_poller(db, workspace_id,  user_message="The API request succeeded but returned no data. Please check filters or response format.",internal_reason="Soft Fail: API returned empty response", is_hard_fail=False,loop=loop)
-            return
+    except Exception as e:
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="The API returned invalid JSON. Please verify the API response format.",
+                internal_reason=f"Hard Fail: JSON parse error: {str(e)[:120]}",
+                is_hard_fail=True,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
 
+    if not data:
+        logger.warning(f"-> [API FETCHER] Empty data for {workspace_id}")
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="The API request succeeded but returned no data. Please check filters or response format.",
+                internal_reason="Soft Fail: API returned empty response",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
+
+    # 4) BUILD CSV: still no DB
+    try:
         df = pd.json_normalize(data)
         csv_content = df.to_csv(index=False)
-        
+    except Exception as e:
+        logger.error(f"🔥 [API FETCHER] CSV build failed: {e}", exc_info=True)
+        db2: Session = SessionLocal()
+        try:
+            kill_poller(
+                db2,
+                workspace_id,
+                user_message="We got data from the API but failed to convert it into CSV.",
+                internal_reason=f"CSV convert crash: {str(e)[:120]}",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db2.close()
+        return
+
+    # 5) DB: write upload + update workspace fast, then CLOSE DB
+    db3: Session = SessionLocal()
+    try:
+        workspace2 = (
+            db3.query(Workspace)
+            .filter(Workspace.id == workspace_id)
+            .first()
+        )
+
+        if not workspace2 or not workspace2.is_polling_active:
+            return
+
         new_upload = DataUpload(
-            workspace_id=workspace.id, 
+            workspace_id=workspace2.id,
             file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_api.csv",
             file_content=csv_content,
-            upload_type='api_poll'
+            upload_type="api_poll",
         )
-        db.add(new_upload)
+        db3.add(new_upload)
 
-        workspace.last_polled_at = datetime.now(timezone.utc)
-        workspace.failure_count = 0 
-        
-        db.commit()
-        db.refresh(new_upload)
+        workspace2.last_polled_at = datetime.now(timezone.utc)
+        workspace2.failure_count = 0
+
+        db3.commit()
+        db3.refresh(new_upload)
+
         if loop is None:
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = None
-        
-        process_csv_task(str(new_upload.id), loop)
-   
 
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] Unexpected Engine Crash: {e}", exc_info=True)
-        kill_poller(db, workspace_id, user_message="Something went wrong while fetching data from the API. We've stopped this task to prevent further issues.",internal_reason=f"API Fetcher Crash: {str(e)[:120]}", is_hard_fail=False,loop=loop)
+        logger.error(f"🔥 [API FETCHER] DB write crash: {e}", exc_info=True)
+        try:
+            db3.rollback()
+        except Exception:
+            pass
+
+        db4: Session = SessionLocal()
+        try:
+            kill_poller(
+                db4,
+                workspace_id,
+                user_message="Something went wrong while saving the API data. We'll retry automatically.",
+                internal_reason=f"DB write crash: {str(e)[:120]}",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        finally:
+            db4.close()
+        return
+
     finally:
-        db.close()
+        db3.close()
+
+    # 6) Kick CSV processing AFTER DB is closed
+    try:
+        process_csv_task(str(new_upload.id), loop)
+    except Exception as e:
+        logger.error(f"🔥 [API FETCHER] process_csv_task failed: {e}", exc_info=True)
+
         
 
 def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
+    """
+    DB Poller:
+    - Validates user query is read-only SELECT
+    - Connects to the user's DB with hard timeouts
+    - Enforces row limits
+    - Writes result as CSV into DataUpload
+    - Updates workspace polling metadata
+    """
+
     MAX_ROWS = 25000
     logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
+
     db: Session = SessionLocal()
-    engine = None
-    
+    user_engine = None
+
     try:
         workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        
+
         if not workspace:
             logger.warning(f"-> [DB FETCHER] Workspace {workspace_id} not found.")
             return
@@ -407,124 +606,254 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             logger.warning(f"-> [DB FETCHER] Polling disabled for {workspace.name}. Aborting.")
             return
 
-        if not all([workspace.db_host, workspace.db_user, workspace.db_password, workspace.db_name, workspace.db_query]):
-            kill_poller(db, workspace_id, user_message="Database connection details are missing or incomplete. Please review your database settings.",internal_reason="Hard Fail: Incomplete DB configuration", is_hard_fail=True,loop=loop)
+        # ✅ Basic config sanity
+        required = [workspace.db_host, workspace.db_user, workspace.db_password, workspace.db_name, workspace.db_query]
+        if not all(required):
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Database connection details are missing or incomplete. Please review your database settings.",
+                internal_reason="Hard Fail: Incomplete DB configuration",
+                is_hard_fail=True,
+                loop=loop,
+            )
             return
 
-        
-        raw_query = workspace.db_query.strip()
-        clean_query = raw_query.rstrip(';')
-        
-        # Strip SQL comments to prevent keyword obfuscation/bypassing
-        query_no_comments = re.sub(r'(--.*)|(/\*[\s\S]*?\*/)', ' ', clean_query)
-        lower_query = query_no_comments.lower()
+        # ✅ Clean and validate query
+        raw_query = (workspace.db_query or "").strip()
+        clean_query = raw_query.rstrip(";").strip()
 
-        # Structural Check: Must start with SELECT
-        if not lower_query.strip().startswith("select"):
-            kill_poller(db, workspace_id, user_message="Only read-only SELECT queries are allowed.", internal_reason="Security: Non-SELECT start", is_hard_fail=True, loop=loop)
+        # Strip comments to prevent keyword bypass
+        query_no_comments = re.sub(r"(--.*)|(/\*[\s\S]*?\*/)", " ", clean_query)
+        lower_query = query_no_comments.lower().strip()
+
+        # Must be SELECT
+        if not lower_query.startswith("select"):
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Only read-only SELECT queries are allowed.",
+                internal_reason="Security: Non-SELECT start",
+                is_hard_fail=True,
+                loop=loop,
+            )
             return
 
-        # Injection Check: No internal semi-colons
+        # Block multi-statement
         if ";" in clean_query:
-            kill_poller(db, workspace_id, user_message="Multiple statements are not permitted.", internal_reason="Security: Semicolon detected", is_hard_fail=True, loop=loop)
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Multiple statements are not permitted.",
+                internal_reason="Security: Semicolon detected",
+                is_hard_fail=True,
+                loop=loop,
+            )
             return
 
-        # Content Check: Forbidden Keywords (DML, DDL, RCE, and File access)
+        # Forbidden keywords
         forbidden_keywords = {
-            'insert', 'update', 'delete', 'drop', 'truncate', 'alter', 'create', 
-            'grant', 'revoke', 'vacuum', 'copy', 'pg_read_file', 'pg_write_file', 
-            'lo_export', 'lo_import', 'dblink', 'program', 'pg_sleep'
+            "insert", "update", "delete", "drop", "truncate", "alter", "create",
+            "grant", "revoke", "vacuum", "copy", "pg_read_file", "pg_write_file",
+            "lo_export", "lo_import", "dblink", "program", "pg_sleep",
         }
-        # Tokenize by removing punctuation and splitting by whitespace
-        query_words = set(lower_query.replace('(', ' ').replace(')', ' ').replace(',', ' ').split())
+
+        query_words = set(
+            lower_query.replace("(", " ")
+            .replace(")", " ")
+            .replace(",", " ")
+            .replace("\n", " ")
+            .split()
+        )
         found_forbidden = query_words.intersection(forbidden_keywords)
 
         if found_forbidden:
-            kill_poller(db, workspace_id, user_message=f"Restricted keywords detected: {', '.join(found_forbidden)}", internal_reason="Security: Forbidden keywords", is_hard_fail=True, loop=loop)
+            kill_poller(
+                db,
+                workspace_id,
+                user_message=f"Restricted keywords detected: {', '.join(sorted(found_forbidden))}",
+                internal_reason="Security: Forbidden keywords",
+                is_hard_fail=True,
+                loop=loop,
+            )
             return
 
+        # ✅ Build connection URL for user's DB
         try:
             encoded_password = quote_plus(workspace.db_password)
-            port = workspace.db_port or 5432 
-            connection_url = f"postgresql://{workspace.db_user}:{encoded_password}@{workspace.db_host}:{port}/{workspace.db_name}"
-            
-            engine = create_engine(
-                connection_url, 
+            port = int(workspace.db_port or 5432)
+
+            # keep it strict: no empty host, no weird protocol
+            host = str(workspace.db_host).strip()
+            user = str(workspace.db_user).strip()
+            dbname = str(workspace.db_name).strip()
+
+            connection_url = f"postgresql://{user}:{encoded_password}@{host}:{port}/{dbname}"
+
+            # ✅ User DB engine must NOT keep pooled connections forever
+            # This prevents "connection hoarding" when multiple jobs run.
+            user_engine = create_engine(
+                connection_url,
+                future=True,
                 pool_pre_ping=True,
-                connect_args={"options": "-c statement_timeout=30000"} 
+                pool_recycle=60,
+                pool_size=1,
+                max_overflow=0,
+                pool_timeout=10,
+                connect_args={
+                    "connect_timeout": 10,
+                    # hard kill slow queries at postgres side
+                    "options": "-c statement_timeout=30000",
+                },
             )
-            
-            with engine.connect() as connection:
-                # --- 2. RESOURCE SANDBOXING ---
-                connection.execute(text("SET work_mem = '4MB';"))
-                connection.execute(text("SET temp_buffers = '2MB';"))
-                
-                # --- 3. ROW-LIMIT ENFORCEMENT ---
-                safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
+
+            # ✅ Run the query safely (LIMIT enforced outside)
+            safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
+
+            with user_engine.connect() as connection:
+                # resource sandboxing
+                try:
+                    connection.execute(text("SET work_mem = '4MB';"))
+                    connection.execute(text("SET temp_buffers = '2MB';"))
+                except Exception:
+                    # Not all DBs allow these (permissions). Don't kill job for this.
+                    pass
+
                 df = pd.read_sql(text(safe_query), connection)
 
-            # Check if we hit the limit
             if len(df) > MAX_ROWS:
-                kill_poller(db, workspace_id, user_message=f"Query result too large (Max {MAX_ROWS} rows).", internal_reason="Hard Fail: SQL row limit exceeded", is_hard_fail=True, loop=loop)
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message=f"Query result too large (Max {MAX_ROWS} rows).",
+                    internal_reason="Hard Fail: SQL row limit exceeded",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
                 return
 
         except Exception as conn_err:
+            # classify error -> hard fail vs soft fail
             err_msg = str(conn_err).lower()
-            
-            auth_patterns = ["authentication failed", "login failed", "password"]
+
+            auth_patterns = ["authentication failed", "login failed", "password", "no pg_hba.conf"]
             permission_patterns = ["permission denied", "privileges", "access denied"]
-            query_patterns = ["syntax error", "undefined_table", "invalid input"]
-            setup_patterns = ["does not exist", "database", "role", "user"]
-            
+            query_patterns = ["syntax error", "undefined_table", "invalid input", "does not exist"]
+            timeout_patterns = ["timeout", "timed out", "could not connect", "connection refused", "server closed"]
+
             if any(p in err_msg for p in auth_patterns):
-                kill_poller(db, workspace_id, user_message="We couldn't connect to your database. Please verify the username and password.", internal_reason=f"Auth failure: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message="We couldn't connect to your database. Please verify the username and password.",
+                    internal_reason=f"Auth failure: {str(conn_err)[:160]}",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
             elif any(p in err_msg for p in permission_patterns):
-                kill_poller(db, workspace_id, user_message="The database user does not have permission to run this query.", internal_reason=f"Permission denied: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message="The database user does not have permission to run this query.",
+                    internal_reason=f"Permission denied: {str(conn_err)[:160]}",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
             elif any(p in err_msg for p in query_patterns):
-                kill_poller(db, workspace_id, user_message="Your query couldn't be executed. Please review the query and try again.", internal_reason=f"Query error: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
-            elif any(p in err_msg for p in setup_patterns):
-                kill_poller(db, workspace_id, user_message="The specified database or user could not be found. Please verify your database setup.", internal_reason=f"Database setup issue: {str(conn_err)[:120]}", is_hard_fail=True, loop=loop)
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message="Your query couldn't be executed. Please review the query and try again.",
+                    internal_reason=f"Query error: {str(conn_err)[:160]}",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
+            elif any(p in err_msg for p in timeout_patterns):
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message="We're having trouble reaching your database right now. We'll retry automatically.",
+                    internal_reason=f"Temporary DB connectivity issue: {str(conn_err)[:160]}",
+                    is_hard_fail=False,
+                    loop=loop,
+                )
             else:
-                kill_poller(db, workspace_id, user_message="We're having trouble reaching your database right now. We'll retry automatically.", internal_reason=f"Temporary DB issue: {str(conn_err)[:120]}", is_hard_fail=False, loop=loop)
+                kill_poller(
+                    db,
+                    workspace_id,
+                    user_message="We're having trouble reaching your database right now. We'll retry automatically.",
+                    internal_reason=f"Unknown DB error: {str(conn_err)[:160]}",
+                    is_hard_fail=False,
+                    loop=loop,
+                )
             return
 
+        # ✅ Empty result
         if df.empty:
             logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace.name}")
-            kill_poller(db, workspace_id, user_message="Your query ran successfully but didn't return any data. Try adjusting filters or date ranges.",internal_reason="Soft Fail: Query returned 0 rows", is_hard_fail=False,loop=loop)
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Your query ran successfully but didn't return any data. Try adjusting filters or date ranges.",
+                internal_reason="Soft Fail: Query returned 0 rows",
+                is_hard_fail=False,
+                loop=loop,
+            )
             return
 
+        # ✅ Store as CSV upload
         csv_content = df.to_csv(index=False)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"{timestamp}_db_query.csv"
 
         new_upload = DataUpload(
-            workspace_id=workspace.id, 
+            workspace_id=workspace.id,
             file_path=file_name,
             file_content=csv_content,
-            upload_type='db_query'
+            upload_type="db_query",
         )
+
         db.add(new_upload)
-        
+
         workspace.last_polled_at = datetime.now(timezone.utc)
         workspace.failure_count = 0
-        
+
         db.commit()
         db.refresh(new_upload)
 
         if loop is None:
-            try: loop = asyncio.get_event_loop()
-            except RuntimeError: loop = None
-        
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = None
+
         process_csv_task(str(new_upload.id), loop)
 
     except Exception as e:
         logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
-        kill_poller(db, workspace_id, user_message="Something went wrong while processing your data. We've stopped this task to prevent further issues.", internal_reason=f"Engine Crash: {str(e)[:120]}", is_hard_fail=False,loop=loop)
-        
+        try:
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Something went wrong while processing your data. We've stopped this task to prevent further issues.",
+                internal_reason=f"Engine Crash: {str(e)[:160]}",
+                is_hard_fail=False,
+                loop=loop,
+            )
+        except Exception:
+            pass
+
     finally:
-        if engine: 
-            engine.dispose()
-        db.close()
+        if user_engine:
+            try:
+                user_engine.dispose()
+            except Exception:
+                pass
+        try:
+            db.close()
+        except Exception:
+            pass
+
         
 
 def schedule_data_fetches() -> None:
