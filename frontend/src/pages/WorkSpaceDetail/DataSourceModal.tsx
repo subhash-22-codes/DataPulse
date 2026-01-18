@@ -53,7 +53,7 @@ const PollingSection: React.FC<{
                         disabled={!isPollingActive}
                         className="appearance-none w-full rounded-md border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 py-2 pl-3 pr-8 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 transition-all font-medium"
                     >
-                        <option value="15min">Every 15 Minutes</option>
+                        <option value="30min">Every 30 Minutes</option>
                         <option value="hourly">Hourly</option>
                         <option value="3hours">Every 3 Hours</option>
                         <option value="12hours">Every 12 Hours</option>
