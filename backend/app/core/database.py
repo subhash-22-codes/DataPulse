@@ -16,7 +16,7 @@ if os.getenv("APP_MODE") == "production":
 engine = create_engine(
     DATABASE_URL,
     future=True,
-    poolclass=NullPool,      # ✅ important
+    poolclass=NullPool,     
     pool_pre_ping=True,
     connect_args=connect_args,
 )

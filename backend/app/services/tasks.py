@@ -30,7 +30,7 @@ import re
 from sqlalchemy.exc import OperationalError, InterfaceError
 
 # Create a ThreadPool at the module level to reuse threads
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 APP_MODE = os.getenv("APP_MODE")
