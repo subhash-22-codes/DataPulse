@@ -274,20 +274,16 @@ async def update_workspace(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
     
-    # 1. Fetch Workspace
     db_workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     
     if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     
-    # 2. Authorization Check
     if db_workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this workspace")
     
-    # Extract only the fields that were set by the client
     update_data = workspace_update.model_dump(exclude_unset=True)
     
-    # Define fields that, if changed, warrant an immediate data fetch/connection test.
     data_source_fields = {
         "data_source",
         "api_url",
@@ -302,7 +298,6 @@ async def update_workspace(
         "polling_interval",
     }
     
-    # Check if any data source configuration field is present in the update payload
     config_changed = any(field in update_data for field in data_source_fields)
 
     if 'data_source' in update_data:
@@ -326,8 +321,7 @@ async def update_workspace(
 
     if "team_member_emails" in update_data:
         emails: list[str] = update_data.pop("team_member_emails")
-        
-        # A. Fetch only users who are REGISTERED and VERIFIED
+
         valid_users = db.query(User).filter(
             User.email.in_(emails),
             User.is_verified == True
@@ -335,7 +329,6 @@ async def update_workspace(
         
         verified_emails = {u.email for u in valid_users}
         
-        # B. Security Check: Find the exact culprit
         for email in emails:
             if email == current_user.email:
                 raise HTTPException(
@@ -350,16 +343,13 @@ async def update_workspace(
                         detail=f"User '{email}' does not have a DataPulse account."
                     )
                 else:
-                    # User exists but is_verified is False
                     raise HTTPException(
                         status_code=403, 
                         detail=f"User '{email}' needs to verify their account before joining teams."
                     )
 
-        # This prevents duplicate roles and potential bugs in team lists.
         final_members = [u for u in valid_users if u.id != current_user.id]
 
-        # This keeps your frontend array and backend array in perfect sync.
         db_workspace.team_members = final_members
 
 
@@ -371,18 +361,15 @@ async def update_workspace(
     user_toggled_on = update_data.get('is_polling_active') is True
     
     if config_changed:
-        # Reset failure metrics so the UI "Red Banner" clears
         db_workspace.failure_count = 0
         db_workspace.last_failure_reason = None
         db_workspace.auto_disabled_at = None
         db_workspace.is_polling_active = False
         
         if user_toggled_on:
-            # User fixed config AND clicked 'Enable Sync' -> Let it run!
             db_workspace.is_polling_active = True
             logger.info(f"🚀 Manual re-enable detected for '{db_workspace.name}'. Resetting failures.")
         else:
-            # User fixed config but left the switch OFF -> Keep it off for safety.
             db_workspace.is_polling_active = False
             logger.info(f"🛡️ Config updated for '{db_workspace.name}'. Polling stays OFF.")
     

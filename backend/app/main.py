@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
                 scheduler.add_job(
                     schedule_data_fetches,
                     "interval",
-                    minutes=5,
+                    minutes=10,
                     id="schedule_data_fetches_job",
                     max_instances=1,
                     coalesce=True,
