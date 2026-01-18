@@ -10,7 +10,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 connect_args = {"connect_timeout": 15}
-if os.getenv("APP_MODE") == "production":
+if os.getenv("APP_MODE") != "production":
     connect_args["sslmode"] = "require"
 
 engine = create_engine(
