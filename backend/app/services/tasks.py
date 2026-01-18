@@ -888,7 +888,7 @@ def schedule_data_fetches() -> None:
             return
 
         triggered_count = 0
-        buffer = timedelta(seconds=150)
+        buffer = timedelta(seconds=240)
 
         for ws in workspaces:
             try:
@@ -898,7 +898,7 @@ def schedule_data_fetches() -> None:
 
                 if not last_polled:
                     is_due = True
-                elif interval == "15min":
+                elif interval == "30min":
                     if (now - last_polled) >= (timedelta(minutes=15) - buffer):
                         is_due = True
                 elif interval == "hourly":
