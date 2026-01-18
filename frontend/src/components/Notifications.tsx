@@ -55,14 +55,27 @@ export const Notifications: React.FC = () => {
   return (
     <Popover className="relative">
       {/* --- ICON TRIGGER --- */}
-      <Popover.Button className="relative p-2 text-slate-400 hover:text-slate-900 transition-colors outline-none">
-        <Bell className="h-5 w-5" />
+     <Popover.Button className="relative p-2 text-slate-500 hover:text-slate-900 transition-all group">
+        {/* The Bell - Standard size */}
+        <Bell className="h-[18px] w-[18px]" />
+        
+        {/* The Micro-Badge - Shrunk and pushed to the edge */}
         {unreadCount > 0 && (
-          <span className="absolute top-2 right-2 flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 border border-white"></span>
+          <span className="absolute top-1.5 right-1.5 flex h-3 w-3 items-center justify-center rounded-full bg-rose-500 text-[6px] font-bold text-white ring-1 ring-white">
+            {/* Optional: Only show number if you really need it, otherwise a plain dot is cleaner */}
+            {unreadCount > 9 ? '!' : unreadCount}
           </span>
         )}
+
+        {/* Micro Tooltip */}
+        <div className="absolute top-[120%] left-1/2 -translate-x-1/2 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none z-50">
+          <div className="w-1.5 h-1.5 bg-slate-800 rotate-45 -mb-0.5"></div>
+          <div className="bg-slate-800 text-white text-[9px] font-medium px-2 py-0.5 rounded-sm shadow-xl whitespace-nowrap">
+            Notification center
+          </div>
+        </div>
       </Popover.Button>
+      
 
       {/* --- MOBILE OVERLAY --- */}
       <Transition.Child
