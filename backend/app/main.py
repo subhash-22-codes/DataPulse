@@ -17,7 +17,7 @@ import json
 from app.core.connection_manager import manager 
 from sqlalchemy import text
 from app.core.database import engine
-
+import socket
 
 load_dotenv()
 
@@ -236,6 +236,29 @@ def db_test():
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     return {"ok": True}
+
+
+
+
+@app.get("/tcp-test")
+def tcp_test():
+    host = "aws-1-ap-south-1.pooler.supabase.com"
+    port = 5432
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(5)
+
+    try:
+        s.connect((host, port))
+        return {"ok": True, "host": host, "port": port}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"TCP connect failed: {e}")
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
 
 @app.get("/")
 def root():
