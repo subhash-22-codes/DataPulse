@@ -226,26 +226,6 @@ The goal is **signal**, not noise.
 
 ---
 
-## AI-Assisted Change Explanation
-
-DataPulse uses AI in a **supporting, non-decision-making role** to help explain detected changes.
-
-When a schema or structural change is identified by deterministic logic,
-AI is used to generate a human-readable explanation describing
-*possible reasons* and *potential impact* of the change.
-
-AI-assisted explanations are generated using a large language model (Gemini),
-used strictly for interpretive summaries and contextual insights.
-
-Examples include:
-- explaining newly added columns
-- describing how additional fields may affect downstream analysis
-
-All change detection, alerting, and enforcement logic remains
-system-driven and deterministic.
-
----
-
 ## Alerts & Notifications
 
 * Users define alert rules per dataset
@@ -329,14 +309,16 @@ Planned improvements:
 
 ## Authors
 
+Frontend development and UI/UX were shared across the project.
+
 **Subhash Yaganti**  
-Full-stack development, backend systems, and security  
-Contributed across backend architecture, API design, frontend integration, and UI/UX.  
+Project creator and system architect  
+Backend systems, authentication/security, data modeling, background processing, deployment  
 GitHub: https://github.com/subhash-22-codes
 
 **Siri Mahalaxmi Vemula**  
-Backend engineering and database design  
-Contributed to backend logic, data modeling, and UI/UX.  
+Backend development, database design, API integration  
+Built **DataPulse AI** help bot for chat-based Q&A (Gemini model integration)  
 GitHub: https://github.com/armycodes
 
 ---
