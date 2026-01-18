@@ -6,6 +6,7 @@ import GitHubLoginButton from '../components/GitHubButton';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,14 +45,12 @@ const Login: React.FC = () => {
     }
   }, [searchParams, navigate, location.pathname]);
   // --- Logic: Handle Login ---
-  const handleEmailLogin = async (e: React.FormEvent) => {
+ const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      // Logic: login() will hit the backend. 
-      // The backend sets the HttpOnly cookies automatically.
       await login(email, password); 
       
       toast.success('Welcome back to DataPulse!', {
@@ -59,13 +58,18 @@ const Login: React.FC = () => {
       });
       
       navigate(from, { replace: true });
-    } catch (err: any) {
-       // Robust Error Handling for SaaS
-       const errorMessage = err.response?.data?.detail || "Invalid email or password. Please try again.";
-       setError(errorMessage);
-       console.error("Login attempt failed:", err);
+    } catch (err: unknown) {
+      let errorMessage = "Invalid email or password. Please try again.";
+      if (axios.isAxiosError(err)) {
+        errorMessage = err.response?.data?.detail || errorMessage;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
+      console.error("Login attempt failed:", err);
     } finally {
-       setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
