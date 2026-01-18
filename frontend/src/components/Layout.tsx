@@ -78,22 +78,39 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => navigate('/trash')}
-                  className="p-2 rounded-md text-slate-400 hover:bg-slate-100/50 hover:text-slate-900 transition-all"
-                  title="Archive"
+                  className="group relative p-2 rounded-md text-slate-400 hover:text-rose-600 transition-all"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {/* The Icon - Kept at your h-4 */}
+                  <Trash2 className="h-4 w-4 transition-transform group-hover:scale-110" />
+
+                  {/* Micro-Consistent Tooltip */}
+                  <div className="absolute top-[120%] left-1/2 -translate-x-1/2 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none z-50">
+                    {/* Tiny Pointer: Matches Bell scale */}
+                    <div className="w-1.5 h-1.5 bg-slate-800 rotate-45 -mb-0.5"></div>
+                    
+                    {/* The Pill: text-[9px] and py-0.5 for that ultra-pro micro look */}
+                    <div className="bg-slate-800 text-white text-[9px] font-medium px-2 py-0.5 rounded-sm shadow-xl whitespace-nowrap">
+                      Archive
+                    </div>
+                  </div>
                 </button>
                 <Notifications />
                 <WhatsNewTrigger />
                 
                 {!user?.is_feedback_submitted && (
                   <div className="relative">
-                    <button
+                   <button
                       onClick={openFeedback}
-                      className="p-2 text-slate-400 hover:text-slate-900"
+                      className="group relative p-2 text-slate-400 hover:text-slate-900 transition-colors"
                       aria-label="Send feedback"
                     >
-                      <MessageSquarePlus className="h-4 w-4" />
+                      <MessageSquarePlus className="h-4 w-4 transition-transform group-hover:scale-110" />
+                      <div className="absolute top-[120%] left-1/2 -translate-x-1/2 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none z-50">
+                        <div className="w-1.5 h-1.5 bg-slate-800 rotate-45 -mb-0.5"></div>
+                        <div className="bg-slate-800 text-white text-[9px] font-medium px-2 py-0.5 rounded-sm shadow-xl whitespace-nowrap">
+                          Feedback
+                        </div>
+                      </div>
                     </button>
 
                     {showHint && (
@@ -124,22 +141,48 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => navigate('/account')}
-                  className="group flex items-center gap-2.5 pl-1 pr-1 sm:pr-3 py-1 rounded-full border border-transparent hover:border-slate-200 hover:bg-white transition-all active:scale-95"
-                >
-                  <div className="h-7 w-7 rounded-full bg-slate-900 flex items-center justify-center text-[10px] text-white font-bold ring-2 ring-white shadow-sm overflow-hidden shrink-0">
-                    {user?.name?.[0]?.toUpperCase() || 'U'}
-                  </div>
-                  <span className="hidden sm:inline text-xs font-bold text-slate-800 tracking-tight">
-                    {user?.name || 'User'}
-                  </span>
-                </button>
+                    onClick={() => navigate('/account')}
+                    className="group relative flex items-center gap-2.5 pl-1 pr-1 sm:pr-3 py-1 rounded-full border border-transparent hover:border-slate-200 hover:bg-white transition-all active:scale-95"
+                  >
+                    {/* Avatar Circle */}
+                    <div className="h-7 w-7 rounded-full bg-slate-900 flex items-center justify-center text-[10px] text-white font-bold ring-2 ring-white shadow-sm overflow-hidden shrink-0">
+                      {user?.name?.[0]?.toUpperCase() || 'U'}
+                    </div>
+
+                    {/* User Name */}
+                    <span className="hidden sm:inline text-xs font-bold text-slate-800 tracking-tight">
+                      {user?.name || 'User'}
+                    </span>
+
+                    {/* --- The Consistent Micro-Tooltip --- */}
+                    <div className="absolute top-[120%] left-1/2 -translate-x-1/2 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none z-50">
+                      {/* Tiny Pointer */}
+                      <div className="w-1.5 h-1.5 bg-slate-800 rotate-45 -mb-0.5"></div>
+                      
+                      {/* The Pill: Same 9px font as Bell, Trash, and Sparkles */}
+                      <div className="bg-slate-800 text-white text-[9px] font-medium px-2 py-0.5 rounded-sm shadow-xl whitespace-nowrap">
+                        Account settings
+                      </div>
+                    </div>
+                  </button>
                 
                 <button
                   onClick={() => setShowConfirm(true)}
-                  className="p-2 rounded-md text-slate-400 hover:text-red-500 transition-colors"
+                  className="group relative p-2 rounded-md text-slate-400 hover:text-rose-500 transition-colors"
                 >
-                  <LogOut className="h-4 w-4" />
+                  {/* The Icon - h-4 with a tiny hover scale */}
+                  <LogOut className="h-4 w-4 transition-transform group-hover:scale-110" />
+
+                  {/* The Final Consistent Micro-Tooltip */}
+                  <div className="absolute top-[120%] left-1/2 -translate-x-1/2 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none z-50">
+                    {/* Tiny Pointer */}
+                    <div className="w-1.5 h-1.5 bg-slate-800 rotate-45 -mb-0.5"></div>
+                    
+                    {/* The Pill: 9px font, slate-800 background */}
+                    <div className="bg-slate-800 text-white text-[9px] font-medium px-2 py-0.5 rounded-sm shadow-xl whitespace-nowrap">
+                      Sign out
+                    </div>
+                  </div>
                 </button>
               </div>
             </div>

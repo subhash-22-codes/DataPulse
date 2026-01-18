@@ -29,7 +29,7 @@ const features = [
   {
     title: "Export your data",
     description:
-      "Download your data anytime in a clean, ready-to-use format.",
+      "Download your individual workspace data anytime in a clean, ready-to-use format.",
     tag: "NEW",
   },
   {
