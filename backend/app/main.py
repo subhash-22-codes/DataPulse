@@ -80,21 +80,30 @@ async def lifespan(app: FastAPI):
     if os.getenv("APP_MODE") == "production":
         logger.info("Application starting in PRODUCTION mode.")
         asyncio.create_task(send_telegram_alert("🚀 System Online: DataPulse (Production)"))
-        try:
-            from app.services.tasks import schedule_data_fetches
-            scheduler.add_job(
-                schedule_data_fetches, 
-                "interval", 
-                minutes=5, 
-                id="schedule_data_fetches_job"
-            )
-            scheduler.start()
-            logger.info("✅ [APScheduler] 'Smart Watch' has started.")
-        except Exception as e:
-            logger.error(f"❌ [APScheduler] Failed to start: {e}", exc_info=True)
-    else:
-        logger.info("Application starting in DEVELOPMENT mode.")
-    
+
+        enable_scheduler = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
+
+        if enable_scheduler:
+            try:
+                from app.services.tasks import schedule_data_fetches
+
+                scheduler.add_job(
+                    schedule_data_fetches,
+                    "interval",
+                    minutes=5,
+                    id="schedule_data_fetches_job",
+                    max_instances=1,
+                    coalesce=True,
+                    misfire_grace_time=30,
+                )
+
+                scheduler.start()
+                logger.info("✅ [APScheduler] 'Smart Watch' has started.")
+            except Exception as e:
+                logger.error(f"❌ [APScheduler] Failed to start: {e}", exc_info=True)
+        else:
+            logger.warning("🟡 [APScheduler] DISABLED (ENABLE_SCHEDULER=false)")
+
     yield
   
     if hasattr(app.state, "redis_listener_task"): 

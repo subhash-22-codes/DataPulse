@@ -1,32 +1,29 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 import os
 
-load_dotenv()  # Load variables from .env
+load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-connect_args = {"connect_timeout": 20}
+
+connect_args = {"connect_timeout": 15}
 if os.getenv("APP_MODE") == "production":
     connect_args["sslmode"] = "require"
 
 engine = create_engine(
     DATABASE_URL,
     future=True,
+    poolclass=NullPool,      # ✅ important
     pool_pre_ping=True,
-    pool_recycle=180,
-    pool_size=5,
-    max_overflow=2,
-    pool_timeout=30,
     connect_args=connect_args,
 )
-
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Dependency for FastAPI routes
 def get_db():
     db = SessionLocal()
     try:
