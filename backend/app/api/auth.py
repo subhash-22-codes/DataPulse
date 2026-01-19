@@ -305,6 +305,7 @@ class UserResponse(BaseModel):
     signup_method: str = "email" 
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+    is_feedback_submitted: bool = False
 
 class AuthResponse(BaseModel):
     message: str

@@ -20,3 +20,5 @@ __pycache__/
 /backend/venv
 /backend/env
 /backend/celerybeat-schedule
+/backend/app/scripts/__pycache__/
+/backend/app/scripts/
