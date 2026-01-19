@@ -11,8 +11,8 @@ from sib_api_v3_sdk import ApiClient, Configuration
 from sib_api_v3_sdk.api.transactional_emails_api import TransactionalEmailsApi
 from sib_api_v3_sdk.models import SendSmtpEmail
 from sib_api_v3_sdk.rest import ApiException
+import anyio 
 
-import anyio # For wrapping blocking SDK calls
 
 logger = logging.getLogger(__name__)
 
@@ -877,3 +877,53 @@ async def send_farewell_email(email: str, name: str):
     """
     
     await _send_brevo_message([email], subject, html_content)
+    
+    
+async def send_feedback_request_email(
+    to_email: EmailStr,
+    google_form_link: str,
+    app_link: str,
+) -> bool:
+    subject = "Quick feedback on DataPulse (2 minutes)"
+
+    safe_form_link = html.escape(google_form_link, quote=True)
+    safe_app_link = html.escape(app_link, quote=True)
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+      <p>Hi,</p>
+
+      <p>
+        Thanks for trying <b>DataPulse</b>.
+        We’re collecting early feedback to understand what’s working and what needs improvement.
+      </p>
+
+      <p>
+        If you have 2 minutes, please share your thoughts here:
+        <br/>
+        <a href="{safe_form_link}" target="_blank">{safe_form_link}</a>
+      </p>
+
+      <p>
+        You can also submit feedback directly inside the app:
+        <br/>
+        <a href="{safe_app_link}" target="_blank">{safe_app_link}</a>
+      </p>
+
+      <p>
+        Your feedback directly shapes what we build next.
+      </p>
+
+      <p style="margin-top: 18px;">
+        Thanks,<br/>
+        <b>Subhash</b> (Founder)<br/>
+        <b>Siri</b> (Co-founder)
+      </p>
+    </div>
+    """
+
+    return await _send_brevo_message(
+        recipients=[to_email],
+        subject=subject,
+        html_content=html_content,
+    )
