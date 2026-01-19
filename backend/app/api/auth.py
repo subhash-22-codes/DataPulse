@@ -183,6 +183,7 @@ def create_tokens_and_set_cookies(
     response.set_cookie(
         key="session_id",
         value=session_id,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
         **cookie_params
     )
 
