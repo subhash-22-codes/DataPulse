@@ -264,7 +264,6 @@ const activeCount = rules.filter(r => r.is_active).length;
         {rules.length > 0 && (
             <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 text-[10px] font-medium text-slate-400 flex justify-between items-center">
                 <span>Usage: {activeCount} / 10 active alerts</span>
-                <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> System operational</span>
             </div>
         )}
       </div>
