@@ -8,8 +8,11 @@ from app.models.data_upload import DataUpload
 from app.models.workspace import Workspace
 from app.models.user import User
 from .dependencies import get_current_user, limiter
+from app.services.storage_service import delete_file
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
+
+
 
 @router.delete("/{upload_id}", status_code=204)
 @limiter.limit("5/minute")
@@ -19,7 +22,6 @@ def delete_upload(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
- 
     upload_record = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
     if not upload_record:
         return Response(status_code=204)
@@ -28,10 +30,17 @@ def delete_upload(
     if not workspace or not (workspace.owner_id == current_user.id or current_user in workspace.team_members):
         raise HTTPException(status_code=403, detail="Not authorized to delete this upload")
 
+    if upload_record.storage_path:
+        try:
+            delete_file(upload_record.storage_path)
+        except Exception:
+            pass
+
     db.delete(upload_record)
     db.commit()
 
     return Response(status_code=204)
+
 
 @router.get("/{upload_id}/content")
 def get_upload_content(

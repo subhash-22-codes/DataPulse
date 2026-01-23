@@ -25,8 +25,9 @@ from app.models.alert_rule import AlertRule
 from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
 from app.services.tasks import executor
-
-# Services & Managers
+from app.services.tasks import process_csv_task
+from app.services.storage_service import upload_csv_bytes
+from app.services.storage_service import delete_files
 from app.api.alerts import AlertRuleResponse 
 from app.api.dependencies import get_current_user, limiter
 from app.core.connection_manager import manager
@@ -433,32 +434,49 @@ async def upload_csv_for_workspace(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    # 2. Read & decode CSV (with RAM Protection for Render Free Tier)
+    # 2. Read CSV bytes (RAM Protection)
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB Limit
     try:
-        # Read only up to the limit to check size before full load
         file_bytes = await file.read(MAX_FILE_SIZE + 1)
         if len(file_bytes) > MAX_FILE_SIZE:
             await file.close()
             raise HTTPException(status_code=413, detail="File too large. Maximum limit is 5MB.")
-        
-        file_text = file_bytes.decode("utf-8")
-        del file_bytes  # Explicitly free memory for the bytes copy
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read uploaded file")
+
+    # Validate UTF-8 without storing huge string in DB
+    try:
+        _ = file_bytes.decode("utf-8")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
 
-    # 3. Create DataUpload (DO NOT set uploaded_at)
+    # 3. Create DataUpload row first (so we have upload_id)
     new_upload = DataUpload(
         workspace_id=workspace.id,
         file_path=file.filename,
-        file_content=file_text,
-        upload_type="manual"
+        file_content=None,  # ✅ don't store raw CSV in Postgres anymore
+        upload_type="manual",
+        file_size_bytes=len(file_bytes),
     )
 
     db.add(new_upload)
-    db.flush()  # 🔥 CRITICAL: ensures server_default(uploaded_at) is applied
+    db.flush()  # ensures new_upload.id exists
 
-    # 4. ORM-safe workspace update (no raw SQL update)
+    # 4. Upload file to Supabase Storage
+    storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
+
+    try:
+        upload_csv_bytes(storage_path, file_bytes)
+    except Exception as e:
+        # rollback upload creation if storage fails
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
+
+    # save storage path in DB
+    new_upload.storage_path = storage_path
+    new_upload.file_url = None  # private bucket, so no public url
+
+    # 5. ORM-safe workspace update
     workspace.data_source = "CSV"
     workspace.is_polling_active = False
 
@@ -467,10 +485,9 @@ async def upload_csv_for_workspace(
 
     task_id = str(new_upload.id)
 
-    # 5. Background task dispatch
+    # 6. Background task dispatch
     if APP_MODE == "production":
         loop = asyncio.get_event_loop()
-        from app.services.tasks import process_csv_task
         background_tasks.add_task(process_csv_task, task_id, loop)
     else:
         if celery_app:
@@ -481,6 +498,7 @@ async def upload_csv_for_workspace(
         "task_id": task_id,
         "message": "File upload successful, processing started."
     }
+
 #  Endpoint to get a workspace's upload history ---
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
 def get_workspace_uploads(
@@ -823,38 +841,40 @@ def restore_workspace(
     return {"message": "Workspace restored successfully"}
 
 
+
 @router.delete("/{workspace_id}/permanently", status_code=204)
 def delete_workspace_permanently(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    PERMANENTLY deletes a workspace. This action cannot be undone.
-    """
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
 
-    # Find the workspace in the trash
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
-        Workspace.is_deleted == True 
+        Workspace.is_deleted == True
     ).first()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found in trash")
 
-    # HARD DELETE
+    uploads = db.query(DataUpload).filter(DataUpload.workspace_id == workspace.id).all()
+    paths = [u.storage_path for u in uploads if u.storage_path]
+
+    try:
+        delete_files(paths)
+    except Exception:
+        pass
+
     db.delete(workspace)
     db.commit()
-    
-    return # 204 No Content
-# ===================================================
-#  NEW: Endpoint to get a workspace's alert rules
-# ===================================================
+
+    return  #204
+
 @router.get("/{workspace_id}/alerts", response_model=List[AlertRuleResponse])
 def get_workspace_alerts(
     workspace_id: str,

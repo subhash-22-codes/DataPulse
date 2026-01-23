@@ -29,6 +29,12 @@ import json
 import re
 from sqlalchemy.exc import OperationalError, InterfaceError
 
+from app.services.data_quality import analyze_dataframe_quality
+from app.services.storage_service import download_file_bytes
+from app.services.storage_service import upload_csv_bytes
+
+
+
 # Create a ThreadPool at the module level to reuse threads
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 logger = logging.getLogger(__name__)
@@ -396,12 +402,17 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
         response.raise_for_status()
 
-        content = b""
+        chunks = []
+        total_size = 0
+
         for chunk in response.iter_content(chunk_size=8192):
             if not chunk:
                 continue
-            content += chunk
-            if len(content) > MAX_BYTES:
+
+            chunks.append(chunk)
+            total_size += len(chunk)
+
+            if total_size > MAX_BYTES:
                 db2: Session = SessionLocal()
                 try:
                     kill_poller(
@@ -415,6 +426,8 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 finally:
                     db2.close()
                 return
+
+        content = b"".join(chunks)
 
     except requests.exceptions.HTTPError as http_err:
         db2: Session = SessionLocal()
@@ -515,7 +528,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             db2.close()
         return
 
-    # 5) DB: write upload + update workspace fast, then CLOSE DB
+   # 5) DB: write upload + update workspace fast, then CLOSE DB
     db3: Session = SessionLocal()
     try:
         workspace2 = (
@@ -527,13 +540,24 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         if not workspace2 or not workspace2.is_polling_active:
             return
 
+        csv_bytes = csv_content.encode("utf-8")
+
         new_upload = DataUpload(
             workspace_id=workspace2.id,
             file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_api.csv",
-            file_content=csv_content,
+            file_content=None, 
             upload_type="api_poll",
+            file_size_bytes=len(csv_bytes),
         )
         db3.add(new_upload)
+        db3.flush()  
+
+        storage_path = f"workspaces/{workspace2.id}/uploads/{new_upload.id}.csv"
+
+        upload_csv_bytes(storage_path, csv_bytes)
+
+        new_upload.storage_path = storage_path
+        new_upload.file_url = None  # private bucket
 
         workspace2.last_polled_at = datetime.now(timezone.utc)
         workspace2.failure_count = 0
@@ -571,6 +595,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     finally:
         db3.close()
 
+
     # 6) Kick CSV processing AFTER DB is closed
     try:
         process_csv_task(str(new_upload.id), loop)
@@ -580,15 +605,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         
 
 def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
-    """
-    DB Poller:
-    - Validates user query is read-only SELECT
-    - Connects to the user's DB with hard timeouts
-    - Enforces row limits
-    - Writes result as CSV into DataUpload
-    - Updates workspace polling metadata
-    """
-
+   
     MAX_ROWS = 25000
     logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
 
@@ -803,17 +820,27 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
         # ✅ Store as CSV upload
         csv_content = df.to_csv(index=False)
+        csv_bytes = csv_content.encode("utf-8")
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"{timestamp}_db_query.csv"
 
         new_upload = DataUpload(
             workspace_id=workspace.id,
             file_path=file_name,
-            file_content=csv_content,
+            file_content=None,
             upload_type="db_query",
+            file_size_bytes=len(csv_bytes),
         )
 
         db.add(new_upload)
+        db.flush()  # get id
+
+        storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
+        upload_csv_bytes(storage_path, csv_bytes)
+
+        new_upload.storage_path = storage_path
+        new_upload.file_url = None
 
         workspace.last_polled_at = datetime.now(timezone.utc)
         workspace.failure_count = 0
@@ -828,6 +855,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 loop = None
 
         process_csv_task(str(new_upload.id), loop)
+
 
     except Exception as e:
         logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
@@ -1002,16 +1030,32 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     
     try:
         current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
-        if not current_upload: 
+        if not current_upload:
             logger.warning(f"[WORKER] Upload ID {upload_id} not found.")
             return
-        
+
         workspace_id_str = str(current_upload.workspace_id)
-        
-        csv_content = current_upload.file_content
-        if not csv_content: 
-            logger.warning(f"[WORKER] No content for upload {upload_id}.")
+
+        csv_content = None
+
+        # ✅ NEW: prefer Supabase Storage
+        if current_upload.storage_path:
+            try:
+                file_bytes = download_file_bytes(current_upload.storage_path)
+                csv_content = file_bytes.decode("utf-8")
+                del file_bytes
+            except Exception as e:
+                logger.error(f"❌ [WORKER] Failed to download CSV from storage: {e}")
+                return
+
+        # ✅ fallback for old uploads (still stored in DB)
+        if not csv_content:
+            csv_content = current_upload.file_content
+
+        if not csv_content:
+            logger.warning(f"[WORKER] No CSV content found for upload {upload_id}.")
             return
+
 
         original_row_count = 0
         is_truncated = False
@@ -1058,15 +1102,24 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 if old_row_count != new_row_count: 
                     row_count_has_changed = True
 
-        stats_df = df.describe(include='all')
-        raw_summary = stats_df.to_dict()
-        summary_stats = clean_nan(raw_summary) 
-        
+        num_df = df.select_dtypes(include="number")
+
+        if num_df.shape[1] > 0:
+            stats_df = num_df.describe()
+            raw_summary = stats_df.to_dict()
+            summary_stats = clean_nan(raw_summary)
+        else:
+            summary_stats = {}
+
+        quality_report, insights = analyze_dataframe_quality(df)
+
         analysis_results = {
             "row_count": new_row_count, 
             "column_count": len(df.columns), 
             "summary_stats": summary_stats,
-            "is_truncated": is_truncated
+            "is_truncated": is_truncated,
+            "quality_report": quality_report,
+            "insights": insights 
         }
         
         current_upload.schema_info = new_schema

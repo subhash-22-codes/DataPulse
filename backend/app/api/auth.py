@@ -33,7 +33,9 @@ from app.models.workspace import workspace_team
 from app.core.guard import send_telegram_alert
 from app.core.database import SessionLocal
 from app.utils.security import hash_ua
-    
+from app.services.storage_service import delete_files
+from app.models.workspace import Workspace
+from app.models.data_upload import DataUpload
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
 
@@ -919,13 +921,14 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
 
 
+
 @router.delete("/me")
 @limiter.limit("5/minute")
 async def delete_account(
     request: Request,
     background_tasks: BackgroundTasks,
-    response: Response, 
-    db: Session = Depends(get_db), 
+    response: Response,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     user_email = current_user.email
@@ -934,12 +937,31 @@ async def delete_account(
     try:
         logger.warning(f"🚨 SCRUB INITIATED: User {user_email}")
 
+        owned_workspaces = db.query(Workspace).filter(Workspace.owner_id == current_user.id).all()
+        owned_workspace_ids = [ws.id for ws in owned_workspaces]
+
+        if owned_workspace_ids:
+            uploads = db.query(DataUpload).filter(
+                DataUpload.workspace_id.in_(owned_workspace_ids)
+            ).all()
+
+            paths = [u.storage_path for u in uploads if u.storage_path]
+
+            try:
+                delete_files(paths)
+                logger.warning(f"🧹 Deleted {len(paths)} storage files for user {user_email}")
+            except Exception as e:
+                # Don't block account deletion if storage cleanup fails
+                logger.error(f"⚠️ Storage cleanup failed for user {user_email}: {e}")
+
+        # ✅ 2) Remove user from team tables (many-to-many)
         db.execute(workspace_team.delete().where(workspace_team.c.user_id == current_user.id))
 
+        # ✅ 3) Delete the user (cascades will delete owned workspaces/uploads from DB)
         db.delete(current_user)
         db.commit()
 
-        # Clear Cookies
+        # ✅ 4) Clear Cookies
         cookie_params = {
             "samesite": "none",
             "secure": True,
@@ -950,9 +972,10 @@ async def delete_account(
         response.delete_cookie("refresh_token", **cookie_params)
         response.delete_cookie("session_id", **cookie_params)
 
+        # ✅ 5) Notifications
         background_tasks.add_task(send_farewell_email, user_email, user_name)
         background_tasks.add_task(
-            send_telegram_alert, 
+            send_telegram_alert,
             f"RED ALERT: USER DELETED ACCOUNT\n"
             f"Name: {user_name}\n"
             f"Email: {user_email}\n"
@@ -965,6 +988,7 @@ async def delete_account(
         db.rollback()
         logger.error(f"❌ Scrub failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Account deletion failed.")
+
     
 
 @router.post("/unlink/{provider}")
