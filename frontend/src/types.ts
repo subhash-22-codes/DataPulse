@@ -24,19 +24,44 @@ export interface SummaryStats {
   };
 }
 
+export type InsightSeverity = "low" | "medium" | "high";
+
+export type UploadInsight = {
+  type: string;
+  severity: InsightSeverity;
+  message: string;
+};
+
+export type QualityReport = {
+  missing_by_column: Record<string, number>;
+  missing_percent_by_column: Record<string, number>;
+  unique_count_by_column: Record<string, number>;
+  unique_percent_by_column: Record<string, number>;
+  duplicate_rows: number;
+  outliers_by_column: Record<string, number>;
+};
+
+export type AnalysisResults = {
+  row_count: number;
+  column_count: number;
+  summary_stats: SummaryStats | null;
+  quality_report?: QualityReport;
+  insights?: UploadInsight[];
+  is_truncated?: boolean;
+};
+
 export interface DataUpload {
   id: string;
   file_path: string;
   uploaded_at: string;
   schema_info: { [key: string]: string } | null;
-  analysis_results: { 
-    row_count: number;
-    column_count: number; 
-    summary_stats: SummaryStats | null; // <-- UPDATED: Replaced 'any'
-  } | null;
+
+  analysis_results: AnalysisResults | null;
+
   schema_changed_from_previous: boolean;
-  upload_type: 'manual' | 'api_poll' | 'db_query'; 
+  upload_type: "manual" | "api_poll" | "db_query";
 }
+
 export interface TrendDataPoint {
   date: string;
   value: number | null;

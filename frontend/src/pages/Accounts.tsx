@@ -145,7 +145,6 @@ export const Account: React.FC = () => {
   const [pendingLink, setPendingLink] = useState<'google' | 'github' | null>(null);
   const [resultModal, setResultModal] = useState<ResultModalState | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [exportingId, setExportingId] = useState<string | null>(null);
   const [showSecurityLogs, setShowSecurityLogs] = useState<boolean>(
   window.innerWidth >= 1024 // lg breakpoint
 );
@@ -156,6 +155,10 @@ export const Account: React.FC = () => {
   const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [hasFetchedLogs, setHasFetchedLogs] = useState(false); 
+  const [selectedExportWorkspace, setSelectedExportWorkspace] = useState<ExportWorkspaceResponse | null>(null);
+  const [isFetchingFiles, setIsFetchingFiles] = useState(false);
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [exportCache, setExportCache] = useState<Record<string, ExportWorkspaceResponse>>({});
 
  useEffect(() => {
   if (isSyncing) return; // ⬅️ IMPORTANT
@@ -328,46 +331,71 @@ const processDelete = async () => {
   }
 };
 
-// Step 1: Open Modal and fetch the list of workspace sizes
 const handleOpenExportModal = async () => {
   setShowExportModal(true);
   setIsFetchingList(true);
   try {
-    const response = await api.get<WorkspaceExportSummary[]>('/user/export-list');
+    const response = await api.get<WorkspaceExportSummary[]>("/user/export-list");
     setWorkspaces(response.data);
   } catch (error) {
     console.error(error);
-    toast.error('Could not load workspace list');
+    toast.error("Could not load workspace list");
   } finally {
     setIsFetchingList(false);
   }
 };
 
-// Step 2: Download a SPECIFIC workspace
-const downloadWorkspace = async (workspaceId: string, wsName: string) => {
-  setExportingId(workspaceId);
-  try {
-    const response = await api.get(`/user/export-workspace/${workspaceId}`, { 
-      responseType: 'blob' 
-    });
 
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `DataPulse_${wsName.replace(/\s+/g, '_')}_Export.zip`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    
-    toast.success(`${wsName} export successful`);
-  } catch (error) {
-    console.error(error);
-    toast.error('Export failed. The workspace might be too large.');
+type ExportWorkspaceFile = {
+  upload_id: string;
+  file_name: string;
+  upload_type: string;
+  uploaded_at: string | null;
+  size_bytes: number;
+  download_url: string;
+};
+
+type ExportWorkspaceResponse = {
+  workspace_id: string;
+  workspace_name: string;
+  exported_at: string;
+  data_source: string | null;
+  file_count: number;
+  files: ExportWorkspaceFile[];
+};
+
+const openWorkspaceExport = async (workspaceId: string) => {
+  if (exportCache[workspaceId]) {
+    setSelectedExportWorkspace(exportCache[workspaceId]);
+    return;
+  }
+
+  setIsFetchingFiles(true);
+  try {
+    const res = await api.get<ExportWorkspaceResponse>(`/user/export-workspace/${workspaceId}`);
+    setExportCache(prev => ({ ...prev, [workspaceId]: res.data }));
+    setSelectedExportWorkspace(res.data);
+  } catch (e) {
+    console.error(e);
+    toast.error("Failed to load workspace files");
   } finally {
-   setExportingId(null);
+    setIsFetchingFiles(false);
   }
 };
+
+
+const downloadOneFile = (file: ExportWorkspaceFile) => {
+  setDownloadingFileId(file.upload_id);
+
+  const a = document.createElement("a");
+  a.href = file.download_url;
+  a.click();
+
+  setTimeout(() => setDownloadingFileId(null), 800);
+};
+
+
+
 
 if (pageState === 'loading') {
   return (
@@ -737,7 +765,7 @@ if (pageState === 'error') {
 
                         <button
                           onClick={handleOpenExportModal}
-                          disabled={isFetchingList || exportingId !== null}
+                          disabled={isFetchingList}
                           className="
                             shrink-0
                             inline-flex items-center justify-center gap-2
@@ -840,82 +868,197 @@ if (pageState === 'error') {
         </div>
 
       {/* --- MODALS --- */}
-
-     {showExportModal && (
+      {showExportModal && (
       <ModalShell>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-md bg-white shadow-2xl border border-slate-300 flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* HEADER: Clear & Simple */}
+          <div className="w-full max-w-3xl rounded-md bg-white shadow-2xl border border-slate-300 flex flex-col animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+
+            {/* HEADER */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
-                Download your data
-              </h3>
-              <button 
-                onClick={() => setShowExportModal(false)} 
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
+                  Download your data
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Choose a workspace, then download the file you want.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowExportModal(false);
+                  setSelectedExportWorkspace(null);
+                }}
                 className="text-slate-400 hover:text-slate-900 transition-colors"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            
-            {/* BODY */}
-            <div className="p-5">
-              <p className="text-xs text-slate-600 mb-5 leading-relaxed">
-                Select a workspace to download as a <span className="font-bold text-slate-900">.zip file</span>. This file contains all your saved information and activity logs.
-              </p>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {isFetchingList ? (
-                  /* HUMAN LOADING STATE */
-                  <div className="flex flex-col items-center justify-center py-10 gap-3">
-                    <Loader2 className="animate-spin h-5 w-5 text-slate-900" />
-                    <span className="text-[11px] font-medium text-slate-500">Searching for your workspaces...</span>
-                  </div>
-                ) : workspaces.length === 0 ? (
-                  <div className="text-center py-8 border border-dashed border-slate-200 rounded-md">
-                    <p className="text-[11px] text-slate-500 font-medium">You don't have any workspaces yet.</p>
-                  </div>
-                ) : workspaces.map((ws) => (
-                  <div 
-                    key={ws.workspace_id} 
-                    className="flex items-center justify-between p-3 rounded-md border border-slate-200 bg-white hover:border-slate-400 transition-all"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{ws.name}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                        {ws.total_size_bytes < 1024 * 1024 
-                          ? `${(ws.total_size_bytes / 1024).toFixed(1)} KB` 
-                          : `${(ws.total_size_bytes / (1024 * 1024)).toFixed(1)} MB`} 
-                        {" • "}{ws.file_count} items
+            {/* BODY */}
+            <div className="grid grid-cols-1 md:grid-cols-2 min-h-[420px]">
+
+              {/* LEFT: WORKSPACES */}
+              <div className="border-b md:border-b-0 md:border-r border-slate-200 bg-white">
+                <div className="px-5 py-3 border-b border-slate-100">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                    Workspaces
+                  </p>
+                </div>
+
+                <div className="p-4 max-h-[360px] md:max-h-[420px] overflow-y-auto custom-scrollbar">
+                  {isFetchingList ? (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3">
+                      <Loader2 className="animate-spin h-5 w-5 text-slate-900" />
+                      <span className="text-[11px] font-medium text-slate-500">
+                        Loading workspaces...
+                      </span>
+                    </div>
+                  ) : workspaces.length === 0 ? (
+                    <div className="text-center py-10 border border-dashed border-slate-200 rounded-md bg-slate-50/40">
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        No workspaces found.
                       </p>
                     </div>
-                    
-                    <button 
-                      onClick={() => downloadWorkspace(ws.workspace_id, ws.name)}
-                      disabled={exportingId !== null || ws.total_size_bytes === 0}
-                      className="ml-4 flex h-9 items-center gap-2 bg-slate-900 px-3 text-white rounded-md hover:bg-black disabled:opacity-20 transition-all"
-                    >
-                      {exportingId === ws.workspace_id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <Download className="h-3.5 w-3.5" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ))}
+                  ) : (
+                    <div className="space-y-2">
+                      {workspaces.map((ws) => {
+                        const isSelected = selectedExportWorkspace?.workspace_id === ws.workspace_id;
+
+                        return (
+                          <button
+                            key={ws.workspace_id}
+                            onClick={() => openWorkspaceExport(ws.workspace_id)}
+                            disabled={ws.file_count === 0 || isFetchingFiles}
+                            className={[
+                              "w-full text-left rounded-md border p-3 transition-all",
+                              "bg-white hover:border-slate-400",
+                              "disabled:opacity-40 disabled:cursor-not-allowed",
+                              isSelected ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200",
+                            ].join(" ")}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">
+                                  {ws.name}
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                                  {ws.total_size_bytes < 1024 * 1024
+                                    ? `${(ws.total_size_bytes / 1024).toFixed(1)} KB`
+                                    : `${(ws.total_size_bytes / (1024 * 1024)).toFixed(1)} MB`}
+                                  {" • "}{ws.file_count} files
+                                </p>
+                              </div>
+
+                              <div className="shrink-0 flex items-center gap-2">
+                                {isSelected && (
+                                  <span className="text-[10px] font-bold text-slate-900 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* RIGHT: FILES */}
+              <div className="bg-slate-50/40">
+                <div className="px-5 py-3 border-b border-slate-100 bg-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                      Files
+                    </p>
+
+                    {selectedExportWorkspace && (
+                      <p className="text-[10px] text-slate-500 font-medium truncate">
+                        {selectedExportWorkspace.workspace_name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 max-h-[360px] md:max-h-[420px] overflow-y-auto custom-scrollbar">
+                  {!selectedExportWorkspace ? (
+                    <div className="flex flex-col items-center justify-center py-14 text-center">
+                      <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm mb-3">
+                        <Download className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <p className="text-[12px] font-semibold text-slate-800">
+                        Select a workspace
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1 max-w-[260px]">
+                        After selecting, you will see files to download.
+                      </p>
+                    </div>
+                  ) : isFetchingFiles ? (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3">
+                      <Loader2 className="animate-spin h-5 w-5 text-slate-900" />
+                      <span className="text-[11px] font-medium text-slate-500">
+                        Loading files...
+                      </span>
+                    </div>
+                  ) : selectedExportWorkspace.files.length === 0 ? (
+                    <div className="text-center py-10 border border-dashed border-slate-200 rounded-md bg-white">
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        No files found in this workspace.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedExportWorkspace.files.map((f) => (
+                        <div
+                          key={f.upload_id}
+                          className="flex items-center justify-between gap-3 p-3 rounded-md border border-slate-200 bg-white hover:border-slate-300 transition-all"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-bold text-slate-800 truncate">
+                              {f.file_name}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                              {f.upload_type?.toUpperCase()}{" • "}
+                              {f.size_bytes < 1024 * 1024
+                                ? `${(f.size_bytes / 1024).toFixed(1)} KB`
+                                : `${(f.size_bytes / (1024 * 1024)).toFixed(1)} MB`}
+                            </p>
+                          </div>
+                         <button
+                            onClick={() => downloadOneFile(f)}
+                            disabled={downloadingFileId === f.upload_id}
+                            className="flex h-9 items-center gap-2 bg-slate-900 px-3 text-white rounded-md hover:bg-black transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {downloadingFileId === f.upload_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Download className="h-3.5 w-3.5" />
+                            )}
+
+                            <span className="text-[11px] font-bold">
+                              {downloadingFileId === f.upload_id ? "Starting..." : "Download"}
+                            </span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
 
             {/* FOOTER */}
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button 
-                onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 text-[11px] font-bold text-slate-500 hover:text-slate-900 font-manrope tracking-widest transition-colors"
+            <div className="px-5 py-3 bg-white border-t border-slate-200 flex items-center justify-between">
+              <button
+                onClick={() => setSelectedExportWorkspace(null)}
+                disabled={!selectedExportWorkspace}
+                className="text-[11px] font-bold text-slate-500 hover:text-slate-900 font-manrope tracking-widest transition-colors disabled:opacity-30"
               >
-                Cancel
+                Back
               </button>
             </div>
 
