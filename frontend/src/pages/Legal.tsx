@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Minus, Printer } from 'lucide-react'; 
-import { Link } from 'react-router-dom';
+import { ArrowLeft, Check, Minus, Printer } from 'lucide-react';
 
 export const Legal: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>('intro');
 
-  // --- Scroll Spy Logic ---
   useEffect(() => {
     const handleScroll = () => {
       const sections = document.querySelectorAll('section[id]');
       let current = '';
-      
+
       sections.forEach((section) => {
         const sectionTop = section.getBoundingClientRect().top;
-        if (sectionTop <= 180) { 
+        if (sectionTop <= 180) {
           current = section.getAttribute('id') || '';
         }
       });
@@ -41,104 +39,82 @@ export const Legal: React.FC = () => {
   };
 
   const tocItems = [
-  { id: 'intro', label: '1. Introduction' },
-  { id: 'collection', label: '2. Data collection' },
-  { id: 'types', label: '3. Types of data processed' },
-  { id: 'usage', label: '4. Purpose of processing' },
-  { id: 'infrastructure', label: '5. Infrastructure and sub-processors' },
-  { id: 'security', label: '6. Security practices' },
-  { id: 'terms', label: '7. Terms of service' },
-  { id: 'liability', label: '8. Limitation of liability' },
-  { id: 'retention', label: '9. Data retention and deletion' },
-  { id: 'changes', label: '10. Changes to this policy' },
-  { id: 'contact', label: '11. Contact and jurisdiction' },
-];
-
+    { id: 'intro', label: 'Privacy Policy Overview' },
+    { id: 'collection', label: 'Data Collection' },
+    { id: 'types', label: 'Types of Data' },
+    { id: 'usage', label: 'How We Use Data' },
+    { id: 'infrastructure', label: 'Storage & Infrastructure' },
+    { id: 'subprocessors', label: 'Sub-processors' },
+    { id: 'retention', label: 'Data Retention' },
+    { id: 'security', label: 'Security' },
+    { id: 'changes-privacy', label: 'Policy Changes' },
+    { id: 'contact-privacy', label: 'Privacy Contact' },
+    { id: 'tos-acceptance', label: 'Terms of Service' },
+    { id: 'what-provided', label: 'What We Provide' },
+    { id: 'account-access', label: 'Account & Access' },
+    { id: 'data-sources', label: 'Data Source Rules' },
+    { id: 'usage-limits', label: 'Usage Limits' },
+    { id: 'acceptable-use', label: 'Acceptable Use' },
+    { id: 'availability', label: 'Availability' },
+    { id: 'export', label: 'Export & Downloads' },
+    { id: 'deletion', label: 'Deletion & Removal' },
+    { id: 'liability', label: 'Limitation of Liability' },
+    { id: 'changes-terms', label: 'Terms Changes' },
+    { id: 'governing', label: 'Governing Law' },
+  ];
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-200 selection:text-black">
-      
-      {/* --- Minimalist Header --- */}
+
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-slate-200 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
 
-          {/* Left */}
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="text-sm sm:text-base font-semibold tracking-tight text-slate-900"
-            >
+            <h1 className="text-sm sm:text-base font-semibold tracking-tight text-slate-900">
               DataPulse
-            </Link>
-
+            </h1>
             <div className="h-4 w-px bg-slate-300 hidden sm:block" />
-
-            <span className="hidden sm:block text-xs font-medium text-slate-600">
-              Legal Reference
-            </span>
+            <span className="hidden sm:block text-xs font-medium text-slate-600">Legal</span>
           </div>
 
-          {/* Right */}
-         <div className="flex items-center gap-2 sm:gap-3">
-            {/* PRINT: Utility Secondary Action */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handlePrint}
-              className="
-                hidden sm:inline-flex items-center gap-2
-                h-9 px-4 tracking-widest
-                rounded-sm border border-slate-200 bg-white
-                text-[11px] font-bold font-manrope text-slate-500
-                hover:text-slate-900 hover:border-slate-300
-                transition-all active:scale-[0.95]
-                focus-visible:ring-slate-300
-              "
+              className="hidden sm:inline-flex items-center gap-2 h-9 px-4 rounded-sm border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:border-slate-300 transition-all active:scale-[0.95]"
             >
               <Printer className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Print</span>
             </button>
 
-            {/* RETURN: Primary System Navigation */}
-            <Link
-              to="/home"
-              className="
-                inline-flex items-center gap-2
-                h-9 px-4
-                bg-slate-900 text-white tracking-widest
-                rounded-sm 
-                text-[11px] font-bold font-manrope
-                transition-all hover:bg-slate-800 active:scale-[0.95]
-                shadow-sm
-                focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-300
-              "
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 h-9 px-4 bg-slate-900 text-white rounded-sm text-[11px] font-bold transition-all hover:bg-slate-800 active:scale-[0.95]"
             >
               <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden sm:inline">Return to App</span>
-              {/* Mobile Only Label - Minimalist */}
-              <span className="inline sm:hidden">Return</span>
-            </Link>
+              <span className="hidden sm:inline">Back</span>
+            </a>
           </div>
 
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="lg:grid lg:grid-cols-12 lg:gap-16">
-          
-          {/* --- Sidebar TOC (Desktop) --- */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="lg:grid lg:grid-cols-12 lg:gap-12">
+
           <aside className="hidden lg:block lg:col-span-3 print:hidden">
-            <nav className="sticky top-28">
-              <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">
-                Table of Contents
+            <nav className="sticky top-28 text-sm">
+              <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 pb-3 border-b border-slate-200">
+                Contents
               </h5>
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {tocItems.map((item) => (
                   <li key={item.id}>
                     <button
                       onClick={() => scrollToSection(item.id)}
-                      className={`text-left text-sm py-1.5 block w-full transition-colors ${
+                      className={`text-left py-1 block w-full transition-colors text-sm ${
                         activeSection === item.id
-                          ? 'text-black font-bold'
-                          : 'text-slate-500 hover:text-slate-800'
+                          ? 'text-slate-900 font-semibold'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       {item.label}
@@ -149,738 +125,713 @@ export const Legal: React.FC = () => {
             </nav>
           </aside>
 
-          {/* --- Main Document --- */}
-          <div className="lg:col-span-8 lg:col-start-4">
-            
-            {/* Document Header */}
-            <div className="mb-10 border-b border-slate-200 pb-6">
-              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
+          <div className="lg:col-span-9">
+
+            <div className="mb-10 pb-8 border-b border-slate-200">
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4">
                 Privacy Policy & Terms of Service
               </h1>
-
-              <p className="mt-3 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                This document explains how DataPulse collects, uses, and protects your data.
-                It also outlines the terms that govern your use of the DataPulse platform,
-                operated by Subhash Yaganti and Siri Mahalaxmi Vemula.
+              <p className="text-base text-slate-600 mb-6">
+                DataPulse is a web-based data monitoring and schema analysis tool. This document explains how we collect, use, and protect your data, and the terms governing your use of our platform.
               </p>
-
-              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-500">
-                <span>Effective: Nov 3, 2025</span>
-                <span>Version: 1.1.0</span>
-                <span>Jurisdiction: India</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Effective Date</span>
+                  <span className="text-slate-700">November 3, 2025</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Jurisdiction</span>
+                  <span className="text-slate-700">India</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Contact</span>
+                  <a href="mailto:datapulseapp@gmail.com" className="text-slate-700 hover:text-slate-900 font-medium">datapulseapp@gmail.com</a>
+                </div>
               </div>
             </div>
 
+            <div className="space-y-12 text-slate-800">
 
-            {/* Content Sections */}
-            <div className="space-y-16 text-slate-800 text-[15px] leading-7">
-              
-              {/* 1. Introduction */}
               <section id="intro" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  1. Introduction
+                <h2 className="text-2xl font-bold text-slate-900 mb-6 pb-3 border-b border-slate-200">
+                  Privacy Policy
                 </h2>
 
-                <div className="space-y-3 text-sm sm:text-base text-slate-600 leading-relaxed">
-                  <p>
-                    DataPulse is a web-based data monitoring and schema analysis tool designed
-                    for educational use and small teams. It enables users to track changes in
-                    CSV files, API responses, and PostgreSQL databases.
-                  </p>
-
-                  <p>
-                    We follow the principle of <strong className="font-medium text-slate-800">
-                      data minimization
-                    </strong>. Only data that is strictly necessary to provide the service is
-                    collected. By using DataPulse, you agree to the data practices described
-                    in this policy.
-                  </p>
+                <div className="space-y-5 text-sm leading-relaxed text-slate-700">
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-2 text-base">1) Overview</h3>
+                    <p>
+                      DataPulse is a web-based data monitoring and schema analysis tool for educational use and small teams. It helps you upload CSV files, poll APIs, poll PostgreSQL databases (read-only queries), detect schema changes, view trends, and export your workspace data.
+                    </p>
+                    <p className="mt-3">
+                      We follow <strong>data minimization</strong>. We only collect and store what is necessary to provide the service and protect accounts.
+                    </p>
+                  </div>
                 </div>
               </section>
 
-
-             {/* 2. Data Collection */}
               <section id="collection" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  2. Data Collection
-                </h2>
-
-                <p className="mb-4 text-sm sm:text-base text-slate-600 max-w-3xl">
-                  The table below describes the types of data processed by DataPulse, how they are obtained,
-                  and why they are required to provide core functionality and account security.
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">2) Data Collection</h3>
+                <p className="text-sm text-slate-700 mb-4">
+                  The table below describes what DataPulse processes, how it is obtained, and why it is required.
                 </p>
 
-                <div className="overflow-x-auto rounded-md border border-slate-200">
-                  <table className="w-full min-w-[640px] border-collapse text-sm">
-                    <thead className="bg-slate-50">
-                      <tr className="border-b border-slate-200">
-                        <th className="px-4 py-2.5 text-left font-medium text-slate-700">
-                          Data type
-                        </th>
-                        <th className="px-3 py-2.5 text-center font-medium text-slate-700 w-28">
-                          User provided
-                        </th>
-                        <th className="px-3 py-2.5 text-center font-medium text-slate-700 w-28">
-                          System generated
-                        </th>
-                        <th className="px-4 py-2.5 text-left font-medium text-slate-700">
-                          Purpose
-                        </th>
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-900">Data Type</th>
+                        <th className="px-3 py-3 text-center font-semibold text-slate-900 w-24">User Provided</th>
+                        <th className="px-3 py-3 text-center font-semibold text-slate-900 w-24">System Generated</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-900">Purpose</th>
                       </tr>
                     </thead>
 
                     <tbody className="divide-y divide-slate-100">
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Account credentials
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Authentication and identity verification, including sign-in via email,
-                          Google, or GitHub.
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Account information (name, email)</td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Authentication, account identity, workspace access</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Password hash (never plain text)</td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Secure authentication</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Linked account identifiers (Google / GitHub)
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Allows users to access the same account using multiple sign-in methods.
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Google/GitHub sign-in info</td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Allows sign-in using external providers</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Workspace data (name, members, roles)</td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Workspace access control and collaboration</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Raw data (CSV / SQL)
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Core monitoring and schema analysis functionality.
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Uploaded data files (CSV)</td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Core monitoring and export functionality</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Data pulled from your API/Database</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Core monitoring and export functionality</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Schema metadata
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Automated change detection and analytical insights.
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Column names and data types (schema)</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Change detection and schema visibility</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Summary stats and data quality checks</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Stats, insights, trends, and validation features</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Login activity records
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Used to display account access history and protect against unauthorized access.
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Login activity records</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Security, auditing, and suspicious activity detection</td>
                       </tr>
 
-                      <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Email notifications
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Check className="mx-auto h-4 w-4 text-slate-700" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Delivery of important service, security, and account-related messages.
-                        </td>
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Notifications</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Check className="w-4 h-4 text-green-600 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-700">Updates when schema/metrics/alerts change</td>
                       </tr>
 
-                      <tr className="bg-slate-50">
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Tracking cookies
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <Minus className="mx-auto h-4 w-4 text-slate-300" />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-500 italic">
-                          Not collected or used.
-                        </td>
+                      <tr className="bg-amber-50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Tracking cookies</td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-3 py-3 text-center"><Minus className="w-4 h-4 text-slate-300 mx-auto" /></td>
+                        <td className="px-4 py-3 text-slate-600 italic">Not collected or used</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               </section>
 
+              <section id="types" className="scroll-mt-28">
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">3) Types of Data We Process</h3>
 
-              {/* 3. Types of Data Processed */}
-                <section id="types" className="scroll-mt-28">
-                  <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                    3. Types of data processed
-                  </h2>
-
-                  <p className="mb-5 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                    To operate and improve the DataPulse platform, we process the following
-                    categories of data. The specific data collected depends on how you use
-                    the service.
-                  </p>
-
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    
-                    {/* 3.1 Personal Information */}
-                    <div className="rounded-md border border-slate-200 bg-white p-4">
-                      <h3 className="mb-2 text-sm font-medium text-slate-900">
-                        3.1 Account information
-                      </h3>
-                      <ul className="space-y-1 text-sm text-slate-600 list-disc list-inside">
-                        <li>Name and email address.</li>
-                        <li>Authentication credentials, stored in a hashed or secure form.</li>
-                        <li>Linked sign-in providers (such as Google or GitHub), if used.</li>
-                        <li>Workspace-related metadata (such as roles and permissions).</li>
-                      </ul>
-                    </div>
-
-                    {/* 3.2 User Content */}
-                    <div className="rounded-md border border-slate-200 bg-white p-4">
-                      <h3 className="mb-2 text-sm font-medium text-slate-900">
-                        3.2 User-provided content
-                      </h3>
-                      <ul className="space-y-1 text-sm text-slate-600 list-disc list-inside">
-                        <li>Uploaded CSV files and structured datasets.</li>
-                        <li>Workspace names, descriptions, and configuration settings.</li>
-                        <li>Alert rules, thresholds, and monitoring preferences.</li>
-                      </ul>
-                    </div>
-
-                    {/* 3.3 Connection Details */}
-                    <div className="rounded-md border border-slate-200 bg-white p-4">
-                      <h3 className="mb-2 text-sm font-medium text-slate-900">
-                        3.3 Connection details
-                      </h3>
-                      <ul className="space-y-1 text-sm text-slate-600 list-disc list-inside">
-                        <li>API endpoint URLs.</li>
-                        <li>Database connection details (such as host, port, and username).</li>
-                        <li>
-                          Credentials such as passwords or secrets are stored in encrypted form
-                          and used only to establish connections you configure.
-                        </li>
-                      </ul>
-                    </div>
-
-                    {/* 3.4 Authentication & Security Data */}
-                    <div className="rounded-md border border-slate-200 bg-white p-4">
-                      <h3 className="mb-2 text-sm font-medium text-slate-900">
-                        3.4 Authentication and security data
-                      </h3>
-                      <ul className="space-y-1 text-sm text-slate-600 list-disc list-inside">
-                        <li>Login activity records such as timestamps and IP address.</li>
-                        <li>Basic device and browser identifiers associated with login sessions.</li>
-                      </ul>
-                    </div>
+                <div className="space-y-5 text-sm">
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">3.1 Account information</h4>
+                    <p className="text-slate-700">
+                      DataPulse stores basic account information such as your name and email address. If you sign in with Google or GitHub, we store the identifier needed to connect that provider to your DataPulse account.
+                    </p>
+                    <p className="text-slate-700 mt-2">
+                      Passwords are not stored in plain text. They are stored only as secure hashes.
+                    </p>
                   </div>
-                </section>
 
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">3.2 User-provided content</h4>
+                    <p className="text-slate-700">
+                      DataPulse processes content you explicitly create or upload, including CSV files, workspace names/descriptions, alert rules, and trend tracking selections.
+                    </p>
+                    <p className="text-slate-700 mt-2">
+                      Workspace data is only accessible to the workspace owner and invited team members.
+                    </p>
+                  </div>
 
-              {/* 4. Purpose of Processing */}
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">3.3 Connection details (API and Database)</h4>
+                    <p className="text-slate-700">
+                      If you configure API polling or database polling, DataPulse stores the connection configuration you provide. This can include API URLs, header name/value fields, database host/port/username/database name, and the SQL query.
+                    </p>
+                    <p className="text-slate-700 mt-2">
+                      Sensitive values such as database passwords and API secrets are treated as confidential and are intended to be used only to establish the connection you configured.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">3.4 Authentication and security data</h4>
+                    <p className="text-slate-700">
+                      DataPulse may record login timestamps, IP addresses, and basic session information. This is used to secure accounts and help detect unusual activity.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
               <section id="usage" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  4. Purpose of processing
-                </h2>
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">4) How We Use Your Data</h3>
+                <p className="text-sm text-slate-700 mb-4">DataPulse processes data for the following purposes:</p>
 
-                <ul className="space-y-4 text-sm sm:text-base text-slate-600 leading-relaxed">
-                  <li>
-                    <span className="font-medium text-slate-800">
-                      Core service delivery:
-                    </span>{" "}
-                    To process uploaded files, connect to configured data sources, and
-                    present schema changes and data trends within the platform.
-                  </li>
+                <div className="space-y-3 text-sm text-slate-700">
+                  <div>
+                    <p>
+                      <strong className="text-slate-900">Core service delivery:</strong> To process uploaded files and polled datasets, detect schema changes, compute analysis summaries, and show results in the dashboard.
+                    </p>
+                  </div>
 
-                  <li>
-                    <span className="font-medium text-slate-800">
-                      Automated alerting:
-                    </span>{" "}
-                    To send notifications when monitored values, schemas, or thresholds
-                    change, including delivery via third-party email services.
-                  </li>
+                  <div>
+                    <p>
+                      <strong className="text-slate-900">Notifications and alerts:</strong> To notify you when schema changes occur, when monitored values change, or when alerts are triggered.
+                    </p>
+                  </div>
 
-                  <li>
-                    <span className="font-medium text-slate-800">
-                      AI-assisted analysis:
-                    </span>{" "}
-                    To provide contextual explanations related to schema and metadata changes
-                    (for example, describing the purpose of a column based on its name and
-                    type).
-                    
-                    <div className="mt-2 inline-block rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-600">
-                      <span className="font-medium text-slate-700">
-                        Data limitation:
-                      </span>{" "}
-                      AI processing is designed to use only high-level metadata such as column
-                      names and data types. Raw row-level data and personally identifiable
-                      information are not intentionally included in these requests.
+                  <div>
+                    <p>
+                      <strong className="text-slate-900">AI-assisted explanations (metadata only):</strong> To provide simple explanations about schema changes and dataset signals. DataPulse is designed to use high-level metadata such as column names and column types. Raw row-level data and personal identifiers are not intentionally included in AI requests.
+                    </p>
+                    <p className="mt-2">
+                      DataPulse does not use your data to train AI models.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p>
+                      <strong className="text-slate-900">Security and account access:</strong> To authenticate users, manage sessions, and prevent unauthorized access.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section id="infrastructure" className="scroll-mt-28">
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">5) Storage and Infrastructure</h3>
+
+                <div className="space-y-5 text-sm leading-relaxed text-slate-700">
+                  <p>
+                    DataPulse needs two places to keep your information safe: one place for your workspace settings and results,
+                    and another place for your actual CSV files.
+                  </p>
+
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">5.1 Supabase (PostgreSQL)</h4>
+                    <p className="text-slate-700 mb-2">
+                      We use Supabase PostgreSQL as our main database. This is where we store the information that makes DataPulse work,
+                      like your account, workspace settings, and analysis reports.
+                    </p>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                      <p className="text-slate-700 mb-2 font-medium">Stored here:</p>
+                      <ul className="list-disc list-inside text-slate-700 space-y-1 ml-2">
+                        <li>your account information</li>
+                        <li>workspace settings and team access</li>
+                        <li>upload history (file names and timestamps)</li>
+                        <li>schema info, insights, and quality reports</li>
+                        <li>alerts and notifications</li>
+                      </ul>
                     </div>
-                  </li>
-                  <li>
-                    <span className="font-medium text-slate-800">
-                      Account access and security:
-                    </span>{" "}
-                    To authenticate users, manage active sessions, prevent unauthorized access,
-                    and provide visibility into recent login activity.
-                  </li>
-                </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-2">5.2 Supabase Storage (Private Bucket)</h4>
+                    <p className="text-slate-700 mb-2">
+                      We store your dataset files (CSV) separately in Supabase Storage. This helps us avoid storing large files directly inside the database.
+                    </p>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                      <p className="text-slate-700 mb-2 font-medium">Stored here:</p>
+                      <ul className="list-disc list-inside text-slate-700 space-y-1 ml-2">
+                        <li>CSV files you upload</li>
+                        <li>CSV files generated from API polling</li>
+                        <li>CSV files generated from database query polling</li>
+                      </ul>
+                    </div>
+
+                    <p className="text-slate-700 mt-3">
+                      These files are stored in <strong>private storage</strong>. That means they are not public.
+                      When you download a file, DataPulse creates a <strong>temporary signed link</strong> only for your account.
+                    </p>
+                  </div>
+                </div>
               </section>
 
 
-              {/* 5. Infrastructure & Sub-processors */}
-              <section id="infrastructure" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  5. Infrastructure and sub-processors
-                </h2>
+              <section id="subprocessors" className="scroll-mt-28">
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">6) Third-party Services We Use</h3>
+                <p className="text-sm text-slate-700 mb-4">DataPulse uses a few trusted third-party services to run the app. They only access data when needed.</p>
 
-                <p className="mb-4 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                  DataPulse relies on a limited number of third-party service providers
-                  (“sub-processors”) to operate the platform. These providers support core
-                  infrastructure and functionality and process data only as necessary to
-                  deliver their services.
-                </p>
-
-                <div className="overflow-x-auto rounded-md border border-slate-200">
-                  <table className="w-full min-w-[560px] border-collapse text-sm">
-                    <thead className="bg-slate-50">
-                      <tr className="border-b border-slate-200">
-                        <th className="px-4 py-2.5 text-left font-medium text-slate-700">
-                          Provider
-                        </th>
-                        <th className="px-4 py-2.5 text-left font-medium text-slate-700">
-                          Purpose
-                        </th>
-                        <th className="px-4 py-2.5 text-left font-medium text-slate-700">
-                          Data involved
-                        </th>
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-[600px] text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-900">Provider</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-900">Purpose</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-900">Data Involved</th>
                       </tr>
                     </thead>
 
                     <tbody className="divide-y divide-slate-100">
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Supabase
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Database and managed storage infrastructure
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          User-provided content and application data
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Supabase</td>
+                        <td className="px-4 py-3 text-slate-700">Database and file storage</td>
+                        <td className="px-4 py-3 text-slate-700">Account data, workspace data, dataset files, analysis results</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Google OAuth</td>
+                        <td className="px-4 py-3 text-slate-700">Login (Google sign-in)</td>
+                        <td className="px-4 py-3 text-slate-700">Email address and account identifier</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          GitHub
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          User authentication via GitHub OAuth
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Email address used to create and identify the account
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">GitHub OAuth</td>
+                        <td className="px-4 py-3 text-slate-700">Sign-in provider</td>
+                        <td className="px-4 py-3 text-slate-700">Email address and account identifier</td>
+                      </tr>
+
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Google Gemini</td>
+                        <td className="px-4 py-3 text-slate-700">AI explanation (column info)</td>
+                        <td className="px-4 py-3 text-slate-700">Schema metadata only</td>
                       </tr>
 
                       <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Google
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          User authentication via Google OAuth
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Email address used to create and identify the account
-                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">Brevo</td>
+                        <td className="px-4 py-3 text-slate-700">Transactional emails</td>
+                        <td className="px-4 py-3 text-slate-700">Email address, verification codes, notification delivery</td>
                       </tr>
 
-                      <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Google Gemini
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          AI-assisted metadata analysis
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Schema metadata only (no raw data or personal identifiers)
-                        </td>
-                      </tr>
-
-                      <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Brevo
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Transactional email delivery
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Email addresses and one-time verification codes
-                        </td>
-                      </tr>
-
-                      <tr>
-                        <td className="px-4 py-2.5 font-medium text-slate-900">
-                          Cloud hosting providers
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Application hosting and request handling
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-600">
-                          Application traffic and operational metadata
-                        </td>
+                      <tr className="bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-900">Cloud hosting provider</td>
+                        <td className="px-4 py-3 text-slate-700">Hosting + request handling</td>
+                        <td className="px-4 py-3 text-slate-700">Operational metadata and application traffic</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-
-                <p className="mt-3 text-[11px] sm:text-xs text-slate-500">
-                  These providers are selected based on their security posture and are
-                  contractually restricted to processing data only on our behalf.
-                </p>
               </section>
 
-              {/* 6. Security */}
-              <section id="security" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  6. Security practices
-                </h2>
+             <section id="retention" className="scroll-mt-28">
+              <h3 className="font-semibold text-slate-900 mb-4 text-base">7) Data Retention and Deletion</h3>
 
-                <p className="mb-4 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                  DataPulse applies reasonable technical and organizational measures designed
-                  to protect data against unauthorized access, alteration, or loss.
+              <div className="space-y-5 text-sm leading-relaxed text-slate-700">
+                <p>
+                  We keep your data only as long as needed to run DataPulse for your account. If you delete something, we remove it from your account.
+                  This section explains exactly what gets deleted and what stays.
                 </p>
 
-                <div className="space-y-4">
-                  {/* Encryption */}
-                  <div className="rounded-md border border-slate-200 bg-white p-4">
-                    <h3 className="mb-1 text-sm font-medium text-slate-900">
-                      Data protection
-                    </h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      Sensitive credentials and connection details are stored in encrypted
-                      form, and passwords are never stored in plain text.
-                    </p>
-                  </div>
-
-                  {/* Sessions */}
-                  <div className="rounded-md border border-slate-200 bg-white p-4">
-                    <h3 className="mb-1 text-sm font-medium text-slate-900">
-                      Session security
-                    </h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      Authentication sessions are managed using secure cookies and short-lived
-                      session identifiers. Users can invalidate active sessions, including
-                      across multiple devices, to protect account access.
-                    </p>
-                  </div>
-
-                  {/* Monitoring */}
-                  <div className="rounded-md border border-slate-200 bg-white p-4">
-                    <h3 className="mb-1 text-sm font-medium text-slate-900">
-                      Account activity monitoring
-                    </h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      Login activity is recorded with timestamps, IP address, and basic device
-                      information to help detect unusual or unauthorized access.
-                    </p>
-                  </div>
-
-                  {/* Destructive actions */}
-                  <div className="rounded-md border border-slate-200 bg-white p-4">
-                    <h3 className="mb-1 text-sm font-medium text-slate-900">
-                      Protection against accidental actions
-                    </h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      Destructive actions, such as workspace deletion, require additional
-                      confirmation steps to help prevent unintended data loss.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-
-              {/* 7. Terms of Service */}
-              <section id="terms" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  7. Terms of service
-                </h2>
-
-                <p className="mb-4 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                  By accessing or using DataPulse, you agree to comply with the terms outlined
-                  below. These terms are intended to ensure fair use, platform stability,
-                  and a safe experience for all users.
-                </p>
-
-                {/* 7.1 Usage limits */}
-                <div className="mt-5">
-                  <h3 className="mb-2 text-sm font-medium text-slate-900">
-                    7.1 Usage limits (free tier)
-                  </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    DataPulse is currently offered as a free service. To ensure fair usage,
-                    platform stability, and consistent performance, the following limits apply
-                    to each workspace:
+                <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                  <h4 className="font-semibold text-slate-900 mb-2">7.1 If you delete a single upload</h4>
+                  <p className="text-slate-700">
+                    If you delete one uploaded file (example: a CSV you uploaded or a file created from API/DB polling),
+                    we remove it from your workspace and delete the stored file (if available).
                   </p>
 
-                  <ul className="mt-2 list-disc list-inside space-y-1 text-sm text-slate-600">
-                    <li>
-                      Up to <span className="font-medium text-slate-800">3 workspaces</span> per user.
-                    </li>
-                    <li>
-                      Up to <span className="font-medium text-slate-800">2 additional members</span> per workspace.
-                    </li>
-                    <li>
-                      Up to <span className="font-medium text-slate-800">10 active Smart alerts</span> per workspace.
-                    </li>
-                    <li>
-                      Up to <span className="font-medium text-slate-800">100 monitored data sources</span>{" "}
-                      per workspace, including CSV uploads, API endpoints, and database connections.
-                    </li>
-                    <li>
-                      Monitoring operations (such as polling APIs or databases) are limited to{" "}
-                      <span className="font-medium text-slate-800">100 executions</span> per workspace.
-                    </li>
+                  <ul className="list-disc list-inside text-slate-700 space-y-1 ml-2 mt-3">
+                    <li>the upload entry is removed from our database</li>
+                    <li>the actual file is removed from storage (if it exists)</li>
+                    <li>your workspace will still stay active</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                  <h4 className="font-semibold text-slate-900 mb-2">7.2 If you delete a workspace</h4>
+                  <p className="text-slate-700">
+                    A workspace is like a folder. If you delete a workspace, everything inside it is also removed.
+                  </p>
+
+                  <ul className="list-disc list-inside text-slate-700 space-y-1 ml-2 mt-3">
+                    <li>all uploads inside that workspace are deleted</li>
+                    <li>all files saved for that workspace are deleted from storage</li>
+                    <li>alerts, notifications, and workspace settings are deleted</li>
                   </ul>
 
-                  <p className="mt-2 text-xs text-slate-500">
-                    Users may remove existing data sources or alerts to add new ones within these limits.
-                    Limits may change over time as the platform evolves.
+                  <p className="text-slate-700 mt-3">
+                    Deleted workspaces stay in Trash for up to <strong>30 days</strong>. After that, they are permanently deleted.
                   </p>
                 </div>
 
-
-                {/* 7.2 Acceptable use */}
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-medium text-slate-900">
-                    7.2 Acceptable use
-                  </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    You agree to use DataPulse only for lawful purposes. You must not attempt
-                    to disrupt the service, introduce malicious code, access systems without
-                    authorization, or misuse the platform in a way that could harm other users
-                    or the service itself.
-                  </p>
-                </div>
-
-                {/* 7.3 Eligibility */}
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-medium text-slate-900">
-                    7.3 Eligibility
-                  </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    You must be at least <span className="font-medium text-slate-800">13 years old</span>
-                    to use DataPulse. By using the service, you confirm that you meet this requirement
-                    and are capable of understanding and complying with these terms.
-                  </p>
-                </div>
-              </section>
-
-
-              {/* 8. Limitation of Liability */}
-              <section id="liability" className="scroll-mt-28">
-                <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                  8. Limitation of liability
-                </h2>
-
-                <div className="space-y-4 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                  <p>
-                    DataPulse is provided on an <span className="font-medium text-slate-800">“as is”</span> and{" "}
-                    <span className="font-medium text-slate-800">“as available”</span> basis.
-                    We do not guarantee that the service will be uninterrupted, error-free,
-                    or meet your specific requirements.
+                <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                  <h4 className="font-semibold text-slate-900 mb-2">7.3 If you delete your account</h4>
+                  <p className="text-slate-700">
+                    If you delete your account, your DataPulse identity and everything you own are deleted.
                   </p>
 
-                  <p>
-                    To the extent permitted by applicable law, DataPulse and its operators
-                    disclaim all warranties, whether express or implied, including implied
-                    warranties of merchantability, fitness for a particular purpose, and
-                    non-infringement.
-                  </p>
-
-                  <p>
-                    To the maximum extent permitted by law, DataPulse and its creators will
-                    not be liable for any indirect, incidental, special, consequential, or
-                    punitive damages, including loss of data, loss of profits, or service
-                    interruption, arising out of or related to your use of the service.
-                  </p>
-                </div>
-              </section>
-
-
-               {/* 9. Data Retention and Deletion */}
-                <section id="retention" className="scroll-mt-28">
-                  <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                    9. Data retention and deletion
-                  </h2>
-
-                  <p className="max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                    DataPulse keeps your data only for as long as it is needed to run the service,
-                     keep your account secure, and meet legal requirements.
-                  </p>
-
-                  <ul className="font-manrope mt-3 space-y-2 text-sm sm:text-base text-slate-600 leading-relaxed list-disc list-inside">
-                    <li>
-                      When a workspace is deleted, it is kept for up to{" "}
-                      <span className="font-manrope text-slate-800">30 days</span> to allow recovery
-                      in case of accidental deletion.
-                    </li>
-                    <li>
-                      After this recovery period, the workspace and all related data are permanently
-                      removed.
-                    </li>
-                    <li>
-                      You may request{" "}
-                      <span className="font-manrope text-slate-800">full account deletion</span> at
-                      any time. Once confirmed, your personal details, login information, and linked
-                      sign-in methods (such as Google or GitHub) are permanently erased.
-                    </li>
-                    <li>
-                      We require an extra verification step before deleting an account to help
-                      prevent accidental or unauthorized removal.
-                    </li>
-                    <li>
-                      Security activity records are kept only for a short time and are automatically
-                      removed as they are no longer needed.
-                    </li>
-                    <li>
-                      You have the{" "}
-                      <span className="font-manrope text-slate-800">right to export your data</span>.
-                      Data can be downloaded{" "}
-                      <span className="font-manrope text-slate-800">per workspace</span> that you choose,
-                      including workspace configuration, schemas, and uploaded files, from the{" "}
-                      <span className="font-manrope text-slate-800">Account</span> page for backup or
-                      migration purposes.
-                    </li>
+                  <ul className="list-disc list-inside text-slate-700 space-y-1 ml-2 mt-3">
+                    <li>your account details are removed</li>
+                    <li>all workspaces you own are deleted</li>
+                    <li>all uploads and stored files are deleted</li>
                   </ul>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Some basic system records may be kept briefly to maintain security and service
-                    stability, after which they are automatically removed.
+
+                  <p className="text-slate-700 mt-3">
+                    Some security logs may be kept for a short time to prevent abuse and protect the platform,
+                    and then removed.
                   </p>
-                </section>
-                  
-                  {/* 10. Changes to This Policy */}
-                    <section id="changes" className="scroll-mt-28">
-                      <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                        10. Changes to this policy
-                      </h2>
+                </div>
+              </div>
+            </section>
 
-                      <p className="max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                        DataPulse may update these terms and privacy practices from time to time
-                        to reflect changes in the platform, legal requirements, or operational
-                        needs.
-                      </p>
 
-                      <p className="mt-2 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                        When changes are made, the updated version will be published on this page
-                        with a revised effective date. Continued use of the service after changes
-                        take effect constitutes acceptance of the updated terms.
-                      </p>
-                    </section>
+             <section id="security" className="scroll-mt-28">
+              <h3 className="font-semibold text-slate-900 mb-4 text-base">8) Security</h3>
 
-                    {/* 11. Contact & Jurisdiction */}
-                <section id="contact" className="scroll-mt-28">
-                  <h2 className="mb-3 text-base sm:text-lg font-semibold text-slate-900">
-                    11. Contact and jurisdiction
-                  </h2>
+              <div className="space-y-4 text-sm leading-relaxed text-slate-700">
+                <p>
+                  We take security seriously and we try to keep your account and your files protected. We use standard protections
+                  to reduce the risk of unauthorized access or data loss.
+                </p>
 
-                  <p className="mb-4 max-w-3xl text-sm sm:text-base text-slate-600 leading-relaxed">
-                    If you have questions about these terms, privacy practices, data deletion
-                    requests, or security concerns, you can contact us using the details below.
+                <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                  <h4 className="font-semibold text-slate-900 mb-2">How we protect your data</h4>
+
+                  <p className="text-slate-700">
+                    Your password is never stored as plain text. Your account actions are protected behind login checks. Your workspaces
+                    are only accessible to you and the team members you add.
                   </p>
 
-                  <div className="mb-6">
-                    <a
-                      href="mailto:datapulseapp@gmail.com"
-                      className="inline-block text-sm sm:text-base font-medium text-slate-900 border-b border-slate-300 hover:border-slate-900 transition-colors"
-                    >
+                  <p className="text-slate-700 mt-3">
+                    Your uploaded files are stored in private storage, and downloads are provided using temporary links to reduce misuse.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h4 className="font-semibold text-slate-900 mb-2">Limits for platform stability</h4>
+
+                  <p className="text-slate-700">
+                    To keep the app fast and stable (especially on the free plan), we may apply limits like file size limits, row limits,
+                    and upload limits per workspace.
+                  </p>
+                </div>
+
+                <p className="text-slate-700">
+                  No system can guarantee perfect security. If you believe your account is compromised, contact{" "}
+                  <a href="mailto:datapulseapp@gmail.com" className="font-medium hover:underline">
+                    datapulseapp@gmail.com
+                  </a>
+                  .
+                </p>
+              </div>
+            </section>
+
+
+              <section id="changes-privacy" className="scroll-mt-28">
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">9) Changes to This Policy</h3>
+                <p className="text-sm text-slate-700">
+                  We may update this Privacy Policy as DataPulse evolves. If changes are made, the revised version will be published on this page with an updated effective date. Continued use after the update means you accept the new version.
+                </p>
+              </section>
+
+              <section id="contact-privacy" className="scroll-mt-28">
+                <h3 className="font-semibold text-slate-900 mb-4 text-base">10) Contact</h3>
+                <p className="text-sm text-slate-700 mb-2">For privacy questions, data export requests, or deletion requests:</p>
+                <p className="text-sm text-slate-700">
+                  <strong className="text-slate-900">
+                    <a href="mailto:datapulseapp@gmail.com" className="hover:underline">
                       datapulseapp@gmail.com
                     </a>
-                  </div>
+                  </strong>
+                </p>
+              </section>
 
-                  <div className="max-w-3xl text-sm text-slate-500 leading-relaxed">
-                    <p className="font-medium text-slate-700 mb-1">
-                      Governing law
-                    </p>
+
+              <div className="border-t border-slate-200 pt-12 mt-16">
+                <h2 className="text-2xl font-bold text-slate-900 mb-6">Terms of Service</h2>
+
+                <section id="tos-acceptance" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">1) Acceptance of Terms</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    By using DataPulse, you agree to these Terms of Service. If you do not agree with these terms, please stop using the platform.
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                    These terms apply to all users, including workspace owners and team members.
+                  </p>
+                </section>
+
+                <section id="what-provided" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">2) What DataPulse Provides</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    DataPulse helps you track and understand changes in your datasets over time. You can upload files, connect data sources, and view simple summaries and checks.
+                  </p>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    Features may include:
+                  </p>
+
+                  <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
+                    <li>uploading CSV files and viewing upload history</li>
+                    <li>polling APIs and turning responses into datasets</li>
+                    <li>polling PostgreSQL databases using read-only queries</li>
+                    <li>schema change detection between uploads</li>
+                    <li>basic dataset quality checks (missing values, duplicates)</li>
+                    <li>alerts and notifications when changes happen</li>
+                    <li>workspace-level export and download tools</li>
+                  </ul>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                    DataPulse is designed for learning, monitoring, and small team usage. It is not a replacement for enterprise backup systems.
+                  </p>
+                </section>
+
+                <section id="account-access" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">3) Account and Access</h3>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    You are responsible for keeping your account safe. Please do not share your password, login links, or access tokens with anyone.
+                  </p>
+
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    If you are invited into a workspace as a team member, you should only access data you are authorized to view.
+                    Workspace owners control who can access a workspace and what actions team members are allowed to perform.
+                  </p>
+                </section>
+
+                <section id="data-sources" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">4) Data Source Rules</h3>
+
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <h4 className="font-semibold text-slate-900 mb-2">4.1 API sources</h4>
+                      <p className="text-slate-700 leading-relaxed">
+                        If you connect an API to DataPulse, you must have permission to access and use that data.
+                        You are responsible for ensuring that the API credentials you provide are valid and allowed for your use.
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-slate-900 mb-2">4.2 Database sources</h4>
+                      <p className="text-slate-700 leading-relaxed mb-2">
+                        If you connect a PostgreSQL database, DataPulse only supports read-only queries. This is done to protect your database
+                        and avoid accidental data loss.
+                      </p>
+                      <p className="text-slate-700 leading-relaxed">
+                        If unsafe database input is detected, DataPulse may block the query and temporarily disable polling for safety.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="usage-limits" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">
+                    5) Usage Limits (Free Tier)
+                  </h3>
+
+                  <div className="space-y-4 text-sm leading-relaxed text-slate-700">
                     <p>
-                      These terms and any disputes arising from the use of DataPulse shall be
-                      governed by and construed in accordance with the laws of
-                      <span className="font-medium text-slate-700">
-                        {" "}India
-                      </span>.
+                      DataPulse is currently offered as a free product. To keep the platform fast and stable for everyone, we apply fair
+                      usage limits.
+                    </p>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                      <p className="font-semibold text-slate-900 mb-2">Your current free limits</p>
+
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>
+                          Up to <strong>3 workspaces</strong> per account
+                        </li>
+                        <li>
+                          Up to <strong>2 team members</strong> per workspace
+                        </li>
+                        <li>
+                          Up to <strong>50 saved uploads</strong> per workspace
+                        </li>
+                        <li>
+                          CSV upload size limit: <strong>5MB</strong> per file
+                        </li>
+                        <li>
+                          Database polling query limit: <strong>25,000 rows</strong> per run
+                        </li>
+                      </ul>
+
+                      <p className="mt-3 text-slate-700">
+                        If you hit a limit, you can delete older uploads and continue using the workspace.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                      <p className="font-semibold text-slate-900 mb-2">Polling limits</p>
+                      <p>
+                        Polling (automatic refresh) depends on the interval you select. You can choose:
+                        <strong> 30 minutes</strong>, <strong>1 hour</strong>, <strong>3 hours</strong>, <strong>12 hours</strong>, or{" "}
+                        <strong>1 day</strong>.
+                      </p>
+                      <p className="mt-2">
+                        If polling causes repeated failures (for example: invalid API key, unreachable database, or unsafe query), we may
+                        temporarily disable polling for that workspace to prevent system overload.
+                      </p>
+                    </div>
+
+                    <p className="text-slate-700">
+                      These limits may change over time based on infrastructure costs and product updates. If we change the limits, we
+                      will update this page.
                     </p>
                   </div>
                 </section>
+
+
+                <section id="acceptable-use" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">6) Acceptable Use</h3>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    You agree to use DataPulse in a responsible and lawful way. You must not misuse the platform or attempt to harm it.
+                  </p>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    Examples of behavior that is not allowed:
+                  </p>
+
+                  <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
+                    <li>abusing polling features to generate excessive traffic</li>
+                    <li>trying to access workspaces that you do not own or belong to</li>
+                    <li>attempting to overload the service intentionally</li>
+                    <li>uploading harmful files or malicious content</li>
+                    <li>using DataPulse to violate laws or third-party rights</li>
+                  </ul>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                    If misuse is detected, we may restrict access or suspend accounts to protect the platform.
+                  </p>
+                </section>
+
+                <section id="availability" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">7) Availability and Reliability</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    DataPulse is provided on an "as is" and "as available" basis. We work to keep the product stable, but we do not guarantee
+                    uninterrupted service, error-free results, or continuous uptime.
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                    This is especially important for external sources like APIs and databases, where failures can happen due to network issues,
+                    provider downtime, or invalid credentials.
+                  </p>
+                </section>
+
+                <section id="export" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">8) Export and Downloads</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    DataPulse allows you to download your workspace data and related exports. Once you download a file to your device,
+                    you are responsible for storing it safely.
+                  </p>
+                </section>
+
+                <section id="deletion" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">9) Deletion and Removal</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    You can delete uploads, workspaces, and your account from inside the platform. Some deletions may be permanent and cannot be undone.
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                    Please review actions carefully before confirming deletions. DataPulse is not responsible for data loss caused by user deletion actions.
+                  </p>
+                </section>
+
+                <section id="liability" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">10) Limitation of Liability</h3>
+
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    To the maximum extent permitted by applicable law:
+                  </p>
+
+                  <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
+                    <li>DataPulse and its operators are not responsible for indirect, special, or consequential damages</li>
+                    <li>we are not responsible for failures of third-party services (APIs, databases, hosting, network issues)</li>
+                    <li>we are not responsible for loss of data caused by external factors or user actions</li>
+                  </ul>
+                </section>
+
+                <section id="changes-terms" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">11) Changes to These Terms</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    We may update these Terms over time. The latest version will always be available on this page with an updated effective date.
+                    If you continue using DataPulse after an update, it means you accept the updated terms.
+                  </p>
+                </section>
+
+                <section id="governing" className="scroll-mt-28 mb-8">
+                  <h3 className="font-semibold text-slate-900 mb-4 text-base">12) Governing Law and Contact</h3>
+                  <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                    These Terms are governed by the laws of India.
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    For support or legal issues:{" "}
+                    <a href="mailto:datapulseapp@gmail.com" className="text-slate-900 font-medium hover:underline">
+                      datapulseapp@gmail.com
+                    </a>
+                  </p>
+                </section>
+              </div>
+
+
             </div>
           </div>
         </div>
-        <p className="mt-10 text-center text-[11px] text-slate-400">
-            Last updated: January 3, 2026
-        </p>
+
+        <div className="mt-16 pt-8 border-t border-slate-200 text-center text-sm text-slate-600">
+          <p className="mb-2">Last updated: January 23, 2026</p>
+          <p className="text-xs text-slate-500">© 2026 DataPulse. All rights reserved.</p>
+        </div>
       </main>
 
-      {/* --- Footer --- */}
-     <footer className="mt-20 border-t border-slate-200 bg-white print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-            
-            {/* Left */}
-            <p>
-              © 2026 <span className="font-medium text-slate-700">DataPulse</span>. All rights reserved.
-            </p>
-
-            {/* Center links */}
-            <div className="flex items-center gap-4">
-              <a href="/legal#intro" className="hover:text-slate-900 transition-colors">
-                Legal
-              </a>
-              <a href="/legal#terms" className="hover:text-slate-900 transition-colors">
-                Terms
-              </a>
-              <a href="/legal#contact" className="hover:text-slate-900 transition-colors">
-                Contact
-              </a>
+      <footer className="mt-16 border-t border-slate-200 print:hidden bg-slate-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm">
+            <div>
+              <p className="font-semibold text-slate-900 mb-1">DataPulse</p>
+              <p className="text-slate-600">Data monitoring & schema analysis</p>
             </div>
-
-            {/* Right */}
-            <p className="text-center sm:text-right">
-              Educational project by{" "}
-              <span className="text-slate-600">Subhash Yaganti</span> &{" "}
-              <span className="text-slate-600">Siri Mahalaxmi Vemula</span>
-            </p>
-            
+            <div>
+              <p className="font-semibold text-slate-900 mb-2">Documentation</p>
+              <div className="space-y-1">
+                <a href="#intro" className="block text-slate-600 hover:text-slate-900 transition-colors">Privacy Policy</a>
+                <a href="#tos-acceptance" className="block text-slate-600 hover:text-slate-900 transition-colors">Terms of Service</a>
+              </div>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900 mb-2">Contact</p>
+              <a href="mailto:datapulseapp@gmail.com" className="text-slate-600 hover:text-slate-900 transition-colors">datapulseapp@gmail.com</a>
+            </div>
+          </div>
+          <div className="mt-6 pt-6 border-t border-slate-200 text-center text-xs text-slate-500">
+            <p>Educational project by Subhash Yaganti & Siri Mahalaxmi Vemula</p>
           </div>
         </div>
       </footer>
@@ -888,3 +839,5 @@ export const Legal: React.FC = () => {
     </div>
   );
 };
+
+export default Legal;
