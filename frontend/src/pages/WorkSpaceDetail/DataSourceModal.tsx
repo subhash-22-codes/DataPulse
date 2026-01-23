@@ -321,7 +321,7 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
                                                 <span>Click to upload</span>
                                                 <input id="file-upload-input" name="file-upload" type="file" className="sr-only" accept=".csv" onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)} />
                                             </label>
-                                            <p className="text-xs text-slate-500">or drag and drop CSV (Max 10MB)</p>
+                                            <p className="text-xs text-slate-500">or drag and drop CSV (Max 5MB)</p>
                                         </div>
                                     </div>
                                 </div>
