@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 import google.generativeai as genai
 import pytz
 import operator 
@@ -32,6 +33,8 @@ from sqlalchemy.exc import OperationalError, InterfaceError
 from app.services.data_quality import analyze_dataframe_quality
 from app.services.storage_service import download_file_bytes
 from app.services.storage_service import upload_csv_bytes
+from app.services.upload_limits import is_workspace_upload_limit_reached
+
 
 
 
@@ -528,7 +531,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             db2.close()
         return
 
-   # 5) DB: write upload + update workspace fast, then CLOSE DB
+    # 5) DB: write upload + update workspace fast, then CLOSE DB
     db3: Session = SessionLocal()
     try:
         workspace2 = (
@@ -540,17 +543,33 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         if not workspace2 or not workspace2.is_polling_active:
             return
 
+        
+        if is_workspace_upload_limit_reached(db3, workspace2.id):
+            db4: Session = SessionLocal()
+            try:
+                kill_poller(
+                    db4,
+                    workspace_id,
+                    user_message="Upload limit reached (50 files). Please delete old files to continue polling.",
+                    internal_reason="Hard Fail: Upload limit reached (50)",
+                    is_hard_fail=True,
+                    loop=loop,
+                )
+            finally:
+                db4.close()
+            return
+
         csv_bytes = csv_content.encode("utf-8")
 
         new_upload = DataUpload(
             workspace_id=workspace2.id,
             file_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_api.csv",
-            file_content=None, 
+            file_content=None,
             upload_type="api_poll",
             file_size_bytes=len(csv_bytes),
         )
         db3.add(new_upload)
-        db3.flush()  
+        db3.flush()
 
         storage_path = f"workspaces/{workspace2.id}/uploads/{new_upload.id}.csv"
 
@@ -594,7 +613,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
     finally:
         db3.close()
-
 
     # 6) Kick CSV processing AFTER DB is closed
     try:
@@ -817,6 +835,17 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 loop=loop,
             )
             return
+        
+        if is_workspace_upload_limit_reached(db, workspace.id):
+            kill_poller(
+                db,
+                workspace_id,
+                user_message="Upload limit reached (50 files). Please delete old files to continue polling.",
+                internal_reason="Hard Fail: Upload limit reached (50)",
+                is_hard_fail=True,
+                loop=loop,
+            )
+            return
 
         # ✅ Store as CSV upload
         csv_content = df.to_csv(index=False)
@@ -916,7 +945,7 @@ def schedule_data_fetches() -> None:
             return
 
         triggered_count = 0
-        buffer = timedelta(seconds=240)
+        buffer = timedelta(seconds=180)
 
         for ws in workspaces:
             try:
@@ -1018,16 +1047,18 @@ def clean_nan(obj):
     return obj
 
 def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
-
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
+
     workspace_id_str = None
     status_message = "job_error"
     new_notifications_created = False
-    
+
     # SAFE LIMIT: Prevent OOM on Render Free Tier (512MB)
-    MAX_ROWS = 25000 
-    
+    MAX_ROWS = 25000
+
+    users_to_notify = []  # prevent UnboundLocalError
+
     try:
         current_upload = db.query(DataUpload).filter(DataUpload.id == upload_id).first()
         if not current_upload:
@@ -1036,72 +1067,115 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
         workspace_id_str = str(current_upload.workspace_id)
 
-        csv_content = None
+        # ==========================================================
+        # 1) LOAD CSV BYTES
+        # ==========================================================
+        csv_bytes: bytes | None = None
 
-        # ✅ NEW: prefer Supabase Storage
         if current_upload.storage_path:
             try:
-                file_bytes = download_file_bytes(current_upload.storage_path)
-                csv_content = file_bytes.decode("utf-8")
-                del file_bytes
+                csv_bytes = download_file_bytes(current_upload.storage_path)
             except Exception as e:
-                logger.error(f"❌ [WORKER] Failed to download CSV from storage: {e}")
+                logger.error(f"❌ [WORKER] Failed to download CSV from storage: {e}", exc_info=True)
                 return
 
-        # ✅ fallback for old uploads (still stored in DB)
-        if not csv_content:
-            csv_content = current_upload.file_content
+        # fallback for old uploads (still stored in DB)
+        if csv_bytes is None and current_upload.file_content:
+            try:
+                csv_bytes = current_upload.file_content.encode("utf-8")
+            except Exception as e:
+                logger.error(f"❌ [WORKER] Failed to encode DB CSV content: {e}", exc_info=True)
+                return
 
-        if not csv_content:
+        if not csv_bytes:
             logger.warning(f"[WORKER] No CSV content found for upload {upload_id}.")
             return
 
-
-        original_row_count = 0
+        # ==========================================================
+        # 2) PARSE CSV (row cap for RAM safety)
+        # ==========================================================
         is_truncated = False
+
         try:
-            # 🛡️ THE ROW BOUNCER: Only read first 25k rows to protect RAM
-            df = pd.read_csv(StringIO(csv_content), nrows=MAX_ROWS + 1)
-            original_row_count = len(df)
-            
-            if original_row_count > MAX_ROWS:
+            df = pd.read_csv(BytesIO(csv_bytes), nrows=MAX_ROWS + 1)
+            del csv_bytes
+
+            if len(df) > MAX_ROWS:
                 is_truncated = True
                 logger.warning(f"⚠️ [WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
                 df = df.head(MAX_ROWS)
 
+            # ✅ safer conversion (no deprecated errors="ignore")
             for col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='ignore')
-                
+                try:
+                    df[col] = pd.to_numeric(df[col])
+                except Exception:
+                    # keep original as-is (string/object/etc)
+                    pass
+
         except Exception as e:
-            logger.error(f"❌ Failed to parse CSV: {e}")
+            logger.error(f"❌ Failed to parse CSV: {e}", exc_info=True)
             status_message = "job_error"
-            return {"status": "error"}
+            return {"status": "error", "message": "Failed to parse CSV"}
 
+        # ==========================================================
+        # 3) SCHEMA + ROW COUNT CHANGE DETECTION
+        # ==========================================================
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
-        new_row_count = len(df)
-        
-        previous_upload = db.query(DataUpload).filter(
-            DataUpload.workspace_id == current_upload.workspace_id, 
-            DataUpload.upload_type == current_upload.upload_type, 
-            DataUpload.id != current_upload.id
-        ).order_by(DataUpload.uploaded_at.desc()).first()
-        
-        schema_has_changed, row_count_has_changed = False, False
-        new_cols, old_cols = set(new_schema.keys()), set()
-        old_row_count = 0
-        
-        if previous_upload and previous_upload.analysis_results:
-            if previous_upload.upload_type == current_upload.upload_type:
-                old_schema = previous_upload.schema_info or {}
-                old_cols = set(old_schema.keys())
-                
-                if old_cols != new_cols: 
-                    schema_has_changed = True
-                
-                old_row_count = previous_upload.analysis_results.get("row_count", 0)
-                if old_row_count != new_row_count: 
-                    row_count_has_changed = True
+        new_row_count = int(len(df))
+        new_col_count = int(len(df.columns))
 
+        previous_upload = (
+            db.query(DataUpload)
+            .filter(
+                DataUpload.workspace_id == current_upload.workspace_id,
+                DataUpload.upload_type == current_upload.upload_type,
+                DataUpload.id != current_upload.id,
+            )
+            .order_by(DataUpload.uploaded_at.desc())
+            .first()
+        )
+
+        schema_has_changed = False
+        row_count_has_changed = False
+        col_count_has_changed = False
+
+        new_cols = set(new_schema.keys())
+        old_cols = set()
+        old_row_count = 0
+        old_col_count = 0
+
+        if previous_upload:
+            old_schema = previous_upload.schema_info or {}
+            old_cols = set(old_schema.keys())
+
+            if old_cols != new_cols:
+                schema_has_changed = True
+
+            try:
+                old_row_count = int((previous_upload.analysis_results or {}).get("row_count", 0))
+            except Exception:
+                old_row_count = 0
+
+            try:
+                old_col_count = int((previous_upload.analysis_results or {}).get("column_count", 0))
+            except Exception:
+                old_col_count = 0
+
+            if old_row_count != new_row_count:
+                row_count_has_changed = True
+
+            if old_col_count != new_col_count:
+                col_count_has_changed = True
+
+        schema_changes_dict = {
+            "added": sorted(list(new_cols - old_cols)),
+            "removed": sorted(list(old_cols - new_cols)),
+        }
+
+        # ==========================================================
+        # 4) STATS + QUALITY
+        # ==========================================================
         num_df = df.select_dtypes(include="number")
 
         if num_df.shape[1] > 0:
@@ -1114,95 +1188,108 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         quality_report, insights = analyze_dataframe_quality(df)
 
         analysis_results = {
-            "row_count": new_row_count, 
-            "column_count": len(df.columns), 
+            "row_count": new_row_count,
+            "column_count": new_col_count,
             "summary_stats": summary_stats,
             "is_truncated": is_truncated,
             "quality_report": quality_report,
-            "insights": insights 
+            "insights": insights,
+
+            # ✅ extra fields for frontend change summary
+            "previous_row_count": old_row_count,
+            "previous_column_count": old_col_count,
+            "row_count_changed": row_count_has_changed,
+            "column_count_changed": col_count_has_changed,
+            "schema_has_changed": schema_has_changed,
+            "schema_changes": schema_changes_dict,
         }
-        
+
         current_upload.schema_info = new_schema
         current_upload.analysis_results = analysis_results
         current_upload.schema_changed_from_previous = schema_has_changed
-        
-        # RELEASE RAM: Immediately free the dataframe objects before heavy logic
-        del df
-        del stats_df
 
-        # Notifications & Insights
+        # RELEASE RAM
+        del df
+        if "stats_df" in locals():
+            del stats_df
+        del num_df
+
+        # ==========================================================
+        # 5) NOTIFICATIONS + EMAIL + ALERT RULES
+        # ==========================================================
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
-            if schema_has_changed or row_count_has_changed:
+            if schema_has_changed or row_count_has_changed or col_count_has_changed:
                 ai_insight_text = None
-                schema_changes_dict = {}
-                
+
                 if schema_has_changed:
-                    schema_changes_dict = {'added': list(new_cols - old_cols), 'removed': list(old_cols - new_cols)}
                     ai_insight_text = get_ai_insight(schema_changes_dict)
-                
+
                 notification_message = f"Structural change detected in workspace '{workspace.name}'."
-                
-                # Notify all team members
+
+                # Notify all team members + owner
                 users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+
                 for user in users_to_notify:
                     new_notification = Notification(
-                        user_id=user.id, 
-                        workspace_id=workspace.id, 
-                        message=notification_message, 
-                        ai_insight=ai_insight_text
+                        user_id=user.id,
+                        workspace_id=workspace.id,
+                        message=notification_message,
+                        ai_insight=ai_insight_text,
                     )
                     db.add(new_notification)
-                    new_notifications_created = True
-                
+
+                new_notifications_created = True
                 logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications.")
-                
-                # Prepare Email
+
+                # Prepare Email context
                 percent_change = "0%"
                 if old_row_count > 0:
                     percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
-                
-                email_context = { 
-                    "workspace_name": workspace.name, 
-                    "upload_type": current_upload.upload_type, 
-                    "new_file_name": current_upload.file_path, 
-                    "old_file_name": previous_upload.file_path if previous_upload else "N/A", 
+
+                email_context = {
+                    "workspace_name": workspace.name,
+                    "upload_type": current_upload.upload_type,
+                    "new_file_name": current_upload.file_path,
+                    "old_file_name": previous_upload.file_path if previous_upload else "N/A",
                     "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at),
-                    "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email}, 
-                    "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members], 
-                    "ai_insight": ai_insight_text, 
-                    "schema_changes": schema_changes_dict, 
+                    "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email},
+                    "team_info": [{"name": member.name, "email": member.email} for member in workspace.team_members],
+                    "ai_insight": ai_insight_text,
+                    "schema_changes": schema_changes_dict,
                     "metric_changes": {
-                        'old_rows': old_row_count, 
-                        'new_rows': new_row_count, 
-                        'percent_change': percent_change
-                    } if row_count_has_changed else {} 
+                        "old_rows": old_row_count,
+                        "new_rows": new_row_count,
+                        "percent_change": percent_change,
+                        "old_cols": old_col_count,
+                        "new_cols": new_col_count,
+                    },
                 }
-                
+
                 recipients = [user.email for user in users_to_notify]
-                
+
                 logger.info("[WORKER] Scheduling detailed alert email...")
-                # Safe async call
                 run_async_safely(send_detailed_alert_email(recipients, email_context), loop)
 
             # Check Alerts
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
-            
+
         db.commit()
         logger.info(f"💾 [WORKER] Success. Upload {upload_id} committed.")
-        
-        if APP_MODE == "production" and new_notifications_created:
-                for user in users_to_notify:
-                    user_id_str = str(user.id)
 
-                    run_async_safely(
-                        manager.push_to_user(
-                            user_id=user_id_str,
-                            message={"type": "NEW_NOTIFICATION_ALERT"}
-                        ),
-                        loop
-                    )
-                logger.info("📡 [WORKER] Pushed NEW_NOTIFICATION_ALERT signal to affected users.")
+        # Push notification ping (only in prod)
+        if APP_MODE == "production" and new_notifications_created and users_to_notify:
+            for user in users_to_notify:
+                user_id_str = str(user.id)
+
+                run_async_safely(
+                    manager.push_to_user(
+                        user_id=user_id_str,
+                        message={"type": "NEW_NOTIFICATION_ALERT"},
+                    ),
+                    loop,
+                )
+            logger.info("📡 [WORKER] Pushed NEW_NOTIFICATION_ALERT signal to affected users.")
 
         status_message = "job_complete"
         return {"status": "success"}
@@ -1211,24 +1298,27 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         logger.error(f"❌ [WORKER] Processing Error: {e}", exc_info=True)
         status_message = "job_error"
         return {"status": "error", "message": str(e)}
-    
+
     finally:
         if APP_MODE == "production" and workspace_id_str:
-            # Uses status_message dynamically (job_complete OR job_error)
             payload = {
-                "type": status_message, 
-                "workspace_id": workspace_id_str
+                "type": status_message,
+                "workspace_id": workspace_id_str,
             }
             json_message = json.dumps(payload)
 
             logger.info(f"📡 [WORKER] Signaling final state {status_message} for {workspace_id_str}...")
-            
+
             run_async_safely(
                 manager.broadcast_to_workspace(workspace_id_str, json_message),
-                loop
+                loop,
             )
-        
-        db.close()
+
+        try:
+            db.close()
+        except Exception:
+            pass
+
 # =====================
 #  The "OTP Email Chef" 
 # =====================

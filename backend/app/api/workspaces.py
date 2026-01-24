@@ -33,7 +33,7 @@ from app.api.dependencies import get_current_user, limiter
 from app.core.connection_manager import manager
 from app.services.tasks import process_data_fetch_task
 from app.core.guard import send_telegram_alert
-
+from app.services.upload_limits import enforce_upload_limit_or_raise
 # --- Setup ---
 logger = logging.getLogger(__name__)
 APP_MODE = os.getenv("APP_MODE", "development")
@@ -426,7 +426,7 @@ async def upload_csv_for_workspace(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID format")
 
-    # 1. Fetch full ORM Workspace (not partial columns)
+    # 1) Fetch full ORM Workspace
     workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -434,7 +434,9 @@ async def upload_csv_for_workspace(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    # 2. Read CSV bytes (RAM Protection)
+    enforce_upload_limit_or_raise(db, workspace.id) # Check upload limits
+
+    # 2) Read CSV bytes (RAM Protection)
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB Limit
     try:
         file_bytes = await file.read(MAX_FILE_SIZE + 1)
@@ -444,39 +446,37 @@ async def upload_csv_for_workspace(
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read uploaded file")
 
-    # Validate UTF-8 without storing huge string in DB
+    # Validate UTF-8
     try:
         _ = file_bytes.decode("utf-8")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
 
-    # 3. Create DataUpload row first (so we have upload_id)
+    # 3) Create DataUpload row first
     new_upload = DataUpload(
         workspace_id=workspace.id,
         file_path=file.filename,
-        file_content=None,  # ✅ don't store raw CSV in Postgres anymore
+        file_content=None,
         upload_type="manual",
         file_size_bytes=len(file_bytes),
     )
 
     db.add(new_upload)
-    db.flush()  # ensures new_upload.id exists
+    db.flush()
 
-    # 4. Upload file to Supabase Storage
+    # 4) Upload file to Supabase Storage
     storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
 
     try:
         upload_csv_bytes(storage_path, file_bytes)
     except Exception as e:
-        # rollback upload creation if storage fails
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
 
-    # save storage path in DB
     new_upload.storage_path = storage_path
-    new_upload.file_url = None  # private bucket, so no public url
+    new_upload.file_url = None
 
-    # 5. ORM-safe workspace update
+    # 5) Workspace update
     workspace.data_source = "CSV"
     workspace.is_polling_active = False
 
@@ -485,7 +485,7 @@ async def upload_csv_for_workspace(
 
     task_id = str(new_upload.id)
 
-    # 6. Background task dispatch
+    # 6) Background task dispatch
     if APP_MODE == "production":
         loop = asyncio.get_event_loop()
         background_tasks.add_task(process_csv_task, task_id, loop)
@@ -498,6 +498,7 @@ async def upload_csv_for_workspace(
         "task_id": task_id,
         "message": "File upload successful, processing started."
     }
+
 
 #  Endpoint to get a workspace's upload history ---
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
