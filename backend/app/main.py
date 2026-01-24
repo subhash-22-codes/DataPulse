@@ -26,7 +26,7 @@ from app.core.guard import send_telegram_alert
 setup_logging()
 logger = logging.getLogger(__name__)
 
-
+APP_MODE_LOCAL = os.getenv("MODE_LOCAL")
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 origins = [
@@ -79,7 +79,8 @@ async def lifespan(app: FastAPI):
 
     if os.getenv("APP_MODE") == "production":
         logger.info("Application starting in PRODUCTION mode.")
-        asyncio.create_task(send_telegram_alert("🚀 System Online: DataPulse (Production)"))
+        if not APP_MODE_LOCAL:
+            asyncio.create_task(send_telegram_alert("🚀 System Online: DataPulse (Production)"))
 
         enable_scheduler = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
 
