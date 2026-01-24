@@ -3,6 +3,7 @@ import { api } from "../../services/api";
 import { Dialog, Transition, RadioGroup, Switch } from '@headlessui/react';
 import { CheckCircle2, Loader2, UploadCloud, X, Database, Globe, FileText,User, Key, BookOpen, Lock, Activity, FileSpreadsheet,AlertTriangle, Clock } from "lucide-react";
 import { Workspace } from "../../types";
+import axios from "axios";
 import toast from 'react-hot-toast';
 interface DataSourceModalProps {
   isOpen: boolean;
@@ -174,49 +175,68 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     }
   };
   
-    const handleCsvUpload = async () => {
-      if (!selectedFile) return toast.error("Please select a CSV file to upload.");
 
-      // --- 🛡️ THE RENDER PROTECTOR ---
-      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-      if (selectedFile.size > MAX_FILE_SIZE) {
-        return toast.error("File is too large! Maximum limit is 5MB.", {
-          style: { fontSize: '13px', background: '#991b1b', color: '#fff' }
-        });
+const handleCsvUpload = async () => {
+  if (!selectedFile) return toast.error("Please select a CSV file to upload.");
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  if (selectedFile.size > MAX_FILE_SIZE) {
+    return toast.error("File is too large! Maximum limit is 5MB.", {
+      style: { fontSize: "13px", background: "#991b1b", color: "#fff" },
+    });
+  }
+
+  setIsSaving(true);
+
+  const formData = new FormData();
+  formData.append("file", selectedFile);
+
+  try {
+    await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    onUploadStart();
+
+    const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, {
+      data_source: "CSV",
+      is_polling_active: false,
+    });
+
+    onUpdate(res.data);
+
+    toast.success("Upload successful!", {
+      style: { fontSize: "13px", background: "#334155", color: "#fff" },
+    });
+
+    setIsOpen(false);
+  } catch (err) {
+    console.error(err);
+
+    // ✅ Extract real backend message (FastAPI gives { detail: "..." })
+    let msg = "File upload failed.";
+
+    if (axios.isAxiosError(err)) {
+      const detail = err.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail) && detail[0]?.msg) {
+        // validation errors sometimes come like this
+        msg = detail[0].msg;
+      } else if (err.response?.status === 413) {
+        msg = "File too large. Max 5MB.";
       }
+    }
 
-      setIsSaving(true);
-      const formData = new FormData();
-      formData.append("file", selectedFile);
+    toast.error(msg, {
+      style: { fontSize: "13px", background: "#991b1b", color: "#fff" },
+    });
+  } finally {
+    setIsSaving(false);
+  }
+};
 
-      try {
-        // 1. Upload the file
-        await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-
-        onUploadStart();
-
-        // 2. Set the data source and stop polling (since CSV is static)
-        const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, { 
-          data_source: 'CSV', 
-          is_polling_active: false 
-        });
-
-        onUpdate(res.data);
-        
-        toast.success("Upload successful!", { 
-          style: { fontSize: '13px', background: '#334155', color: '#fff' }
-        });
-        
-        setIsOpen(false);
-      } catch (error) {
-        console.error(error);
-        toast.error("File upload failed.");
-      } finally {
-        setIsSaving(false);
-      }
-  };
 
   const dataSourceOptions = [
     { value: "CSV", label: "CSV Upload", description: "Static file ingestion", icon: FileSpreadsheet },

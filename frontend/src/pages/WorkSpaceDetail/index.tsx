@@ -55,140 +55,136 @@ const WorkspaceDetail: React.FC = () => {
     if (id) fetchWorkspace();
   }, [id, fetchWorkspace]); 
 
-  // ---------------------------------------------------------
-  // ✅ PRODUCTION-READY WEBSOCKET IMPLEMENTATION
-  // ---------------------------------------------------------
-// ---------------------------------------------------------
-  // ✅ PRODUCTION-READY WEBSOCKET IMPLEMENTATION (HARDENED)
-  // ---------------------------------------------------------
- // 1. Add this Ref at the top of your component (above other states)
-  const socketRef = useRef<WebSocket | null>(null);
 
-  // 2. Updated useEffect block
-  useEffect(() => {
-    // Guard Clause: Requires ID and authenticated user
-    if (!id || !user) return;
+ const socketRef = useRef<WebSocket | null>(null);
 
-    // 🛡️ RE-RENDER GUARD: If a socket is already open or connecting, don't trigger a new one.
-    // This stops the "Double/Triple Connection" spam when React re-renders.
-    if (socketRef.current?.readyState === WebSocket.OPEN || 
-        socketRef.current?.readyState === WebSocket.CONNECTING) return;
+useEffect(() => {
+  if (!id || !user) return;
 
-    let retryTimeout: NodeJS.Timeout;
-    let pingInterval: NodeJS.Timeout;
-    const RECONNECT_DELAY = 3000;
+  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  let pingInterval: ReturnType<typeof setInterval> | null = null;
+  const RECONNECT_DELAY = 3000;
 
-    const connect = () => {
-        // Optimization: Do not connect if the tab is hidden
-        if (document.hidden) return;
+  const startPing = (ws: WebSocket) => {
+    if (pingInterval) clearInterval(pingInterval);
 
-        const isSecure = window.location.protocol === 'https:';
-        const wsProtocol = isSecure ? 'wss' : 'ws';
-        const envWsUrl = import.meta.env.VITE_WS_URL; 
-        
-        let wsUrl: string;
-        // --- 🎯 Path Logic (Preserved exactly) ---
-        if (envWsUrl) {
-            const sanitizedEnvUrl = envWsUrl.replace(/^(ws|wss):\/\//, ''); 
-            wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}`;
-        } else {
-            wsUrl = `${wsProtocol}://${window.location.host}/api/workspaces/${id}/ws/${Date.now()}`;
+    pingInterval = setInterval(() => {
+      if (document.hidden) return; // don't ping in background
+      if (ws.readyState === WebSocket.OPEN) ws.send("ping");
+    }, 30000);
+  };
+
+  const connect = () => {
+    // ✅ Guard inside connect too
+    if (
+      socketRef.current?.readyState === WebSocket.OPEN ||
+      socketRef.current?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
+
+    const isSecure = window.location.protocol === "https:";
+    const wsProtocol = isSecure ? "wss" : "ws";
+    const envWsUrl = import.meta.env.VITE_WS_URL;
+
+    let wsUrl: string;
+    if (envWsUrl) {
+      const sanitizedEnvUrl = envWsUrl.replace(/^(ws|wss):\/\//, "");
+      wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}`;
+    } else {
+      wsUrl = `${wsProtocol}://${window.location.host}/api/workspaces/${id}/ws/${Date.now()}`;
+    }
+
+    console.log(`🔌 Attempting WS Connection: ${wsUrl}`);
+
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("✅ WS Connected Successfully");
+      startPing(ws);
+    };
+
+    ws.onmessage = (event) => {
+      if (event.data === "pong") return;
+
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "job_complete" || data.type === "job_error") {
+          setIsProcessing(false);
+          setRefreshHistoryKey((prev) => prev + 1);
+
+          if (data.type === "job_error") {
+            setWorkspace((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    is_polling_active: false,
+                    last_failure_reason: data.error,
+                  }
+                : null
+            );
+            toast.error(data.error || "Sync failed.");
+          } else {
+            setWorkspace((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    is_polling_active: true,
+                    failure_count: 0,
+                  }
+                : null
+            );
+          }
         }
-
-        console.log(`🔌 Attempting WS Connection: ${wsUrl}`);
-        const ws = new WebSocket(wsUrl);
-        socketRef.current = ws;
-
-        ws.onopen = () => {
-            console.log("✅ WS Connected Successfully");
-            // 🔥 HEARTBEAT: Send a ping every 30s to prevent Render from killing idle connection
-            pingInterval = setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send("ping");
-                }
-            }, 30000);
-        };
-
-        ws.onmessage = (event) => {
-            if (event.data === "pong") return; // Ignore heartbeat responses
-            
-            try {
-                const data = JSON.parse(event.data);
-
-                if (data.type === "job_complete" || data.type === "job_error") {
-                    setIsProcessing(false);
-                    setRefreshHistoryKey((prev) => prev + 1);
-
-                    if (data.type === "job_error") {
-                        setWorkspace((prev) => {
-                            if (!prev) return null;
-                            return {
-                                ...prev,
-                                is_polling_active: false,
-                                last_failure_reason: data.error,
-                            };
-                        });
-                        toast.error(data.error || "Sync failed.");
-                    } else {
-                        // Handle Success
-                        setWorkspace((prev) => {
-                            if (!prev) return null;
-                            return {
-                                ...prev,
-                                is_polling_active: true,
-                                failure_count: 0,
-                            };
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error(err);
-                // Handle non-JSON signals
-                if (event.data === "job_complete" || event.data === "job_error") {
-                    setIsProcessing(false);
-                }
-            }
-        };
-
-        ws.onclose = (e) => {
-            clearInterval(pingInterval);
-            // Don't retry if it was a manual close (code 1000) or tab is hidden
-            if (!document.hidden && e.code !== 1000) {
-                console.log(`🔌 WS Disconnected (${e.code}). Retrying in ${RECONNECT_DELAY}ms...`);
-                retryTimeout = setTimeout(connect, RECONNECT_DELAY);
-            }
-        };
-
-        ws.onerror = (e) => {
-            console.error("🔌 WS Socket Error:", e);
-        };
+      } catch (err) {
+        console.error(err);
+      }
     };
 
-    connect();
+    ws.onclose = (e) => {
+      console.log(`🔌 WS Closed (${e.code})`);
+      if (pingInterval) clearInterval(pingInterval);
 
-    const handleVisibilityChange = () => {
-        if (document.hidden) {
-            socketRef.current?.close(1000, "Tab hidden");
-        } else {
-            connect();
-            setRefreshHistoryKey(k => k + 1); 
-        }
+      socketRef.current = null;
+
+      // ✅ reconnect only if visible and not a clean/manual close
+      if (!document.hidden && e.code !== 1000) {
+        retryTimeout = setTimeout(connect, RECONNECT_DELAY);
+      }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-        // 🧹 ABSOLUTE CLEANUP: Stop all timers and kill connection on unmount
-        socketRef.current?.close(1000, "Component unmount");
-        socketRef.current = null;
-        clearTimeout(retryTimeout);
-        clearInterval(pingInterval);
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
+    ws.onerror = (e) => {
+      console.error("🔌 WS Socket Error:", e);
     };
-    
-  // 🔥 STABILITY FIX: Removed all unstable dependencies.
-  // This effect will ONLY re-run if the Workspace ID or User changes.
-  }, [id, user]);
+  };
+
+  connect();
+
+  const handleVisibilityChange = () => {
+    // ✅ only reconnect if we lost socket
+    if (!document.hidden) {
+      if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED) {
+        connect();
+      }
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return () => {
+    if (retryTimeout) clearTimeout(retryTimeout);
+    if (pingInterval) clearInterval(pingInterval);
+
+    socketRef.current?.close(1000, "Component unmount");
+    socketRef.current = null;
+
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}, [id, user]);
+
+
   const handleHistoryLoaded = useCallback((manualUploads: DataUpload[], scheduledFetches: DataUpload[]) => {
       const allUploads = [...manualUploads, ...scheduledFetches];
       if (allUploads.length === 0) {
