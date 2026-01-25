@@ -2,7 +2,7 @@
 
 import logging
 from fastapi import WebSocket
-from typing import List, Dict
+from typing import List, Dict, Any
 import asyncio
 from starlette.websockets import WebSocketState
 
@@ -50,18 +50,14 @@ class ConnectionManager:
         except ValueError:
             logger.warning(f"WS client already disconnected from {conn_name}: {item_id}")
 
-    async def broadcast_to_workspace(self, workspace_id: str, message: str):
-        """
-        Send a text message to all clients in a workspace.
-        """
+    async def broadcast_to_workspace(self, workspace_id: str, message: dict[str, Any]):
         if workspace_id in self.workspace_connections:
             connections = list(self.workspace_connections[workspace_id])
-            logger.info(f"Broadcasting '{message}' to {len(connections)} clients in workspace {workspace_id}")
-            
-            # 🔥 Corrected: Check if state is CONNECTED before sending to prevent crashes
+            logger.info(f"Broadcasting JSON to {len(connections)} clients in workspace {workspace_id}")
+
             send_tasks = [
-                conn.send_text(message) 
-                for conn in connections 
+                conn.send_json(message)
+                for conn in connections
                 if conn.client_state == WebSocketState.CONNECTED
             ]
             if send_tasks:

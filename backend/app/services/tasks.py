@@ -12,6 +12,7 @@ from io import BytesIO
 import google.generativeai as genai
 import pytz
 import operator 
+import threading
 from urllib.parse import quote_plus
 from io import StringIO
 import numpy as np 
@@ -178,7 +179,9 @@ def check_alert_rules(
     }
 
     triggered_alerts = []
-    users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+    users_map = {str(u.id): u for u in (workspace.team_members + [workspace.owner])}
+    users_to_notify = list(users_map.values())
+
 
     for rule in rules:
         try:
@@ -974,8 +977,6 @@ def schedule_data_fetches() -> None:
                 if is_due:
                     logger.info(f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool...")
 
-                    from app.services.tasks import process_data_fetch_task
-
                     executor.submit(
                         process_data_fetch_task,
                         str(ws.id),
@@ -1046,6 +1047,30 @@ def clean_nan(obj):
             return None
     return obj
 
+EMAIL_SEM = threading.BoundedSemaphore(3)
+
+def _run_email_in_background(recipients, email_context):
+    if not EMAIL_SEM.acquire(blocking=False):
+        logger.warning("⚠️ [EMAIL] Skipping email: too many concurrent email jobs")
+        return
+
+    loop = None
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(send_detailed_alert_email(recipients, email_context))
+    except Exception as e:
+        logger.error(f"❌ [EMAIL] Failed: {e}", exc_info=True)
+    finally:
+        if loop:
+            try:
+                loop.close()
+            except Exception:
+                pass
+        EMAIL_SEM.release()
+
+
+
 def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
@@ -1053,6 +1078,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     workspace_id_str = None
     status_message = "job_error"
     new_notifications_created = False
+    error_msg = None
 
     # SAFE LIMIT: Prevent OOM on Render Free Tier (512MB)
     MAX_ROWS = 25000
@@ -1220,15 +1246,15 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
             if schema_has_changed or row_count_has_changed or col_count_has_changed:
+                # ✅ AI Insight removed (Gemini slow) but field stays
                 ai_insight_text = None
-
-                if schema_has_changed:
-                    ai_insight_text = get_ai_insight(schema_changes_dict)
 
                 notification_message = f"Structural change detected in workspace '{workspace.name}'."
 
-                # Notify all team members + owner
-                users_to_notify = list(set(workspace.team_members + [workspace.owner]))
+                # ✅ Notify all team members + owner (safe dedupe by user.id)
+                all_users = list(workspace.team_members) + [workspace.owner]
+                users_map = {str(u.id): u for u in all_users}
+                users_to_notify = list(users_map.values())
 
                 for user in users_to_notify:
                     new_notification = Notification(
@@ -1268,10 +1294,16 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
                 recipients = [user.email for user in users_to_notify]
 
-                logger.info("[WORKER] Scheduling detailed alert email...")
-                run_async_safely(send_detailed_alert_email(recipients, email_context), loop)
+                logger.info("[WORKER] Scheduling detailed alert email (non-blocking)...")
 
-            # Check Alerts
+                # ✅ DO NOT BLOCK CSV JOB for email
+                threading.Thread(
+                    target=_run_email_in_background,
+                    args=(recipients, email_context),
+                    daemon=True,
+                ).start()
+
+            # Check Alerts (keep as-is)
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
 
         db.commit()
@@ -1296,8 +1328,9 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
     except Exception as e:
         logger.error(f"❌ [WORKER] Processing Error: {e}", exc_info=True)
+        error_msg = str(e)
         status_message = "job_error"
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": error_msg}
 
     finally:
         if APP_MODE == "production" and workspace_id_str:
@@ -1305,12 +1338,14 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 "type": status_message,
                 "workspace_id": workspace_id_str,
             }
-            json_message = json.dumps(payload)
 
-            logger.info(f"📡 [WORKER] Signaling final state {status_message} for {workspace_id_str}...")
+            if status_message == "job_error" and error_msg:
+                payload["error"] = error_msg
+
+            logger.info(f"📡 [WORKER] Broadcasting {status_message} to workspace {workspace_id_str}...")
 
             run_async_safely(
-                manager.broadcast_to_workspace(workspace_id_str, json_message),
+                manager.broadcast_to_workspace(workspace_id_str, payload),
                 loop,
             )
 
@@ -1318,6 +1353,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             db.close()
         except Exception:
             pass
+
 
 # =====================
 #  The "OTP Email Chef" 
