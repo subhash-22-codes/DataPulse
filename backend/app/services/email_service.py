@@ -316,7 +316,6 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict) -
     metric_changes = context.get("metric_changes", {})
     owner_info = context.get("owner_info", {}) 
     team_info = context.get("team_info", []) 
-    ai_insight = context.get("ai_insight")
     new_file_name = context.get("new_file_name", "N/A")
     logo_url = "https://res.cloudinary.com/dggciuh9l/image/upload/v1766819631/profile_pics/xnysrluddsvcfkzlatkq.png"
     dashboard_url = f"https://data-pulse-eight.vercel.app/workspace/{workspace_id}" if workspace_id else "https://data-pulse-eight.vercel.app/home"
@@ -331,20 +330,55 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict) -
     preheader_html = f'<div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">{preview_text} &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>'
     subject = f"{workspace_name} · {source_title} Data Change Detected [{short_id}]"
 
-    ai_html = ""
-    if ai_insight:
-        ai_html = f"""<div style="margin-top: 24px; background-color: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td valign="top" width="24" style="padding-right: 12px; font-size: 18px;">✨</td><td valign="top"><strong style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #5B21B6; display: block; margin-bottom: 6px;">AI Analysis</strong><div style="font-size: 14px; line-height: 1.6; color: #1F2937;">{ai_insight}</div></td></tr></table></div>"""
-
     schema_html = ""
-    if schema_changes:
-        added_html = ""; removed_html = ""
-        if schema_changes.get("added"):
-            badges = [f'<span style="display: inline-block; background-color: #DEF7EC; color: #03543F; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace; border: 1px solid #BCF0DA; margin-right: 6px; margin-bottom: 6px;">+ {col}</span>' for col in schema_changes["added"]]
-            added_html = f'<div style="margin-bottom: 16px;"><p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: #046C4E; text-transform: uppercase; letter-spacing: 0.5px;">Added Fields</p><div style="display: block; line-height: 1.8;">{"".join(badges)}</div></div>'
-        if schema_changes.get("removed"):
-            badges = [f'<span style="display: inline-block; background-color: #FDE8E8; color: #9B1C1C; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace; border: 1px solid #F8B4B4; margin-right: 6px; margin-bottom: 6px;">- {col}</span>' for col in schema_changes["removed"]]
-            removed_html = f'<div><p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: #C81E1E; text-transform: uppercase; letter-spacing: 0.5px;">Removed Fields</p><div style="display: block; line-height: 1.8;">{"".join(badges)}</div></div>'
-        schema_html = f'<div style="margin-top: 32px; padding: 24px; background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><h3 style="margin: 0 0 20px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #111827; border-bottom: 1px solid #F3F4F6; padding-bottom: 12px;">Schema Changes</h3>{added_html}{removed_html}</div>'
+
+    added = (schema_changes or {}).get("added") or []
+    removed = (schema_changes or {}).get("removed") or []
+
+    if not added and not removed:
+        schema_html = """
+        <div style="margin-top: 32px; padding: 16px; background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px;">
+        <p style="margin: 0; font-size: 12px; color: #374151;">
+            No schema changes detected. Column structure stayed the same.
+        </p>
+        </div>
+        """
+    else:
+        added_html = ""
+        removed_html = ""
+
+        if added:
+            badges = [
+                f'<span style="display: inline-block; background-color: #DEF7EC; color: #03543F; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace; border: 1px solid #BCF0DA; margin-right: 6px; margin-bottom: 6px;">+ {col}</span>'
+                for col in added
+            ]
+            added_html = f'''
+            <div style="margin-bottom: 16px;">
+            <p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: #046C4E; text-transform: uppercase; letter-spacing: 0.5px;">Added Fields</p>
+            <div style="display: block; line-height: 1.8;">{"".join(badges)}</div>
+            </div>
+            '''
+
+        if removed:
+            badges = [
+                f'<span style="display: inline-block; background-color: #FDE8E8; color: #9B1C1C; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace; border: 1px solid #F8B4B4; margin-right: 6px; margin-bottom: 6px;">- {col}</span>'
+                for col in removed
+            ]
+            removed_html = f'''
+            <div>
+            <p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: #C81E1E; text-transform: uppercase; letter-spacing: 0.5px;">Removed Fields</p>
+            <div style="display: block; line-height: 1.8;">{"".join(badges)}</div>
+            </div>
+            '''
+
+        schema_html = f'''
+        <div style="margin-top: 32px; padding: 24px; background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+        <h3 style="margin: 0 0 20px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #111827; border-bottom: 1px solid #F3F4F6; padding-bottom: 12px;">
+            Schema Changes
+        </h3>
+        {added_html}{removed_html}
+        </div>
+        '''
 
     metrics_html = ""
     if metric_changes:
@@ -395,13 +429,12 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict) -
                             <td class="content-padding" style="padding: 24px 48px 40px 48px; text-align: left;">
                                 <span style="display: inline-block; background-color: #EFF6FF; color: #1D4ED8; padding: 4px 12px; border-radius: 100px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 20px;">{source_title}</span>
                                 <h1 style="margin: 0 0 12px 0; font-size: 24px; font-weight: 800; color: #111827; letter-spacing: -0.02em; line-height: 1.2;">Update in {workspace_name}</h1>
-                                <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4B5563;">A new sync event was triggered. Here is the summary of changes affecting your dataset.</p>
-                                {ai_html}
+                                <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4B5563;">New data was received and processed. Below is a quick summary of what changed.</p>
                                 <div style="margin-top: 32px; padding: 20px; background-color: #F9FAFB; border-radius: 8px; border: 1px solid #E5E7EB;">
                                     <table width="100%" border="0" cellspacing="0" cellpadding="0">
                                         <tr>
-                                            <td class="mobile-stack" width="60%" valign="top"><p style="margin: 0; font-size: 11px; color: #9CA3AF; text-transform: uppercase; font-weight: 700;">File Source</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #111827; font-family: ui-monospace, monospace; word-break: break-all;">{new_file_name}</p></td>
-                                            <td class="mobile-stack" width="40%" valign="top" align="right"><p style="margin: 0; font-size: 11px; color: #9CA3AF; text-transform: uppercase; font-weight: 700;">Sync Time</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #111827;">{timestamp_ist}</p></td>
+                                            <td class="mobile-stack" width="60%" valign="top"><p style="margin: 0; font-size: 11px; color: #9CA3AF; text-transform: uppercase; font-weight: 700;">Data Source</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #111827; font-family: ui-monospace, monospace; word-break: break-all;">{new_file_name}</p></td>
+                                            <td class="mobile-stack" width="40%" valign="top" align="right"><p style="margin: 0; font-size: 11px; color: #9CA3AF; text-transform: uppercase; font-weight: 700;">Processed At</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #111827;">{timestamp_ist}</p></td>
                                         </tr>
                                     </table>
                                 </div>
