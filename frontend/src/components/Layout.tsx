@@ -60,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="flex items-center gap-4">
               {isAccountPage ? (
                 <button 
-                  onClick={() => navigate('/home')}
+                  onClick={() => navigate(-1)}
                   className="group flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-widest"
                 >
                   <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
