@@ -115,7 +115,7 @@ export default function Features() {
     { Illustration: CsvUploadIllustration, title: 'CSV Uploads', description: 'Quickly upload CSV files to visualize and analyze data without needing a database connection.' },
     { Illustration: ApiPollIllustration, title: 'API Polling', description: 'Easily poll external APIs and integrate the data alongside your database metrics.' },
     { Illustration: DirectDbIllustration, title: 'Direct DB Connection', description: 'Connect directly to your PostgreSQL database. No complex middleware required. We handle the secure handshake.' },
-    { Illustration: AiSchemaIllustration, title: 'Schema Detection', description: 'Pandas detects your schema structure, while Gemini AI analyzes patterns and provides actionable insights.' },
+    { Illustration: AiSchemaIllustration, title: 'Schema Detection', description: "Pandas detects your schema structure and DataPulse highlights changes like added/removed columns and row/column count shifts."},
     { Illustration: RbacIllustration, title: 'Role-Based Access', description: 'Granular permission controls ensure team members only see the data tables they are authorized to view.' },
     { Illustration: WebsocketIllustration, title: 'Real-Time WebSockets', description: 'Experience zero-refresh updates. As soon as data changes in your DB, it reflects on your dashboard.' },
     { Illustration: AlertIllustration, title: 'Alerts & Notifications', description: 'Receive instant email notifications via Brevo whenever schema drifts are detected or critical metrics update.' },
