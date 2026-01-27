@@ -36,6 +36,7 @@ from app.utils.security import hash_ua
 from app.services.storage_service import delete_files
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload
+from sqlalchemy.exc import OperationalError, TimeoutError
 
 DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
 
@@ -820,8 +821,12 @@ def get_login_history(
         raise HTTPException(status_code=500, detail="Could not retrieve security activity.")
 
 @router.post("/refresh")
-@limiter.limit('10/minute')
-def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     old_rt_value = request.cookies.get("refresh_token")
     if not old_rt_value:
         raise HTTPException(status_code=401, detail="No refresh token provided")
@@ -830,13 +835,20 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if not session_id:
         raise HTTPException(status_code=401, detail="Missing session context")
 
-    db_token = (
-        db.query(RefreshToken)
-        .filter(RefreshToken.token == old_rt_value)
-        .with_for_update()
-        .first()
-    )
-    
+    # FAIL FAST: first DB touch must be guarded
+    try:
+        db_token = (
+            db.query(RefreshToken)
+            .filter(RefreshToken.token == old_rt_value)
+            .first()
+        )
+    except (OperationalError, TimeoutError):
+        # DB down or pooler stalled, do not crash ASGI
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service temporarily unavailable",
+        )
+
     if not db_token:
         raise HTTPException(status_code=401, detail="Invalid refresh session")
 
@@ -847,37 +859,47 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     ):
         db.query(RefreshToken).filter(
             RefreshToken.user_id == db_token.user_id
-        ).delete()
+        ).delete(synchronize_session=False)
+
         db_token.user.token_version += 1
         db.commit()
-        raise HTTPException(status_code=401, detail="Session mismatch. Please login again.")
+
+        raise HTTPException(
+            status_code=401,
+            detail="Session mismatch. Please login again.",
+        )
 
     if db_token.revoked:
-        # Security Action: Revoke every single token this user has
         db.query(RefreshToken).filter(
             RefreshToken.user_id == db_token.user_id
-        ).delete()
-        # Increment token version to invalidate existing Access Tokens (JWTs)
+        ).delete(synchronize_session=False)
+
         db_token.user.token_version += 1
         db.commit()
-        raise HTTPException(status_code=401, detail="Security breach detected. Please login again.")
+
+        raise HTTPException(
+            status_code=401,
+            detail="Security breach detected. Please login again.",
+        )
 
     now = dt.datetime.now(dt.timezone.utc)
+
     if db_token.expires_at < now:
         db_token.revoked = True
         db.commit()
         raise HTTPException(status_code=401, detail="Refresh session expired")
 
     user = db_token.user
+
     new_rt_value = str(uuid.uuid4())
-    
     new_refresh_token = RefreshToken(
         token=new_rt_value,
         user_id=user.id,
         session_id=db_token.session_id,
         user_agent_hash=db_token.user_agent_hash,
-        expires_at=now + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at=now + dt.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
+
     db.add(new_refresh_token)
 
     db_token.revoked = True
@@ -891,34 +913,41 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         "ver": user.token_version,
         "iss": "datapulse-auth",
         "iat": now,
-        "exp": access_exp
+        "exp": access_exp,
     }
+
     new_at = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    db.commit()
+    try:
+        db.commit()
+    except (OperationalError, TimeoutError):
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service temporarily unavailable",
+        )
 
     cookie_params = {
         "httponly": True,
         "secure": True,
         "samesite": "none",
     }
-    
+
     response.set_cookie(
         key="access_token",
         value=new_at,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        **cookie_params
+        **cookie_params,
     )
-    
+
     response.set_cookie(
         key="refresh_token",
         value=new_rt_value,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        **cookie_params
+        **cookie_params,
     )
 
     return {"message": "Tokens rotated successfully"}
-
 
 
 
