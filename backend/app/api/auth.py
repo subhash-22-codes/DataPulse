@@ -192,98 +192,95 @@ def create_tokens_and_set_cookies(
 
 
 def get_or_create_social_user(
-    db: Session, 
-    email: str, 
-    name: str, 
-    provider: str, 
+    db: Session,
+    email: str,
+    name: str,
+    provider: str,
     provider_id: str,
     background_tasks: BackgroundTasks,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
 ):
-    
     provider_map = {
         "google": "google_id",
-        "github": "github_id"
+        "github": "github_id",
     }
-    
-    # Now field_attr will be "google_id" (a string)
-    field_attr = provider_map.get(provider) 
-    
+
+    field_attr = provider_map.get(provider)
     if not field_attr:
         raise HTTPException(status_code=400, detail="Unsupported provider")
-    
-    # ✅ Now getattr(User, "google_id") will work perfectly
-    existing_social_owner = db.query(User).filter(
-        getattr(User, field_attr) == provider_id 
-    ).with_for_update().first()
 
-    if current_user:
-        if existing_social_owner and existing_social_owner.id != current_user.id:
-            logger.error(f"❌ Conflict: {provider} ID {provider_id} belongs to another user.")
-            raise HTTPException(
-                status_code=409,
-                detail=f"This {provider} account is already linked to a different DataPulse user."
-            )
-
-        if current_user.email != email:
-            logger.error(f"❌ Identity Mismatch: {current_user.id} tried linking {email}")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Email mismatch. Use the {provider} account associated with {current_user.email}."
-            )
-
-        setattr(current_user, field_attr, provider_id)
-        logger.info(f"✅ Linked {provider} to User ID: {current_user.id}")
-        return current_user
-
-    if existing_social_owner:
-        if existing_social_owner.email != email:
-             logger.warning(f"⚠️ Provider email changed for {existing_social_owner.id}. Updating logs.")
-        
-        return existing_social_owner
-
-    user_by_email = db.query(User).filter(User.email == email).with_for_update().first()
-    
-    if user_by_email:
-        if user_by_email.is_verified:     
-            if current_user:
-                if current_user.id == user_by_email.id:
-                    setattr(user_by_email, field_attr, provider_id)
-                    return user_by_email
-                else:
-                    raise HTTPException(status_code=400, detail="This email is associated with another account.")
-
-            logger.warning(f"🛡️ Security Block: {email} exists via {user_by_email.signup_method}. Denying {provider}.")
-            raise HTTPException(
-                status_code=400,
-                detail=f"An active account with this email already exists. Please login and link {provider} in Settings."
-            )
-
-        # If existing account is UNVERIFIED, claim it
-        setattr(user_by_email, field_attr, provider_id)
-        user_by_email.is_verified = True
-        return user_by_email
-
-
-    logger.info(f"✨ Creating new identity via {provider}: {email}")
-    if background_tasks:
-        # This is the safe, non-crashing way to send the alert
-        background_tasks.add_task(
-            send_telegram_alert, 
-            f"✨ **NEW USER JOINED!**\nVia: {provider}\nEmail: {email}"
+    try:
+        # 1. Check if provider ID already exists
+        existing_social_owner = (
+            db.query(User)
+            .filter(getattr(User, field_attr) == provider_id)
+            .first()
         )
-    new_user = User(
-        email=email, 
-        name=name, 
-        is_verified=True, 
-        signup_method=provider, 
-        auth_type=provider
-    )
-    setattr(new_user, field_attr, provider_id)
-    
-    db.add(new_user)
-    db.flush()
-    return new_user
+
+        if current_user:
+            if existing_social_owner and existing_social_owner.id != current_user.id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"This {provider} account is already linked to another user.",
+                )
+
+            if current_user.email != email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email mismatch for social account linking.",
+                )
+
+            setattr(current_user, field_attr, provider_id)
+            return current_user
+
+        if existing_social_owner:
+            return existing_social_owner
+
+        # 2. Check by email
+        user_by_email = (
+            db.query(User)
+            .filter(User.email == email)
+            .first()
+        )
+
+        if user_by_email:
+            if user_by_email.is_verified:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Account already exists. Login and link provider.",
+                )
+
+            setattr(user_by_email, field_attr, provider_id)
+            user_by_email.is_verified = True
+            return user_by_email
+
+        # 3. Create new user
+        if background_tasks:
+            background_tasks.add_task(
+                send_telegram_alert,
+                f"NEW USER via {provider}: {email}",
+            )
+
+        new_user = User(
+            email=email,
+            name=name,
+            is_verified=True,
+            signup_method=provider,
+            auth_type=provider,
+        )
+        setattr(new_user, field_attr, provider_id)
+
+        db.add(new_user)
+        db.flush()
+
+        return new_user
+
+    except (OperationalError, TimeoutError):
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service temporarily unavailable",
+        )
 
 # ==========================
 #   SCHEMAS
@@ -500,53 +497,81 @@ async def github_callback( request: Request, background_tasks: BackgroundTasks, 
         logger.error(f"❌ GitHub Callback Failed: {str(e)}", exc_info=True)
         return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error=github_auth_failed")
 
+
+
 @router.post("/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
 def google_login(
-    request: Request, 
-    response: Response, 
-    req: GoogleLoginRequest, 
+    request: Request,
+    response: Response,
+    req: GoogleLoginRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    # Step 1: verify Google token (no DB here)
     try:
-        try:
-            idinfo = id_token.verify_oauth2_token(req.token, google_requests.Request(), GOOGLE_CLIENT_ID)
-        except ValueError:
-            raise HTTPException(status_code=401, detail="Invalid or expired Google token")
-
-        email = idinfo.get('email')
-        if not email or not idinfo.get('email_verified'):
-            raise HTTPException(status_code=400, detail="Verified Google account required.")
-
-        user = get_or_create_social_user(
-            db, email, idinfo.get('name', 'User'), "google", idinfo.get('sub'), background_tasks
+        idinfo = id_token.verify_oauth2_token(
+            req.token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
         )
-        logger.info(f"✅ Google login success: {user.email}")
-     
-        create_tokens_and_set_cookies(request, response, user, db, 'google', background_tasks)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid or expired Google token")
+
+    email = idinfo.get("email")
+    if not email or not idinfo.get("email_verified"):
+        raise HTTPException(
+            status_code=400,
+            detail="Verified Google account required",
+        )
+
+    # Step 2: DB work must be guarded
+    try:
+        user = get_or_create_social_user(
+            db,
+            email,
+            idinfo.get("name", "User"),
+            "google",
+            idinfo.get("sub"),
+            background_tasks,
+        )
+
+        create_tokens_and_set_cookies(
+            request,
+            response,
+            user,
+            db,
+            "google",
+            background_tasks,
+        )
 
         db.commit()
-        db.refresh(user) 
+        db.refresh(user)
 
-        return {
-            "message": "Login successful", 
-            "user": {
-                "id": str(user.id), 
-                "email": user.email, 
-                "name": user.name,
-                "google_id": user.google_id,
-                "github_id": user.github_id,
-                "signup_method": user.signup_method,
-                "created_at": user.created_at
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Google Auth Critical Failure: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal authentication server error")
+    except (OperationalError, TimeoutError):
+        db.rollback()
+        # DB outage, not auth failure
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service temporarily unavailable",
+        )
+
+    # Step 3: success response
+    logger.info(f"Google login success: {user.email}")
+
+    return {
+        "message": "Login successful",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "google_id": user.google_id,
+            "github_id": user.github_id,
+            "signup_method": user.signup_method,
+            "created_at": user.created_at,
+        },
+    }
+
     
     
 @router.post("/login-email", response_model=AuthResponse)
