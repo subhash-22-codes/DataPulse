@@ -1,35 +1,48 @@
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
-from dotenv import load_dotenv
 import os
+import logging
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-connect_args = {"connect_timeout": 10}
-if os.getenv("APP_MODE") == "production":
-    connect_args["sslmode"] = "require"
+logger = logging.getLogger("db")
+
+connect_args = {
+    "connect_timeout": 7,
+    "sslmode": "require",
+}
 
 engine = create_engine(
     DATABASE_URL,
     future=True,
-    pool_size=3,
-    max_overflow=1,
+    poolclass=NullPool,        
     pool_pre_ping=True,
-    pool_recycle=180,
-
     connect_args=connect_args,
+    echo_pool="debug",          
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
 Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
+    logger.info("DB OPEN")
     try:
         yield db
+        db.commit()
+    except Exception:
+        logger.exception("DB ERROR")
+        db.rollback()
+        raise
     finally:
         db.close()
+        logger.info("DB CLOSE")
