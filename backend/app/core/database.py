@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
+from fastapi import HTTPException
+
 
 load_dotenv()
 
@@ -32,16 +34,19 @@ SessionLocal = sessionmaker(
 
 Base = declarative_base()
 
+
 def get_db():
     db = SessionLocal()
-    logger.info("DB OPEN")
+    logger.debug("DB OPEN")
     try:
         yield db
-        db.commit()
+    except HTTPException:
+        # auth / validation errors are not DB errors
+        raise
     except Exception:
         logger.exception("DB ERROR")
         db.rollback()
         raise
     finally:
         db.close()
-        logger.info("DB CLOSE")
+        logger.debug("DB CLOSE")
