@@ -23,7 +23,6 @@ def get_current_user(
     db: Session = Depends(get_db),
     raise_error: bool = True 
 ) -> Optional[User]:
-    # 1. Extraction
     token = request.cookies.get("access_token")
     if not token:
         logger.debug("❌ No access_token cookie found in request")
@@ -34,7 +33,6 @@ def get_current_user(
         token = token.split(" ")[1]
 
     try:
-        # 2. Decode
         payload = jwt.decode(
             token, 
             JWT_SECRET, 
@@ -46,7 +44,6 @@ def get_current_user(
             }
         )
         
-        # 3. STRICT CLAIMS VALIDATION 
         user_id = payload.get("sub")
         token_version = payload.get("ver")
         token_type = payload.get("type")
@@ -58,7 +55,6 @@ def get_current_user(
             logger.warning(f"❌ Rejected token: Expected 'access', got '{token_type}'")
             raise HTTPException(status_code=401, detail="Invalid token type")
         
-        # Ensure user_id is present
         if not user_id:
             raise HTTPException(status_code=401, detail="Missing user identifier")
 

@@ -617,16 +617,14 @@ def get_trend_data(
             trend_data.append(TrendDataPoint(date=uploaded_at, value=value))
 
     return TrendResponse(column_name=column_name, data=trend_data)
-# ===================================================
-#  NEW: WebSocket Endpoint for Real-time Updates
-# ===================================================
+
+
 @router.websocket("/{workspace_id}/ws/{client_id}")
 async def websocket_endpoint(
     websocket: WebSocket, 
     workspace_id: str, 
     client_id: str
 ):
-    # 1. Manually Open Session
     db = SessionLocal() 
     user_id_str = None
 
@@ -647,49 +645,34 @@ async def websocket_endpoint(
     except Exception as e:
         logger.warning(f"WS authentication failed: {e}")
         try:
-            # Code 1008 is for Policy Violation (Auth failure)
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except Exception:
-            pass # Connection might already be closed
-        # Ensure DB is closed even on auth failure
+            pass 
         db.close()
         return
-
-    # Close the DB connection NOW. 
-    # This is excellent for Render stability as it keeps connection pools open.
     db.close() 
 
-    # 2. Accept connection (Zero DB usage from here on)
     await websocket.accept()
-    
-    # We register using the ID string we saved, not the DB object
     await manager.connect('workspace', workspace_id, websocket)
     await manager.connect('user', user_id_str, websocket)
     
     logger.info(f"WS Connected: User {user_id_str} -> Workspace {workspace_id} (Client {client_id})")
-
-    # 3. Keep-alive loop
     try:
         while True:
-            # This line keeps the connection open by waiting for data
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
-        # Normal disconnect (user closed tab or navigated away)
         logger.info(f"WS Disconnected: {client_id}")
     except Exception as e:
-        # Unexpected error (network flicker or server issue)
         logger.error(f"WS Error {client_id}: {e}", exc_info=True)
     finally:
-        # 4. Cleanup
-        # Ensure we always remove the connection from our manager to prevent memory leaks
         if user_id_str:
             manager.disconnect('workspace', workspace_id, websocket)
             manager.disconnect('user', user_id_str, websocket)
             
 
-# ----Endpoint: Request Delete OTP Endpoint
+
 @router.post("/{workspace_id}/request-delete-otp", status_code=200)
 @limiter.limit("3/minute")
 async def request_delete_otp(
