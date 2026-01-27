@@ -101,7 +101,7 @@ def record_login_history_task(
     ip_address: str, 
     user_agent: str
 ):
-    db = SessionLocal() # 🛡️ Independent session
+    db = SessionLocal()
     try:
         new_log = LoginHistory(
             user_id=user_id,
@@ -126,7 +126,7 @@ def record_login_history_task(
         db.rollback()
         logger.error(f"⚠️ Background Audit Failed: {str(e)}")
     finally:
-        db.close() # 🛡️ Always close the background connection
+        db.close()
 
 def create_tokens_and_set_cookies(
     request: Request, 
@@ -638,7 +638,7 @@ def login_email(
 def send_otp(request: Request, req: SendOtpRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     email_normalized = req.email.lower().strip()
     
-    user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
+    user = db.query(User).filter(User.email == email_normalized).first()
 
     if user and user.is_verified and user.password_hash:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account already active. Please login.")
@@ -680,7 +680,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
 def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: BackgroundTasks ,db: Session = Depends(get_db)):
     logger.info("✅ verify_otp endpoint HIT")
     email_normalized = req.email.lower().strip()
-    user = db.query(User).filter(User.email == email_normalized).with_for_update().first()
+    user = db.query(User).filter(User.email == email_normalized).first()
     
     generic_err = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP request")
 
