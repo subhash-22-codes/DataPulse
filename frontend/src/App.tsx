@@ -152,12 +152,61 @@ function App() {
     pollUntilAwake();
   }, [pollUntilAwake]);
 
+if (import.meta.env.VITE_MAINTENANCE_MODE === "true") {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-[#f9fafb] px-6 antialiased">
+      <div className="w-full max-w-[440px] text-left">
+        
+        {/* Icon */}
+        <div className="mb-8 text-slate-400">
+          <svg
+            width="36"
+            height="36"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path
+              d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+
+        {/* Title */}
+        <h1 className="text-[24px] font-semibold text-slate-900 mb-3 tracking-tight">
+          We’ll be back shortly
+        </h1>
+
+        {/* Message */}
+        <p className="text-[15px] leading-relaxed text-slate-600">
+          DataPulse is temporarily unavailable due to scheduled maintenance.
+          We’re making improvements to ensure everything runs smoothly.
+        </p>
+
+        {/* Divider */}
+        <div className="my-10 h-px w-full bg-slate-200" />
+
+        {/* Footer */}
+       <p className="text-[13px] text-slate-500">
+        Need assistance? Reach out to{" "}
+        <a
+          href="mailto:datapulseapp@gmail.com"
+          className="text-slate-900 font-medium hover:underline"
+        >
+          DataPulse Support
+        </a>.
+      </p>
+
+      </div>
+    </div>
+  );
+}
+
+
   return (
     <Router>
-      {/* Using isBackendReady in the key ensures that if the server goes down 
-        and then wakes up, the AuthProvider is forced to re-mount and 
-        re-run its session check logic automatically.
-      */}
       <AuthProvider key={`backend-state-${isBackendReady}`}>
           <Toaster
             position="top-right"
