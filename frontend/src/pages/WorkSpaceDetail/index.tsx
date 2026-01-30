@@ -2,7 +2,7 @@ import React, { useEffect, useState, Fragment, useCallback, useRef } from "react
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, LayoutDashboard, Settings, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, LayoutDashboard, Settings, AlertCircle, Bell } from "lucide-react";
 import { DescriptionCard } from "./DescriptionCard";
 import { TeamMembersCard } from "./TeamMembersCard";
 import { DataSourceCard } from "./DataSourceCard";
@@ -13,6 +13,7 @@ import { Workspace, DataUpload } from "../../types";
 import { Tab } from "@headlessui/react";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
+import NotificationsCard from "./NotificationsCard";
 // Helper function for styling (from original code)
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
@@ -320,6 +321,36 @@ if (!workspace) {
                 )}
               </Tab>
 
+              <Tab as={Fragment}>
+                {({ selected }) => (
+                  <button
+                    className={classNames(
+                      "group relative pb-4 text-sm font-medium transition-colors focus:outline-none",
+                      selected ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Bell
+                        className={classNames(
+                          "h-4 w-4",
+                          selected
+                            ? "text-blue-600"
+                            : "text-slate-400 group-hover:text-slate-600"
+                        )}
+                      />
+                      Notifications
+                    </div>
+                    <span
+                      className={classNames(
+                        "absolute bottom-0 left-0 h-0.5 w-full bg-blue-600 transition-transform duration-300 ease-out",
+                        selected ? "scale-x-100" : "scale-x-0"
+                      )}
+                    />
+                  </button>
+                )}
+              </Tab>
+
+
               {isOwner && (
                 <Tab as={Fragment}>
                   {({ selected }) => (
@@ -381,11 +412,20 @@ if (!workspace) {
               </div>
             </Tab.Panel>
 
+           <Tab.Panel className="focus:outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="w-full">
+                {user && (
+                  <NotificationsCard
+                    workspaceId={workspace.id}
+                    currentUserId={user.id}
+                  />
+                )}
+              </div>
+            </Tab.Panel>
 
             {/* Settings Panel */}
             {isOwner && (
               <Tab.Panel className="focus:outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* REMOVED max-w-4xl to allow full width like the dashboard */}
                 <div className="grid grid-cols-1 gap-8 w-full">
                   <div className="w-full">
                     <AlertsCard workspace={workspace} isOwner={isOwner} />
