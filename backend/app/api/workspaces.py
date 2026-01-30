@@ -24,6 +24,7 @@ from app.models.data_upload import DataUpload
 from app.models.alert_rule import AlertRule
 from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
+from app.models.workspace_user_settings import WorkspaceUserSettings
 from app.services.tasks import executor
 from app.services.tasks import process_csv_task
 from app.services.storage_service import upload_csv_bytes
@@ -141,6 +142,16 @@ class WorkspaceUpdate(BaseModel):
     def parse_url_to_str(cls, v):
         if v == "": return None
         return v
+    
+class WorkspaceNotificationSettingOut(BaseModel):
+    used_id: uuid.UUID
+    name: str
+    email: EmailStr
+    email_notifications_enabled: bool
+
+
+class NotificationUpdate(BaseModel):
+    email_notifications_enabled: bool
 
 class DataUploadResponse(BaseModel):
     id: uuid.UUID
@@ -249,10 +260,8 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     
-    # Permission Check 
     is_owner = workspace.owner_id == current_user.id
     
-    # Efficient membership check
     is_member = current_user in workspace.team_members
     
     if not (is_owner or is_member):
@@ -264,27 +273,27 @@ def get_workspace(workspace_id: str, current_user: User = Depends(get_current_us
 @limiter.limit("10/minute")
 async def update_workspace(
     request: Request,
-    workspace_id: str, 
-    workspace_update: WorkspaceUpdate, 
-    background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db), 
+    workspace_id: str,
+    workspace_update: WorkspaceUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
-    
+
     db_workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
-    
+
     if not db_workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     if db_workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this workspace")
-    
+
     update_data = workspace_update.model_dump(exclude_unset=True)
-    
+
     data_source_fields = {
         "data_source",
         "api_url",
@@ -298,27 +307,31 @@ async def update_workspace(
         "db_query",
         "polling_interval",
     }
-    
+
     config_changed = any(field in update_data for field in data_source_fields)
 
-    if 'data_source' in update_data:
-        new_source = update_data['data_source']
-        
-        db_fields = ['db_host', 'db_port', 'db_user', 'db_password', 'db_name', 'db_query']
-        api_fields = ['api_url', 'api_header_name', 'api_header_value']
-        
-        if new_source == 'API':
-            for field in db_fields: setattr(db_workspace, field, None)
-            
-        elif new_source == 'DB':
-            for field in api_fields: setattr(db_workspace, field, None)
-            
-        elif new_source == 'CSV':
-            for field in db_fields + api_fields: setattr(db_workspace, field, None)
+    if "data_source" in update_data:
+        new_source = update_data["data_source"]
+
+        db_fields = ["db_host", "db_port", "db_user", "db_password", "db_name", "db_query"]
+        api_fields = ["api_url", "api_header_name", "api_header_value"]
+
+        if new_source == "API":
+            for field in db_fields:
+                setattr(db_workspace, field, None)
+
+        elif new_source == "DB":
+            for field in api_fields:
+                setattr(db_workspace, field, None)
+
+        elif new_source == "CSV":
+            for field in db_fields + api_fields:
+                setattr(db_workspace, field, None)
             db_workspace.is_polling_active = False
 
     if "description" in update_data:
         db_workspace.description_last_updated_at = dt.datetime.now(dt.timezone.utc)
+
 
     if "team_member_emails" in update_data:
         emails: list[str] = update_data.pop("team_member_emails")
@@ -327,63 +340,96 @@ async def update_workspace(
             User.email.in_(emails),
             User.is_verified == True
         ).all()
-        
+
         verified_emails = {u.email for u in valid_users}
-        
+
         for email in emails:
             if email == current_user.email:
                 raise HTTPException(
-                    status_code=400, 
-                    detail="You are the owner of this workspace. You don't need to add yourself to the team."
+                    status_code=400,
+                    detail="You are the owner of this workspace. You don't need to add yourself."
                 )
+
             if email not in verified_emails:
                 user_record = db.query(User).filter(User.email == email).first()
                 if not user_record:
                     raise HTTPException(
-                        status_code=404, 
+                        status_code=404,
                         detail=f"User '{email}' does not have a DataPulse account."
                     )
                 else:
                     raise HTTPException(
-                        status_code=403, 
-                        detail=f"User '{email}' needs to verify their account before joining teams."
+                        status_code=403,
+                        detail=f"User '{email}' must verify account first."
                     )
 
         final_members = [u for u in valid_users if u.id != current_user.id]
 
+        old_members = {u.id for u in db_workspace.team_members}
+        new_members = {u.id for u in final_members}
+
         db_workspace.team_members = final_members
+
+        # Create settings for new members
+        added_members = new_members - old_members
+        for user_id in added_members:
+            db.add(
+                WorkspaceUserSettings(
+                    workspace_id=db_workspace.id,
+                    user_id=user_id,
+                )
+            )
+
+        removed_members = old_members - new_members
+        if removed_members:
+            db.query(WorkspaceUserSettings).filter(
+                WorkspaceUserSettings.workspace_id == db_workspace.id,
+                WorkspaceUserSettings.user_id.in_(removed_members),
+            ).delete(synchronize_session=False)
 
 
     for key, value in update_data.items():
-        if key == 'api_url' and value is not None:
+        if key == "api_url" and value is not None:
             value = str(value)
         setattr(db_workspace, key, value)
-        
-    user_toggled_on = update_data.get('is_polling_active') is True
-    
+
+    user_toggled_on = update_data.get("is_polling_active") is True
+
     if config_changed:
         db_workspace.failure_count = 0
         db_workspace.last_failure_reason = None
         db_workspace.auto_disabled_at = None
         db_workspace.is_polling_active = False
-        
+
         if user_toggled_on:
             db_workspace.is_polling_active = True
-            logger.info(f"🚀 Manual re-enable detected for '{db_workspace.name}'. Resetting failures.")
         else:
             db_workspace.is_polling_active = False
-            logger.info(f"🛡️ Config updated for '{db_workspace.name}'. Polling stays OFF.")
-    
+            
+    owner_settings = db.query(WorkspaceUserSettings).filter(
+        WorkspaceUserSettings.workspace_id == db_workspace.id,
+        WorkspaceUserSettings.user_id == db_workspace.owner_id,
+    ).first()
+
+    if not owner_settings:
+        db.add(
+            WorkspaceUserSettings(
+                workspace_id=db_workspace.id,
+                user_id=db_workspace.owner_id,
+            )
+        )
+
+
     db.commit()
     db.refresh(db_workspace)
+
     user_toggled_on = update_data.get("is_polling_active") is True
 
     if user_toggled_on and db_workspace.is_polling_active:
         current_loop = asyncio.get_running_loop()
-        logger.info(f"⚡ [UX KICKSTART] Triggering instant fetch for '{db_workspace.name}'")
         executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
-    
-    if user_toggled_on:   
+
+    if user_toggled_on:
         if background_tasks:
             background_tasks.add_task(
                 send_telegram_alert,
@@ -392,8 +438,109 @@ async def update_workspace(
                 f"User: {current_user.email}\n"
                 f"Config Changed: {config_changed}"
             )
-        
+
     return db_workspace
+
+@router.get("/{workspace_id}/notification-settings")
+@limiter.limit("60/minute")
+async def get_notification_settings(
+    request: Request,
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid workspace ID")
+
+    workspace = db.query(Workspace).filter(
+        Workspace.id == ws_uuid
+    ).first()
+
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    # --- membership check ---
+    is_member = (
+        current_user.id == workspace.owner_id
+        or current_user in workspace.team_members
+    )
+
+    if not is_member:
+        raise HTTPException(403, "Not part of this workspace")
+
+    members = workspace.team_members + [workspace.owner]
+
+    settings = db.query(WorkspaceUserSettings).filter(
+        WorkspaceUserSettings.workspace_id == ws_uuid
+    ).all()
+
+    settings_map = {s.user_id: s for s in settings}
+
+    result = []
+
+    for user in members:
+        setting = settings_map.get(user.id)
+
+        result.append({
+            "user_id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "email_notifications_enabled":
+                setting.email_notifications_enabled if setting else True,
+        })
+
+    return result
+
+
+@router.patch("/{workspace_id}/notification-settings")
+@limiter.limit("20/minute")
+async def update_notification_setting(
+    request: Request,
+    workspace_id: str,
+    payload: NotificationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid workspace ID")
+
+    workspace = db.query(Workspace).filter(
+        Workspace.id == ws_uuid
+    ).first()
+
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+
+    # --- membership check ---
+    is_member = (
+        current_user.id == workspace.owner_id
+        or current_user in workspace.team_members
+    )
+
+    if not is_member:
+        raise HTTPException(403, "Not part of this workspace")
+
+    setting = db.query(WorkspaceUserSettings).filter(
+        WorkspaceUserSettings.workspace_id == ws_uuid,
+        WorkspaceUserSettings.user_id == current_user.id,
+    ).first()
+
+    if not setting:
+        setting = WorkspaceUserSettings(
+            workspace_id=ws_uuid,
+            user_id=current_user.id,
+        )
+        db.add(setting)
+
+    setting.email_notifications_enabled = payload.email_notifications_enabled
+
+    db.commit()
+
+    return {"status": "updated"}
 
 
 @router.get("/team/", response_model=List[WorkspaceResponse])

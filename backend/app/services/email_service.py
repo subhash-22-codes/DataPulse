@@ -450,8 +450,19 @@ async def send_detailed_alert_email(recipients: List[EmailStr], context: dict) -
                             <td class="new-footer" style="background-color: #fafafa; padding: 48px; border-top: 1px solid #f0f0f0; text-align: left;">
                                 <img src="{logo_url}" alt="DataPulse" width="90" style="display: block; filter: grayscale(100%); opacity: 0.4; margin-bottom: 24px; width: 90px; height: auto;">
                                 <p style="margin: 0 0 16px 0; font-size: 11px; line-height: 1.6; color: #9ca3af; word-break: break-word;">
-                                    This message was sent to <span style="color: #6b7280; font-weight: 500;">recipients of {workspace_name}</span>. 
-                                    If you have questions or complaints, please <a href="mailto:datapulseapp@gmail.com" style="color: #6b7280; text-decoration: none; font-weight: 500;">contact us</a>.
+                                    You are receiving this email because notifications are enabled for 
+                                    <span style="color: #6b7280; font-weight: 500;">{workspace_name}</span>.
+                                    <br><br>
+                                    You can change or disable email notifications anytime from your workspace settings:
+                                    <br>
+                                    <a href="{dashboard_url}" style="color: #6b7280; text-decoration: none; font-weight: 500;">
+                                        Manage notification preferences
+                                    </a>.
+                                    <br><br>
+                                    Need help? Contact us at 
+                                    <a href="mailto:datapulseapp@gmail.com" style="color: #6b7280; text-decoration: none; font-weight: 500;">
+                                        datapulseapp@gmail.com
+                                    </a>.
                                 </p>
                                 <p style="margin: 0; font-size: 11px; line-height: 1.6; color: #d1d5db;">
                                     <span style="display: inline-block;"><a href="https://data-pulse-eight.vercel.app/legal" style="color: #d1d5db; text-decoration: none;">Terms of Use</a></span> &nbsp;|&nbsp; 
@@ -624,8 +635,19 @@ async def send_threshold_alert_email(recipients: List[EmailStr], context: dict) 
                                 <img src="{logo_url}" alt="DataPulse" width="90" style="display: block; filter: grayscale(100%); opacity: 0.4; margin-bottom: 24px; width: 90px; height: auto;">
                                 
                                 <p style="margin: 0 0 16px 0; font-size: 11px; line-height: 1.6; color: #9ca3af; word-break: break-word;">
-                                    This message was sent to <span style="color: #6b7280; font-weight: 500;">recipients of {workspace_name}</span>. 
-                                    If you have questions or complaints, please <a href="mailto:datapulseapp@gmail.com" style="color: #6b7280; text-decoration: none; font-weight: 500;">contact us</a>.
+                                    You are receiving this email because notifications are enabled for 
+                                    <span style="color: #6b7280; font-weight: 500;">{workspace_name}</span>.
+                                    <br><br>
+                                    You can change or disable email notifications anytime from your workspace settings:
+                                    <br>
+                                    <a href="{dashboard_url}" style="color: #6b7280; text-decoration: none; font-weight: 500;">
+                                        Manage notification preferences
+                                    </a>.
+                                    <br><br>
+                                    Need help? Contact us at 
+                                    <a href="mailto:datapulseapp@gmail.com" style="color: #6b7280; text-decoration: none; font-weight: 500;">
+                                        datapulseapp@gmail.com
+                                    </a>.
                                 </p>
 
                                 <p style="margin: 0; font-size: 11px; line-height: 1.6; color: #d1d5db;">
