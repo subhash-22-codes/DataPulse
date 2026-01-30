@@ -9,14 +9,22 @@ from fastapi import HTTPException
 
 load_dotenv()
 
+MODE_LOCAL = os.getenv("MODE_LOCAL", "false").lower() == "true"
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 logger = logging.getLogger("db")
 
-connect_args = {
-    "connect_timeout": 7,
-    "sslmode": "require",
-}
+if MODE_LOCAL:
+    logger.info("Running in LOCAL mode - connecting to local DB.")
+    connect_args = {
+        "connect_timeout": 7,
+    }
+else:
+    logger.info("Running in PRODUCTION mode - connecting to production DB.")
+    connect_args = {
+        "sslmode": "require",
+        "connect_timeout": 7,
+    }
 
 engine = create_engine(
     DATABASE_URL,
@@ -41,7 +49,6 @@ def get_db():
     try:
         yield db
     except HTTPException:
-        # auth / validation errors are not DB errors
         raise
     except Exception:
         logger.exception("DB ERROR")

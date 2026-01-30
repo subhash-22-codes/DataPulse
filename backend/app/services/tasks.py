@@ -24,6 +24,7 @@ from app.models.user import User
 from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
 from app.models.feedback import Feedback
+from app.models.workspace_user_settings import WorkspaceUserSettings
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
 import concurrent.futures
@@ -233,7 +234,21 @@ def check_alert_rules(
             logger.error(f"❌ Database error, aborting: {e}")
             return
 
-        recipients = [user.email for user in users_to_notify]
+        user_ids = [u.id for u in users_to_notify]
+
+        enabled_settings = db.query(WorkspaceUserSettings).filter(
+            WorkspaceUserSettings.workspace_id == workspace.id,
+            WorkspaceUserSettings.user_id.in_(user_ids),
+            WorkspaceUserSettings.email_notifications_enabled == True,
+        ).all()
+
+        enabled_user_ids = {s.user_id for s in enabled_settings}
+
+        recipients = [
+            user.email for user in users_to_notify
+            if user.id in enabled_user_ids
+        ]
+
         timestamp_to_use = current_upload.uploaded_at or datetime.now(timezone.utc)
         email_context = { 
             "workspace_name": workspace.name, 
@@ -253,7 +268,9 @@ def check_alert_rules(
                 loop
             )
 
-        run_async_safely(send_threshold_alert_email(recipients, email_context), loop)
+        if recipients:
+            run_async_safely(send_threshold_alert_email(recipients, email_context), loop)
+
         
         logger.info(f"✅ Side effects sent for {len(triggered_alerts)} alerts.")
     else:
@@ -1292,16 +1309,30 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     },
                 }
 
-                recipients = [user.email for user in users_to_notify]
+                user_ids = [u.id for u in users_to_notify]
+
+                enabled_settings = db.query(WorkspaceUserSettings).filter(
+                    WorkspaceUserSettings.workspace_id == workspace.id,
+                    WorkspaceUserSettings.user_id.in_(user_ids),
+                    WorkspaceUserSettings.email_notifications_enabled == True,
+                ).all()
+
+                enabled_user_ids = {s.user_id for s in enabled_settings}
+
+                recipients = [
+                    user.email for user in users_to_notify
+                    if user.id in enabled_user_ids
+                ]
+
 
                 logger.info("[WORKER] Scheduling detailed alert email (non-blocking)...")
 
-                # ✅ DO NOT BLOCK CSV JOB for email
-                threading.Thread(
-                    target=_run_email_in_background,
-                    args=(recipients, email_context),
-                    daemon=True,
-                ).start()
+                if recipients:
+                    threading.Thread(
+                        target=_run_email_in_background,
+                        args=(recipients, email_context),
+                        daemon=True,
+                    ).start()
 
             # Check Alerts (keep as-is)
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
