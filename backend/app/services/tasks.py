@@ -277,55 +277,77 @@ def check_alert_rules(
         logger.info("✅ Scan complete: No violations found.")
 
 
-def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reason: str, is_hard_fail: bool = True, loop: asyncio.AbstractEventLoop = None):
+def kill_poller(
+    db: Session,
+    workspace_id: str,
+    user_message: str,
+    internal_reason: str,
+    is_hard_fail: bool = True,
+    loop: asyncio.AbstractEventLoop = None,
+):
+    terminal = False
+
     try:
         ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if not ws: return
+        if not ws:
+            return
 
         now = datetime.now(timezone.utc)
 
         if is_hard_fail:
             if ws.is_polling_active:
                 ws.is_polling_active = False
-                ws.last_failure_reason = user_message   
+                ws.last_failure_reason = user_message
                 ws.auto_disabled_at = now
                 ws.failure_count = 0
+                terminal = True
                 db.commit()
-                logger.warning(f"🛑 [HARD KILL]  '{ws.name}': {internal_reason}")
+                logger.warning(f"[HARD KILL] '{ws.name}': {internal_reason}")
         else:
             ws.failure_count += 1
             ws.last_failure_reason = user_message
+
             if ws.failure_count >= 3:
                 ws.is_polling_active = False
                 ws.auto_disabled_at = now
-                logger.error(f"🚨 [SOFT KILL] '{ws.name}' | {internal_reason}")
+                terminal = True
+                logger.error(f"[SOFT KILL] '{ws.name}' | {internal_reason}")
+
             db.commit()
 
     except Exception as e:
         db.rollback()
-        logger.error(f"🔥 [KILL_POLLER] DB Update Failed: {e}")
+        logger.error(f"[KILL_POLLER] DB Update Failed: {e}")
+        return
 
-    # --- THE CORRECT BROADCAST LOGIC ---
-    if loop and loop.is_running():
+    if not loop or not loop.is_running():
+        logger.warning("No active loop provided to kill_poller. UI will not update automatically.")
+        return
+
+    if terminal:
         payload = {
-            "type": "job_error", 
+            "type": "job_complete",
+            "workspace_id": str(workspace_id),
+            "status": "failed",
+            "error": user_message,
+            "is_polling_active": False,
+        }
+    else:
+        payload = {
+            "type": "job_error",
             "workspace_id": str(workspace_id),
             "error": user_message,
-            "is_hard_fail": is_hard_fail
+            "is_hard_fail": is_hard_fail,
         }
 
-        try:
-            # We use the explicitly passed loop to jump back to the main thread
-            asyncio.run_coroutine_threadsafe(
-                manager.broadcast_to_workspace(str(workspace_id), json.dumps(payload)), 
-                loop
-            )
-            logger.info(f"📡 Broadcasted 'job_error' to UI for {workspace_id}")
-        except Exception as e:
-            logger.error(f"❌ WebSocket Broadcast Failed: {e}")
-    else:
-        logger.warning(f"⚠️ No active loop provided to kill_poller. UI will not update automatically.")
-        
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_to_workspace(str(workspace_id), payload),
+            loop,
+        )
+        logger.info(f"Broadcasted {payload['type']} to UI for {workspace_id}")
+    except Exception as e:
+        logger.error(f"WebSocket Broadcast Failed: {e}")
 
 def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
