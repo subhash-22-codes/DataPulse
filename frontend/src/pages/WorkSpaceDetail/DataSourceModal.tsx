@@ -162,9 +162,6 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     try {
       const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, payload);
       onUpdate(res.data);
-      if (isPollingActive) {
-          onUploadStart(); 
-      }
       toast.success("Configuration saved successfully!", { style: { fontSize: '13px', background: '#334155', color: '#fff' }});
       setIsOpen(false);
     } catch (error) {
