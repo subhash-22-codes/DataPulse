@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import { useNavigate } from "react-router-dom";
-import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, LayoutGrid, ArrowRight, Clock, Lock, Check, Database, Activity, Loader2 } from "lucide-react";
+import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, ArrowRight, Clock, Lock, Check, Database, Activity, Loader2, Folder } from "lucide-react";
 import { AxiosError } from "axios";
 import { Workspace } from "../types";
 import { CreateWorkspaceModal } from "../components/CreateWorkspaceModal";
@@ -18,29 +18,41 @@ const WorkspaceCard: React.FC<{
 }> = ({ ws, onClick, isOwner, workspaceIndex }) => {
 
   const getWorkspaceImage = () => {
-    const index = workspaceIndex !== undefined ? workspaceIndex : 0;
+    const index = workspaceIndex ?? 0;
     const imageNumber = (index % 3) + 1;
-
-    if (isOwner) {
-      return `/images/Workspace${imageNumber}.png`;
-    } else {
-      return `/images/Teamspace${imageNumber}.png`;
-    }
+    return isOwner
+      ? `/images/Workspace${imageNumber}.png`
+      : `/images/Teamspace${imageNumber}.png`;
   };
 
   const imageSrc = getWorkspaceImage();
 
+  const formatDate = (date?: string) => {
+    if (!date) return '—';
+    return new Date(date).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
   return (
     <div
       onClick={() => onClick(ws.id)}
-      className="group flex h-full cursor-pointer flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-gray-300 hover:shadow-md"
+      className="
+        flex h-full cursor-pointer flex-col
+        rounded-lg border border-gray-200 bg-white
+        p-4 shadow-sm
+        transition
+        hover:border-gray-300 hover:shadow-md
+      "
     >
-      {/* Header */}
+      {/* Top: Identity */}
       <div className="flex items-start gap-3">
         <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md bg-gray-50">
           <img
             src={imageSrc}
-            alt={isOwner ? 'Workspace' : 'Team Workspace'}
+            alt={isOwner ? 'Workspace' : 'Team workspace'}
             className="h-full w-full object-contain"
           />
         </div>
@@ -52,68 +64,62 @@ const WorkspaceCard: React.FC<{
 
           {!isOwner && (
             <p className="mt-0.5 truncate text-xs text-gray-500">
-              by {ws.owner.name || ws.owner.email}
+              Owned by {ws.owner.name || ws.owner.email}
             </p>
           )}
         </div>
       </div>
 
-      {/* Meta */}
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-        <Calendar className="h-3.5 w-3.5 text-gray-400" />
-        <span>
-          Created {ws.created_at ? new Date(ws.created_at).toLocaleDateString() : 'Just now'}
-        </span>
-      </div>
-
-      {/* Footer */}
-      <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-3">
-        {/* Left */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-            <Users className="h-3.5 w-3.5" />
-            <span>{ws.team_members?.length || 0} collaborators</span>
-          </div>
-
-          {ws.data_source && (
-            <div
-              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                ws.data_source === 'API'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : ws.data_source === 'DB'
-                  ? 'bg-purple-50 text-purple-700'
-                  : 'bg-green-50 text-green-700'
-              }`}
-            >
-              {ws.data_source === 'API' && <Globe className="h-3 w-3" />}
-              {ws.data_source === 'DB' && <Server className="h-3 w-3" />}
-              {ws.data_source === 'CSV' && <FileText className="h-3 w-3" />}
-              <span>
-                {ws.data_source === 'API'
-                  ? 'Live API'
-                  : ws.data_source === 'DB'
-                  ? 'Database'
-                  : 'CSV import'}
-              </span>
-            </div>
-          )}
+      {/* Middle: Metadata */}
+      <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center gap-1.5">
+          <Calendar className="h-3.5 w-3.5 text-gray-400" />
+          Created {formatDate(ws.created_at)}
         </div>
 
-        {/* Right */}
+        <div className="flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-gray-400" />
+          {ws.team_members?.length || 0} collaborators
+        </div>
+      </div>
+
+      {/* Bottom: State */}
+      <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-3">
+        {/* Data source */}
+        {ws.data_source ? (
+          <div
+            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+              ws.data_source === 'API'
+                ? 'bg-indigo-50 text-indigo-700'
+                : ws.data_source === 'DB'
+                ? 'bg-purple-50 text-purple-700'
+                : 'bg-green-50 text-green-700'
+            }`}
+          >
+            {ws.data_source === 'API' && <Globe className="h-3 w-3" />}
+            {ws.data_source === 'DB' && <Server className="h-3 w-3" />}
+            {ws.data_source === 'CSV' && <FileText className="h-3 w-3" />}
+            <span>
+              {ws.data_source === 'API'
+                ? 'Live API'
+                : ws.data_source === 'DB'
+                ? 'Database'
+                : 'CSV import'}
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400">No data source</span>
+        )}
+
+        {/* Status */}
         {(ws.data_source === 'API' || ws.data_source === 'DB') && (
           ws.is_polling_active ? (
-            <div
-              className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"
-              title="Data is being refreshed automatically"
-            >
+            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               Active
             </div>
           ) : (
-            <div
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500"
-              title="Automatic data refresh is paused"
-            >
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
               <span className="h-2 w-2 rounded-full bg-gray-400" />
               Paused
             </div>
@@ -405,25 +411,27 @@ const Home: React.FC = () => {
                     <div className="space-y-12">
                         {/* Owned Workspaces Section */}
                         <section>
-                            {/* Section Header */}
-                            <div className="mb-5 flex items-center gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                <LayoutGrid className="h-4 w-4" />
-                                </div>
+                            <div className="mb-6 flex items-start">
+                              <div className="mt-1 mr-3">
+                                <Folder className="h-4 w-4 text-gray-400" />
+                              </div>
 
-                                <div>
-                                <h2 className="text-base font-semibold text-gray-900">
-                                    Personal workspaces
+                              {/* Title + subtitle */}
+                              <div>
+                                <h2 className="text-base font-semibold text-gray-900 leading-tight">
+                                  Personal workspaces
                                 </h2>
-                                <p className="text-sm text-gray-500">
-                                    Workspaces you own and manage
+                                <p className="mt-0.5 text-sm text-gray-500">
+                                  Workspaces you own and manage
                                 </p>
-                                </div>
+                              </div>
 
-                                <div className="ml-auto text-xs font-medium text-gray-500">
+                              {/* Meta */}
+                              <div className="ml-auto pt-1 text-xs font-medium text-gray-500">
                                 {ownedWorkspaces.length} of 3 used
-                                </div>
+                              </div>
                             </div>
+
 
                             {/* Workspace Grid */}
                             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -438,101 +446,114 @@ const Home: React.FC = () => {
                                     />
                                 ))
                                 ) : dataReady ? (
-                                <div className="col-span-full">
-                                  <div
-                                    className="
-                                      relative overflow-hidden
-                                      rounded-xl border border-gray-200
-                                      bg-white
-                                      shadow-sm
-                                    "
-                                  >
-                                    <div
-                                      className="
-                                        grid gap-6
-                                        p-6 sm:p-8
-                                        md:grid-cols-2
-                                        items-center
-                                      "
-                                    >
-                                      {/* LEFT: Context */}
-                                      <div className="text-center md:text-left">
-                                        <h3 className="text-base font-semibold text-gray-900">
-                                          Create your first workspace
-                                        </h3>
+              
+                              <div className="col-span-full">
+                                <div
+                                  className="
+                                    relative overflow-hidden
+                                    rounded-2xl
+                                    border border-gray-200
+                                    bg-gradient-to-br from-white via-white to-blue-50
+                                    shadow-sm
+                                  "
+                                >
+                                  {/* Decorative background */}
+                                  <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-blue-200/30 blur-3xl" />
 
-                                        <p className="mt-2 max-w-md mx-auto md:mx-0 text-sm text-gray-600">
-                                          A workspace is where DataPulse connects to your data, tracks changes,
-                                          and helps you collaborate with your team in one place.
-                                        </p>
+                                  <div className="relative grid gap-10 p-6 sm:p-8 md:grid-cols-2 items-center">
+                                    
+                                    {/* LEFT: Action + Promise */}
+                                    <div className="space-y-6 text-center md:text-left">
+                                      
+                                      {/* Eyebrow */}
+                                      <p className="text-[11px] font-bold uppercase tracking-widest text-blue-600">
+                                        Get started
+                                      </p>
 
-                                        {/* Capabilities */}
-                                       <div className="mt-5 space-y-3 text-left max-w-md mx-auto md:mx-0">
-                                          <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                              <Database className="h-3.5 w-3.5" />
-                                            </div>
-                                            <p className="text-sm text-gray-600">
-                                              Connect CSV files, APIs, or databases
-                                            </p>
-                                          </div>
+                                      {/* Headline */}
+                                      <h3 className="text-xl font-semibold text-gray-900 leading-tight">
+                                        Track your data changes
+                                        <br className="hidden sm:block" />
+                                        in one shared workspace
+                                      </h3>
 
-                                          <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                              <Activity className="h-3.5 w-3.5" />
-                                            </div>
-                                            <p className="text-sm text-gray-600">
-                                              Monitor trends and data changes over time
-                                            </p>
-                                          </div>
+                                      {/* Explanation (clarified) */}
+                                      <p className="max-w-md mx-auto md:mx-0 text-sm text-gray-600">
+                                        A workspace connects your data sources, watches for changes,
+                                        and keeps updates organized in one place — without manual tracking.
+                                      </p>
 
-                                          <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                              <Users className="h-3.5 w-3.5" />
-                                            </div>
-                                            <p className="text-sm text-gray-600">
-                                              Invite up to 2 teammates per workspace
-                                            </p>
-                                          </div>
-                                        </div>
-                                        
-                                        {/* Limits */}
-                                        <p className="mt-4 text-xs text-gray-400">
-                                          You can create up to{" "}
-                                          <span className="font-medium text-gray-500">
-                                            3 personal workspaces
-                                          </span>.
-                                        </p>
-
-                                        {/* CTA */}
-                                        <div className="mt-6">
-                                          <button
-                                            onClick={() => setIsCreateModalOpen(true)}
-                                            className="
-                                              inline-flex items-center gap-2
-                                              rounded-md bg-blue-600
-                                              px-5 py-2.5
-                                              text-sm font-medium text-white
-                                              transition hover:bg-blue-700
-                                            "
-                                          >
-                                            Create workspace
-                                            <ArrowRight className="h-4 w-4" />
-                                          </button>
-                                        </div>
+                                      {/* Primary action */}
+                                      <div>
+                                        <button
+                                          onClick={() => setIsCreateModalOpen(true)}
+                                          className="
+                                            inline-flex items-center justify-center gap-2
+                                            rounded-sm 
+                                            bg-blue-600 
+                                            px-5 py-2.5
+                                            text-[11px] font-bold text-white tracking-widest
+                                            shadow-sm hover:bg-blue-700 font-manrope hover:shadow-md
+                                            transition-all active:scale-[0.98]
+                                            group
+                                          "
+                                        >
+                                          <span>Create workspace</span>
+                                          <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                                        </button>
                                       </div>
 
-                                      {/* RIGHT: Illustration */}
-                                      <div className="order-first md:order-last flex justify-center md:justify-end">
+                                      {/* Micro-clarity */}
+                                      <p className="text-xs text-gray-400">
+                                        Takes less than a minute. You can create up to{" "}
+                                        <span className="font-medium text-gray-500">
+                                          3 personal workspaces
+                                        </span>.
+                                      </p>
+                                    </div>
+
+                                    {/* RIGHT: Illustration + capabilities */}
+                                    <div className="order-first md:order-last space-y-6">
+                                      
+                                      {/* Illustration */}
+                                      <div className="relative flex justify-center md:justify-end">
+                                        <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
                                         <img
                                           src="/images/Workspace1.png"
                                           alt="Workspace overview"
-                                          className="w-44 sm:w-52 md:w-56 object-contain opacity-95"
+                                          className="relative z-10 w-48 sm:w-56 md:w-64 object-contain"
                                         />
                                       </div>
+
+                                      {/* Capabilities */}
+                                      <div className="grid gap-3 max-w-md mx-auto md:ml-auto">
+                                        <div className="flex items-center gap-3 text-sm text-gray-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                            <Database className="h-4 w-4" />
+                                          </div>
+                                          Connect CSV files, APIs, or databases
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-sm text-gray-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                            <Activity className="h-4 w-4" />
+                                          </div>
+                                          Monitor trends and data changes over time
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-sm text-gray-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                            <Users className="h-4 w-4" />
+                                          </div>
+                                          Invite teammates to collaborate
+                                        </div>
+                                      </div>
                                     </div>
+
                                   </div>
                                 </div>
+                              </div>
+
 
                              ) : null}
                                
@@ -541,20 +562,23 @@ const Home: React.FC = () => {
 
                         <section>
                             {/* Section Header */}
-                            <div className="mb-5 flex items-center gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
-                                <Users className="h-4 w-4" />
-                                </div>
+                            <div className="mb-6 flex items-start">
+                              {/* Icon */}
+                              <div className="mt-1 mr-3">
+                                <Users className="h-4 w-4 text-gray-400" />
+                              </div>
 
-                                <div>
-                                <h2 className="text-base font-semibold text-gray-900">
-                                    Team collaborations
+                              {/* Title + subtitle */}
+                              <div>
+                                <h2 className="text-base font-semibold text-gray-900 leading-tight">
+                                  Team collaborations
                                 </h2>
-                                <p className="text-sm text-gray-500">
-                                    Workspaces shared with you
+                                <p className="mt-0.5 text-sm text-gray-500">
+                                  Workspaces shared with you
                                 </p>
-                                </div>
+                              </div>
                             </div>
+
 
                             {/* Content */}
                             {teamWorkspaces.length > 0 ? (
@@ -570,29 +594,33 @@ const Home: React.FC = () => {
                                 ))}
                                 </div>
                             ) : dataReady ? (
-                               <div className="col-span-full">
+                              <div className="col-span-full">
                                 <div
                                   className="
                                     relative overflow-hidden
                                     rounded-xl border border-gray-200
-                                    bg-white
+                                    bg-gradient-to-br from-white via-white to-blue-50/30
                                     shadow-sm
                                   "
                                 >
                                   <div className="flex flex-col items-center justify-center px-6 py-8 sm:py-9 text-center">
+                                    
                                     {/* Illustration */}
-                                    <img
-                                      src="/images/Teamspace1.png"
-                                      alt="Shared workspaces"
-                                      className="mb-4 w-36 object-contain opacity-90"
-                                    />
+                                    <div className="relative mb-4">
+                                      <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
+                                      <img
+                                        src="/images/Teamspace1.png"
+                                        alt="Shared workspaces"
+                                        className="relative z-10 w-36 object-contain opacity-90"
+                                      />
+                                    </div>
 
                                     {/* Copy */}
                                     <h3 className="text-sm font-semibold text-gray-900">
                                       No shared workspaces yet
                                     </h3>
 
-                                    <p className="mt-1 max-w-sm text-sm text-gray-500">
+                                    <p className="mt-1 max-w-sm text-sm text-gray-600">
                                       Workspaces shared with you by teammates will appear here automatically.
                                     </p>
 
@@ -602,6 +630,7 @@ const Home: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
+
                             ) : null}
                             </section>
                     </div>
