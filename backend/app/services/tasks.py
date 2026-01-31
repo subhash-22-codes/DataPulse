@@ -1263,10 +1263,35 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
             if schema_has_changed or row_count_has_changed or col_count_has_changed:
-                # ✅ AI Insight removed (Gemini slow) but field stays
+
                 ai_insight_text = None
 
-                notification_message = f"Structural change detected in workspace '{workspace.name}'."
+                change_parts = []
+
+                if schema_has_changed:
+                    added = len(schema_changes_dict.get("added", []))
+                    removed = len(schema_changes_dict.get("removed", []))
+                    if added or removed:
+                        change_parts.append(
+                            f"schema updated (+{added} / -{removed})"
+                        )
+
+                if row_count_has_changed:
+                    change_parts.append(
+                        f"rows {old_row_count} → {new_row_count}"
+                    )
+
+                if col_count_has_changed:
+                    change_parts.append(
+                        f"columns {old_col_count} → {new_col_count}"
+                    )
+
+                change_summary = ", ".join(change_parts)
+
+                notification_message = (
+                    f"Data updated in '{workspace.name}': {change_summary}"
+                )
+
 
                 # ✅ Notify all team members + owner (safe dedupe by user.id)
                 all_users = list(workspace.team_members) + [workspace.owner]
