@@ -112,11 +112,11 @@ useEffect(() => {
       try {
         const data = JSON.parse(event.data);
 
-        if (data.type === "job_complete" || data.type === "job_error") {
+        if (data.type === "job_complete") {
           setIsProcessing(false);
           setRefreshHistoryKey((prev) => prev + 1);
 
-          if (data.type === "job_error") {
+          if (data.status === "failed") {
             setWorkspace((prev) =>
               prev
                 ? {
@@ -139,6 +139,12 @@ useEffect(() => {
             );
           }
         }
+
+        if (data.type === "job_error") {
+          // non-terminal error, keep polling
+          toast.error(data.error || "Temporary error.");
+        }
+
       } catch (err) {
         console.error(err);
       }
