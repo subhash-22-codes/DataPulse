@@ -468,34 +468,34 @@ const Home: React.FC = () => {
 
                                         {/* Capabilities */}
                                        <div className="mt-5 space-y-3 text-left max-w-md mx-auto md:mx-0">
-                                    <div className="flex items-start gap-3">
-                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                        <Database className="h-3.5 w-3.5" />
-                                      </div>
-                                      <p className="text-sm text-gray-600">
-                                        Connect CSV files, APIs, or databases
-                                      </p>
-                                    </div>
+                                          <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                              <Database className="h-3.5 w-3.5" />
+                                            </div>
+                                            <p className="text-sm text-gray-600">
+                                              Connect CSV files, APIs, or databases
+                                            </p>
+                                          </div>
 
-                                    <div className="flex items-start gap-3">
-                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                        <Activity className="h-3.5 w-3.5" />
-                                      </div>
-                                      <p className="text-sm text-gray-600">
-                                        Monitor trends and data changes over time
-                                      </p>
-                                    </div>
+                                          <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                              <Activity className="h-3.5 w-3.5" />
+                                            </div>
+                                            <p className="text-sm text-gray-600">
+                                              Monitor trends and data changes over time
+                                            </p>
+                                          </div>
 
-                                    <div className="flex items-start gap-3">
-                                      <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                        <Users className="h-3.5 w-3.5" />
-                                      </div>
-                                      <p className="text-sm text-gray-600">
-                                        Invite up to 2 teammates per workspace
-                                      </p>
-                                    </div>
-                                  </div>
-                                  
+                                          <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                                              <Users className="h-3.5 w-3.5" />
+                                            </div>
+                                            <p className="text-sm text-gray-600">
+                                              Invite up to 2 teammates per workspace
+                                            </p>
+                                          </div>
+                                        </div>
+                                        
                                         {/* Limits */}
                                         <p className="mt-4 text-xs text-gray-400">
                                           You can create up to{" "}
