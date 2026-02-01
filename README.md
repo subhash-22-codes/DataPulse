@@ -86,62 +86,71 @@ All heavy work is pushed into **background execution**.
 
 ## Data Sources Supported
 
+DataPulse supports multiple data ingestion paths, all designed around
+versioned comparison and change detection rather than one-time analysis.
+
 ### 1. CSV Uploads
 
-* Designed for recurring datasets (daily / monthly)
-* Each upload is treated as a new version
-* Compared against the immediately previous version
+- Intended for recurring datasets (daily / weekly / monthly)
+- Each upload is treated as a new immutable version
+- Compared against the immediately previous version
+- Used for schema, structural, and metric change detection
 
 ### 2. External Database Connections
 
-* PostgreSQL
-* MySQL
+- PostgreSQL
+- MySQL
 
 Connections are:
+- read-only
+- isolated per workspace
+- credential-safe
 
-* read-only
-* isolated
-* credential-safe
+Query results are ingested as snapshots rather than live connections.
 
 ### 3. API-Based Sources
 
-* Open APIs
-* Secured APIs using headers (e.g., Authorization, API keys)
-* Secrets are encrypted at rest
+- Open APIs
+- Secured APIs using headers (e.g. Authorization, API keys)
+- Secrets are encrypted at rest
+- Responses are ingested as bounded snapshots
 
 ---
 
 ## External Database Connectivity (Deep Dive)
 
-This is a **core feature** of DataPulse.
+External database connectivity is a core feature of DataPulse and is designed
+for **safe, read-only monitoring**, not live querying or mutation.
 
 ### Design Goals
 
-* Never mutate external data
-* Avoid exposing credentials in plaintext
-* Fail safely by surfacing errors and preserving system usability
-* Reduce SQL injection risk through strict query validation
-* Keep schema inspection isolated from source systems
+- Never mutate external source databases
+- Avoid storing or exposing credentials in plaintext
+- Fail safely without leaving polling or jobs in an inconsistent state
+- Reduce SQL injection risk through strict query validation
+- Isolate ingestion from source systems
 
-### How It Works (Conceptual)
+### How It Works
 
-* Users provide DB connection details
-* Credentials are **encrypted at rest** using Fernet (AES-based)
-* Encryption keys are loaded from environment variables
-* Connections are established using **read-only access**
-* Schema metadata is extracted using:
+- Users provide external database connection details
+- Credentials are encrypted at rest using Fernet (AES-based encryption)
+- Encryption keys are supplied via environment variables
+- Connections use read-only database users
+- Only validated single SELECT queries are allowed
+- Query results are fetched as bounded snapshots
+- Snapshots are converted to CSV and stored in private object storage
+- Schema metadata is derived from the snapshot, not the live database
 
-  * SQLAlchemy inspection
-  * database system catalogs
-* Only metadata is stored — never actual table data
+### Tracked Changes
 
-Tracked changes include:
+Across successive snapshots, DataPulse detects:
+- column additions and removals
+- column type changes
+- row count differences
+- structural shifts derived from snapshot comparison
 
-* table creation / deletion
-* column additions / removals
-* column type changes
-
-This allows DataPulse to monitor **schema evolution over time** without compromising source databases.
+External databases are never modified, and no long-lived connections
+or writable access are maintained.
 
 ---
 
