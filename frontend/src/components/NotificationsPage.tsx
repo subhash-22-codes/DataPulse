@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { api } from "../services/api";
 import {
   Bell,
@@ -6,13 +7,14 @@ import {
   Inbox,
   Loader2,
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
-import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { ModalShell } from "./ModelShell";
 
 /* =======================
-   Types
+   Types (matches backend)
 ======================= */
 
 interface Notification {
@@ -21,57 +23,117 @@ interface Notification {
   is_read: boolean;
   priority: "low" | "info" | "warning" | "critical";
   created_at: string;
-}
-
-interface ParsedNotification {
-  workspace: string;
-  summary: string;
-  timestamp: string;
+  action_url?: string | null;
 }
 
 /* =======================
-   Parsing (frontend only)
+   Helpers
 ======================= */
 
-const parseMessage = (
-  message: string,
-  createdAt: string
-): ParsedNotification => {
+const relativeTime = (date: string) => {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? "s" : ""} ago`;
+};
+
+const summarizeMessage = (message: string) => {
   const workspace =
     message.match(/Data updated in '(.+?)'/)?.[1] ?? "Workspace";
 
-  const parts: string[] = [];
+  const parts: React.ReactNode[] = [];
 
-  const schema = message.match(/\(\+(\d+)\s*\/\s*-(\d+)\)/);
+  const schema = message.match(/\+(\d+)\s*\/\s*-(\d+)/);
   if (schema) {
     const added = Number(schema[1]);
     const removed = Number(schema[2]);
-    if (added) parts.push(`${added} column${added > 1 ? "s" : ""} added`);
-    if (removed)
-      parts.push(`${removed} column${removed > 1 ? "s" : ""} removed`);
+
+    if (added > 0) {
+      parts.push(
+        <span key="schema-add" className="inline-flex items-center gap-1">
+          Structure <ArrowUp className="h-3 w-3 text-green-600" />
+          {added}
+        </span>
+      );
+    }
+
+    if (removed > 0) {
+      parts.push(
+        <span key="schema-remove" className="inline-flex items-center gap-1">
+          Structure <ArrowDown className="h-3 w-3 text-red-600" />
+          {removed}
+        </span>
+      );
+    }
   }
 
   const rows = message.match(/rows\s+(\d+)\s*→\s*(\d+)/);
   if (rows) {
-    const diff = Number(rows[2]) - Number(rows[1]);
-    if (diff > 0) parts.push(`row count increased by ${diff}`);
-    if (diff < 0) parts.push(`row count decreased by ${Math.abs(diff)}`);
+    const from = Number(rows[1]);
+    const to = Number(rows[2]);
+
+    parts.push(
+      <span key="rows" className="inline-flex items-center gap-1">
+        Rows
+        {to > from ? (
+          <ArrowUp className="h-3 w-3 text-green-600" />
+        ) : (
+          <ArrowDown className="h-3 w-3 text-red-600" />
+        )}
+        {from} → {to}
+      </span>
+    );
   }
 
   const cols = message.match(/columns\s+(\d+)\s*→\s*(\d+)/);
   if (cols) {
-    parts.push(`total columns ${cols[2]}`);
+    const from = Number(cols[1]);
+    const to = Number(cols[2]);
+
+    parts.push(
+      <span key="cols" className="inline-flex items-center gap-1">
+        Columns
+        {to > from ? (
+          <ArrowUp className="h-3 w-3 text-green-600" />
+        ) : (
+          <ArrowDown className="h-3 w-3 text-red-600" />
+        )}
+        {from} → {to}
+      </span>
+    );
   }
 
-  return {
-    workspace,
-    summary:
-      parts.length > 0
-        ? `Schema updated: ${parts.join(", ")}`
-        : "Data updated",
-    timestamp: new Date(createdAt).toLocaleString(),
-  };
+  return { workspace, parts };
 };
+
+/* =======================
+   Skeletons
+======================= */
+
+const NotificationSkeletonRow = () => (
+  <div className="flex items-start justify-between gap-3 px-3 py-2">
+    <div className="flex gap-2 w-full">
+      <div className="mt-1 h-4 w-4 rounded bg-slate-200 animate-pulse" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 w-40 bg-slate-200 rounded animate-pulse" />
+        <div className="h-3 w-3/4 bg-slate-200 rounded animate-pulse" />
+        <div className="h-2 w-24 bg-slate-200 rounded animate-pulse" />
+      </div>
+    </div>
+  </div>
+);
+
+const NotificationsSkeleton = () => (
+  <div className="rounded-md border border-slate-200 bg-white divide-y">
+    {Array.from({ length: 5 }).map((_, i) => (
+      <NotificationSkeletonRow key={i} />
+    ))}
+  </div>
+);
 
 /* =======================
    Component
@@ -80,89 +142,108 @@ const parseMessage = (
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [mutating, setMutating] = useState(false);
 
+  const abortRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
 
-  /* ---------------- Fetch ---------------- */
-
   const fetchNotifications = async () => {
-    try {
-      const res = await api.get<Notification[]>("/notifications/");
-      setNotifications(res.data);
+    abortRef.current = new AbortController();
 
-      if (res.data.some(n => !n.is_read)) {
-        await api.post("/notifications/read-all");
+    try {
+      const res = await api.get<Notification[]>("/notifications", {
+        signal: abortRef.current?.signal,
+      });
+
+      const sorted = [...res.data].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      );
+
+      setNotifications(sorted);
+      setError(null);
+
+      if (sorted.some(n => !n.is_read)) {
+        api.post("/notifications/read-all").catch(() => {});
+        setNotifications(prev =>
+          prev.map(n => ({ ...n, is_read: true }))
+        );
       }
-    } catch {
-      toast.error("Failed to load activity");
+    } catch (err) {
+      if (
+        axios.isAxiosError(err) &&
+        err.code === "ERR_CANCELED"
+      ) {
+        return;
+      }
+      setError("Failed to load notifications.");
     } finally {
       setLoading(false);
     }
   };
 
+  const retryFetch = () => {
+    setError(null);
+    setLoading(true);
+    fetchNotifications();
+  };
+
   useEffect(() => {
     fetchNotifications();
+    return () => abortRef.current?.abort();
   }, []);
 
-  /* ---------------- Actions ---------------- */
-
   const handleDelete = async (id: string) => {
+    if (processingId || clearingAll) return;
+
     setProcessingId(id);
+    setMutating(true);
+
     const backup = notifications;
     setNotifications(prev => prev.filter(n => n.id !== id));
 
     try {
       await api.delete(`/notifications/${id}`);
+      setError(null);
     } catch {
       setNotifications(backup);
-      toast.error("Delete failed");
+      setError("Failed to delete notification.");
     } finally {
       setProcessingId(null);
+      setMutating(false);
     }
   };
 
   const handleClearAll = async () => {
+    if (clearingAll) return;
+
+    setClearingAll(true);
+    setMutating(true);
     setShowClearModal(false);
+
     const backup = notifications;
     setNotifications([]);
 
     try {
-      await api.delete("/notifications/");
+      await api.delete("/notifications");
+      setError(null);
     } catch {
       setNotifications(backup);
-      toast.error("Clear failed");
+      setError("Failed to clear notifications.");
+    } finally {
+      setClearingAll(false);
+      setMutating(false);
     }
   };
 
-  /* ---------------- Derived ---------------- */
-
-  const parsed = useMemo(
-    () =>
-      notifications.map(n => ({
-        raw: n,
-        parsed: parseMessage(n.message, n.created_at),
-      })),
-    [notifications]
-  );
-
-  /* ---------------- Loading ---------------- */
-
-  if (loading) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
-      </div>
-    );
-  }
-
-  /* ---------------- UI ---------------- */
-
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-6 py-6">
-        {/* Back */}
+      <div className="mx-auto max-w-4xl px-4 py-5">
         <button
           onClick={() => navigate(-1)}
           className="mb-3 flex items-center gap-2 text-xs text-slate-400 hover:text-slate-900"
@@ -171,98 +252,129 @@ export const NotificationsPage: React.FC = () => {
           Back
         </button>
 
-        {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-slate-900">
-            Workspace Activity
+        <div className="mb-2 flex items-center justify-between">
+          <h1 className="text-base font-semibold text-slate-900">
+            Notifications
           </h1>
 
           <button
             onClick={() => setShowClearModal(true)}
-            disabled={notifications.length === 0}
-            className="text-xs font-medium text-slate-400 hover:text-red-600 disabled:opacity-30"
+            disabled={notifications.length === 0 || clearingAll}
+            className="text-xs text-slate-400 hover:text-red-600 disabled:opacity-30"
           >
-            Clear history
+            Clear all
           </button>
         </div>
 
-        {/* Empty */}
-        {parsed.length === 0 ? (
-          <div className="flex flex-col items-center py-24 text-center">
-            <Inbox className="h-8 w-8 text-slate-300" />
-            <p className="mt-3 text-sm text-slate-500">
-              No recent activity
+        <p className="mb-4 text-xs text-slate-500">
+          Activity from your connected data sources. We highlight meaningful changes.
+        </p>
+
+        {error && notifications.length === 0 && (
+          <div className="mb-4 text-xs text-red-600 flex items-center gap-3">
+            <span>{error}</span>
+            <button
+              onClick={retryFetch}
+              className="text-xs font-medium text-slate-900 underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <NotificationsSkeleton />
+        ) : mutating && notifications.length === 0 ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-4 w-4 animate-spin text-slate-300" />
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center py-20">
+            <Inbox className="h-7 w-7 text-slate-300" />
+            <p className="mt-2 text-sm text-slate-500">
+              No notifications yet
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200 rounded-md border border-slate-200 bg-white">
-            {parsed.map(({ raw, parsed }) => (
-              <div
-                key={raw.id}
-                className="group flex items-start justify-between gap-4 px-4 py-3 hover:bg-slate-50"
-              >
-                <div className="flex gap-3">
-                  <Bell className="mt-0.5 h-4 w-4 text-slate-400" />
+          <div className="rounded-md border border-slate-200 bg-white divide-y">
+            {notifications.map(n => {
+              const { workspace, parts } =
+                summarizeMessage(n.message);
 
-                  <div>
-                    <div className="text-sm text-slate-900">
-                      <span className="font-semibold">
-                        {parsed.workspace}
-                      </span>{" "}
-                      <span className="text-slate-600">
-                        {parsed.summary}
-                      </span>
-                    </div>
+              return (
+                <div
+                  key={n.id}
+                  className="flex items-start justify-between gap-3 px-3 py-2 hover:bg-slate-50"
+                >
+                  <div className="flex gap-2">
+                    <Bell className="mt-1 h-4 w-4 text-slate-400" />
 
-                    <div className="mt-0.5 text-xs text-slate-400">
-                      {parsed.timestamp}
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                        {workspace}
+                      </div>
+
+                      <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-600">
+                        {parts.map((p, i) => (
+                          <React.Fragment key={i}>
+                            {p}
+                            {i < parts.length - 1 && (
+                              <span className="text-slate-400">•</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+
+                      <div className="mt-0.5 text-[11px] text-slate-400">
+                        {relativeTime(n.created_at)}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <button
-                  onClick={() => handleDelete(raw.id)}
-                  disabled={processingId === raw.id}
-                  className="opacity-0 group-hover:opacity-100 rounded p-1 text-slate-400 hover:text-red-600 transition"
-                >
-                  {processingId === raw.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            ))}
+                  <button
+                    onClick={() => handleDelete(n.id)}
+                    disabled={processingId === n.id || clearingAll}
+                    className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-40"
+                  >
+                    {processingId === n.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Clear Modal (unchanged, your style) */}
       {showClearModal && (
         <ModalShell>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-6">
-            <div className="w-full max-w-[340px] rounded-sm border border-slate-300 bg-white p-4 shadow-2xl">
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Empty inbox?
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="w-full max-w-[320px] rounded-sm border border-slate-300 bg-white p-4 shadow-xl">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Clear notifications?
               </h3>
 
-              <p className="mt-2 text-xs text-slate-500 leading-normal font-medium">
-                All your current notifications will be removed. You won't be able to see them again.
+              <p className="mt-2 text-xs text-slate-500">
+                This will permanently remove all notifications.
               </p>
 
-              <div className="mt-6 flex justify-end gap-2">
+              <div className="mt-5 flex justify-end gap-2">
                 <button
                   onClick={() => setShowClearModal(false)}
-                  className="px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-900 transition-colors font-manrope hover:bg-black/5 tracking-widest"
+                  className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900"
                 >
                   Cancel
                 </button>
 
                 <button
                   onClick={handleClearAll}
-                  className="rounded-sm bg-slate-900 px-4 py-1.5 text-[11px] font-bold text-white hover:bg-black shadow-sm transition-all font-manrope tracking-widest"
+                  disabled={clearingAll}
+                  className="rounded-sm bg-neutral-900 hover:bg-neutral-800 px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                 >
-                  Clear Inbox
+                  Clear all
                 </button>
               </div>
             </div>

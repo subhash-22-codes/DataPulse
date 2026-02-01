@@ -2,6 +2,10 @@ import { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { api } from "../../services/api";
 
+/* =======================
+   Types
+======================= */
+
 interface Props {
   workspaceId: string;
   currentUserId: string;
@@ -14,20 +18,30 @@ interface MemberSetting {
   email_notifications_enabled: boolean;
 }
 
+/* =======================
+   Component
+======================= */
+
 export default function NotificationsCard({
   workspaceId,
   currentUserId,
 }: Props) {
+  /* ---------- State ---------- */
+
   const [members, setMembers] = useState<MemberSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const [cooldown, setCooldown] = useState(false);
 
+  /* ---------- Cooldown ---------- */
+
   const startCooldown = () => {
     setCooldown(true);
     setTimeout(() => setCooldown(false), 3000);
   };
+
+  /* ---------- Fetch ---------- */
 
   const loadSettings = useCallback(async () => {
     try {
@@ -47,7 +61,11 @@ export default function NotificationsCard({
     }
   }, [workspaceId]);
 
-  /* ---------- Optimistic Toggle ---------- */
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  /* ---------- Actions ---------- */
 
   const toggleSelf = async (enabled: boolean) => {
     if (cooldown) {
@@ -55,7 +73,6 @@ export default function NotificationsCard({
       return;
     }
 
-    // optimistic UI update
     setMembers(prev =>
       prev.map(m =>
         m.user_id === currentUserId
@@ -87,15 +104,19 @@ export default function NotificationsCard({
     }
   };
 
-  useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+  /* ---------- Derived ---------- */
+
+  const self = members.find(m => m.user_id === currentUserId);
+
+  const allDisabled =
+    members.length > 0 &&
+    members.every(m => !m.email_notifications_enabled);
 
   /* ---------- Loading ---------- */
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200/60 p-6 space-y-4">
+      <div className="rounded-xl bg-white ring-1 ring-slate-200/60 p-6 space-y-4">
         <div className="h-6 w-48 bg-slate-200 rounded animate-pulse" />
         {[1, 2, 3].map(i => (
           <div key={i} className="space-y-2">
@@ -111,13 +132,13 @@ export default function NotificationsCard({
 
   if (error) {
     return (
-      <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200/60 p-6 text-center space-y-3">
+      <div className="rounded-xl bg-white ring-1 ring-slate-200/60 p-6 text-center space-y-3">
         <div className="text-red-600 font-semibold">
           Failed to load notification settings
         </div>
         <button
           onClick={loadSettings}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md"
         >
           Retry
         </button>
@@ -125,99 +146,67 @@ export default function NotificationsCard({
     );
   }
 
-  const allDisabled = members.every(
-    m => !m.email_notifications_enabled
-  );
-
   /* ---------- UI ---------- */
 
   return (
-    
-    <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200/60">
+    <div className="rounded-xl bg-white ring-1 ring-slate-200/60">
 
       {/* Header */}
-      <div className="p-6 border-b border-slate-100">
+      <header className="p-6 border-b border-slate-100">
         <h3 className="text-lg font-semibold">
           Workspace Email Notifications
         </h3>
-
         <p className="text-sm text-slate-500 mt-1">
-          Receive alerts when workspace data changes or monitoring rules trigger.
+          Control who receives email alerts for this workspace.
         </p>
-      </div>
+      </header>
 
-      {/* My Setting */}
-      <div className="p-6 border-b border-slate-100 space-y-4">
-        {members
-          .filter(m => m.user_id === currentUserId)
-          .map(m => (
-            <div key={m.user_id} className="space-y-3">
-
-              <div>
-                <div className="font-medium text-slate-800">
-                  Your Notification Preference
-                </div>
-                 <div className="text-xs text-slate-500 mt-1">
-                  Disable this if you do not want to receive workspace
-                  notification emails.
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-slate-600 max-w-xl leading-relaxed">
-                  {cooldown
-                    ? "Please wait..."
-                    : m.email_notifications_enabled
-                    ? "You will receive workspace alert emails."
-                    : "You will not receive alerts and may miss important updates."}
-                </span>
-
-
-                <label
-                  className={`flex items-center ${
-                    saving || cooldown
-                      ? "cursor-not-allowed opacity-60"
-                      : "cursor-pointer"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only peer focus:outline-none"
-                    checked={m.email_notifications_enabled}
-                    disabled={saving || cooldown}
-                    onChange={() =>
-                      toggleSelf(!m.email_notifications_enabled)
-                    }
-                  />
-
-                  <div
-                    className={`relative w-12 h-7 rounded-full transition-all duration-200
-                      peer-focus:ring-2 peer-focus:ring-blue-400 peer-focus:ring-offset-2
-                      ${
-                        m.email_notifications_enabled
-                          ? "bg-green-500"
-                          : "bg-slate-300"
-                      }
-                    `}
-                  >
-                    <div
-                      className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-all duration-200
-                        ${
-                          m.email_notifications_enabled
-                            ? "translate-x-5"
-                            : ""
-                        }
-                      `}
-                    />
-                  </div>
-                </label>
-              </div>
+      {/* Self Setting */}
+      {self && (
+        <section className="p-6 border-b border-slate-100 space-y-4">
+          <div>
+            <div className="font-medium text-slate-800">
+              Your Preference
             </div>
-          ))}
-      </div>
+            <div className="text-xs text-slate-500 mt-1">
+              Disable this if you do not want email alerts.
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-slate-600 max-w-xl">
+              {cooldown
+                ? "Please wait before changing again."
+                : self.email_notifications_enabled
+                ? "You will receive workspace alert emails."
+                : "Alerts are disabled for you."}
+            </p>
+
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={self.email_notifications_enabled}
+                disabled={saving || cooldown}
+                onChange={() =>
+                  toggleSelf(!self.email_notifications_enabled)
+                }
+                className="
+                  h-5 w-5
+                  accent-green-600
+                  disabled:opacity-50
+                  disabled:cursor-not-allowed
+                "
+              />
+              <span className="text-sm text-slate-700">
+                Enable emails
+              </span>
+            </label>
+          </div>
+        </section>
+      )}
 
       {/* Team Status */}
-      <div className="divide-y divide-slate-100">
+      <section className="divide-y divide-slate-100">
         <div className="px-6 pt-4 pb-2 text-sm font-semibold text-slate-600">
           Team Notification Status
         </div>
@@ -225,16 +214,15 @@ export default function NotificationsCard({
         {members.map(m => (
           <div
             key={m.user_id}
-            className="px-6 py-4 space-y-1 sm:flex sm:items-center sm:justify-between sm:space-y-0"
+            className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
           >
             <div>
               <div className="font-medium text-slate-800">
-                {m.name}{" "}
+                {m.name}
                 {m.user_id === currentUserId && (
-                  <span className="text-blue-600">(You)</span>
+                  <span className="text-blue-600"> (You)</span>
                 )}
               </div>
-
               <div className="text-sm text-slate-500 break-all">
                 {m.email}
               </div>
@@ -242,20 +230,20 @@ export default function NotificationsCard({
 
             <div className="text-sm text-slate-600">
               {m.email_notifications_enabled
-                ? "Receiving alert emails"
+                ? "Receiving alerts"
                 : "Alerts paused"}
             </div>
           </div>
         ))}
-      </div>
+      </section>
 
+      {/* Warning */}
       {allDisabled && (
-        <div className="border-t border-slate-100 p-6">
-          <div className="m-5 sm:m-6 p-4 border border-amber-200 bg-amber-50 rounded-md text-sm text-amber-900">
-            All members have disabled notifications. Important alerts may go
-            unnoticed.
+        <section className="p-6 border-t border-slate-100">
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            All members have disabled notifications. Important alerts may go unnoticed.
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

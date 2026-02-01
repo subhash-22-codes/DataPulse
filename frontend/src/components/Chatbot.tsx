@@ -13,18 +13,18 @@ interface Message {
 
 const conversationStarters = [
   "What is DataPulse?",
-  "Explain Smart Alerts",
-  "How does API Polling work?",
-  "Are there any usage limits?",
-  "Can I link my Google account?",
-  "Who built DataPulse?",
-  "How do I set up a Smart Alert?",
-  "Explain the Snapshot vs. Trend views.",
+  "What are the current usage limits?",
+  "How do alerts work in general?",
+  "How can I manage email notifications?",
+  "Can I link my Google or GitHub account?",
+  "How does data versioning work?",
+  "What can Pulse help me with right now?",
 ];
+
 
 const welcomeMessage: Message = {
   sender: 'ai',
-  text: "Hello! I'm DataPulse AI. I can answer questions about how this application works. Ask me something, or try one of the suggestions below!",
+  text: "Hi, I’m Pulse. I’m an early preview assistant for DataPulse. I can help with general questions, but I don’t cover every feature yet.",
   timestamp: new Date()
 };
 
@@ -67,7 +67,10 @@ export const Chatbot: React.FC = () => {
 
     try {
       // API Logic remains identical
-      const res = await api.post<{ reply: string }>('/chat/', { message: userMessage });
+      const res = await api.post<{ reply: string; preview?: boolean }>('/chat/', {
+        message: userMessage
+      });
+
 
       const aiMessage: Message = {
         sender: 'ai',
