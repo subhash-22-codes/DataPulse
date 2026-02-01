@@ -519,7 +519,7 @@ const Home: React.FC = () => {
                                       <div className="relative flex justify-center md:justify-end">
                                         <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
                                         <img
-                                          src="/images/Workspace1.png"
+                                          src="/images/workspace_owner.png"
                                           alt="Workspace overview"
                                           className="relative z-10 w-48 sm:w-56 md:w-64 object-contain"
                                         />
@@ -609,7 +609,7 @@ const Home: React.FC = () => {
                                     <div className="relative mb-4">
                                       <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
                                       <img
-                                        src="/images/Teamspace1.png"
+                                        src="/images/team_collab.png"
                                         alt="Shared workspaces"
                                         className="relative z-10 w-36 object-contain opacity-90"
                                       />
