@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.database import get_db
-from app.api.dependencies import get_current_user, limiter
+from app.api.dependencies import get_current_user
+from app.core.limiter import limiter
 from app.models.data_upload import DataUpload
 from app.models.workspace import Workspace
 from app.services.storage_service import create_signed_download_url

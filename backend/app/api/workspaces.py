@@ -30,7 +30,8 @@ from app.services.tasks import process_csv_task
 from app.services.storage_service import upload_csv_bytes
 from app.services.storage_service import delete_files
 from app.api.alerts import AlertRuleResponse 
-from app.api.dependencies import get_current_user, limiter
+from app.api.dependencies import get_current_user
+from app.core.limiter import limiter
 from app.core.connection_manager import manager
 from app.services.tasks import process_data_fetch_task
 from app.core.guard import send_telegram_alert

@@ -7,7 +7,8 @@ from app.core.database import get_db
 from app.models.data_upload import DataUpload
 from app.models.workspace import Workspace
 from app.models.user import User
-from .dependencies import get_current_user, limiter
+from .dependencies import get_current_user
+from app.core.limiter import limiter
 from app.services.storage_service import delete_file
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])

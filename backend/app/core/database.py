@@ -5,7 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 from fastapi import HTTPException
-
+from slowapi.errors import RateLimitExceeded
+from fastapi import HTTPException
 
 load_dotenv()
 
@@ -50,6 +51,8 @@ def get_db():
         yield db
     except HTTPException:
         raise
+    except RateLimitExceeded:
+        raise
     except Exception:
         logger.exception("DB ERROR")
         db.rollback()
@@ -57,3 +60,4 @@ def get_db():
     finally:
         db.close()
         logger.debug("DB CLOSE")
+

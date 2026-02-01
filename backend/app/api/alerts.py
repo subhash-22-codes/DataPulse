@@ -6,7 +6,8 @@ from app.models.alert_rule import AlertRule
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload  # Added this import
 from app.models.user import User
-from .dependencies import get_current_user, limiter
+from .dependencies import get_current_user
+from app.core.limiter import limiter
 from pydantic import BaseModel, field_validator
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])

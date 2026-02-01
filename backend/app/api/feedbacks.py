@@ -1,10 +1,11 @@
 import uuid
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
+from app.core.limiter import limiter
 from app.models.feedback import Feedback
 from app.models.user import User
 
@@ -20,7 +21,9 @@ class FeedbackResponse(BaseModel):
     status: str = "success"
 
 @router.post("/", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def create_feedback(
+    request: Request,
     payload: FeedbackCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

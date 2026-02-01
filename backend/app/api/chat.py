@@ -11,7 +11,7 @@ from google.api_core import exceptions as google_exceptions
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.api.dependencies import limiter  # still imported for other routes if needed
+from app.core.limiter import limiter
 from app.models.user import User
 from .dependencies import get_current_user
 

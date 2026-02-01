@@ -5,8 +5,6 @@ import jwt
 import uuid
 import os
 import logging
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from app.core.database import get_db
 from app.models.user import User
 
@@ -14,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
-limiter = Limiter(key_func=get_remote_address)
 
 
 def get_current_user(

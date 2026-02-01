@@ -6,7 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from starlette.requests import Request
-from app.api.dependencies import limiter
+from app.core.limiter import limiter
 from app.core.logging import setup_logging
 import logging
 import os
