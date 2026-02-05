@@ -1,6 +1,6 @@
 # DataPulse
 
-**Real-Time Data & Schema Change Monitoring System**
+**Near Real-Time Data & Schema Change Monitoring System**
 
 DataPulse is a backend-heavy data monitoring platform designed to track **schema evolution, structural changes, and metric shifts** between dataset versions and live data sources.
 
@@ -324,11 +324,15 @@ Frontend development and UI/UX were shared across the project.
 Project creator and system architect  
 Backend systems, authentication/security, data modeling, background processing, deployment  
 GitHub: https://github.com/subhash-22-codes
+LinkedIn: https://linkedin.com/in/subhash-yaganti-a8b3b626a
+Email: subashyagantisubbu@gmail.com
 
 **Siri Mahalaxmi Vemula**  
 Backend development, database design, API integration  
 Built **DataPulse AI** help bot for chat-based Q&A (Gemini model integration)  
 GitHub: https://github.com/armycodes
+LinkedIn: https://linkedin.com/in/vemula-siri-mahalaxmi-b4b624319 
+Email: sirimahalaxmivemula@gmail.com
 
 ---
 
