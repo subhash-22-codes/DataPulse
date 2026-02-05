@@ -140,7 +140,7 @@ export const Legal: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Last Updated</span>
-                  <span className="text-slate-700">January 26, 2026</span>
+                  <span className="text-slate-700">February 5, 2026</span>
                 </div>
                 <div>
                   <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Jurisdiction</span>
@@ -943,7 +943,7 @@ export const Legal: React.FC = () => {
         </div>
 
         <div className="mt-16 pt-8 border-t border-slate-200 text-center text-sm text-slate-600">
-          <p className="mb-2">Last updated: January 26, 2026</p>
+          <p className="mb-2">Last updated: February 5, 2026</p>
           <p className="text-xs text-slate-500">© 2026 DataPulse. All rights reserved.</p>
         </div>
       </main>
