@@ -751,12 +751,16 @@ export const Legal: React.FC = () => {
                         <li>
                           <strong>25,000 rows</strong> maximum per database query result
                         </li>
+                        <li>
+                          <strong>Up to 10 metric alerts</strong> per workspace, delivered in a single consolidated email when triggered
+                        </li>
                       </ul>
-
-                      <p className="mt-3 text-slate-700">
-                        If you reach a limit, you can delete older uploads to continue using your workspace.
+                     <p className="mt-3 text-slate-700">
+                        When the 50-upload limit is reached, older uploads must be deleted before adding new ones.
                       </p>
+
                     </div>
+
 
                     <div className="rounded-lg border border-slate-200 bg-white p-4">
                       <p className="font-semibold text-slate-900 mb-2">Polling Intervals</p>
