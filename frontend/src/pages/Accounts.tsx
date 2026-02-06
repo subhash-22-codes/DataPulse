@@ -260,10 +260,18 @@ export const Account: React.FC = () => {
     }
   };
   const handleLink = () => {
-    if (!pendingLink) return;
-    setLoadingAction(`link-${pendingLink}`);
-    window.location.href = `${API_BASE}/auth/${pendingLink}/link?return_to=/account?status=success%26provider=${pendingLink}`;
-  };
+  if (!pendingLink) return;
+
+  setLoadingAction(`link-${pendingLink}`);
+
+  const returnTo = encodeURIComponent(
+    `/account?status=success&provider=${pendingLink}`
+  );
+
+  window.location.href =
+    `${API_BASE}/auth/${pendingLink}/link?return_to=${returnTo}`;
+};
+
 
   const processUnlink = async () => {
   if (!unlinkProvider) return;
@@ -1139,64 +1147,107 @@ if (pageState === 'error') {
         )}
 
       
-      {resultModal && (
+     {resultModal && (
       <ModalShell>
-      <div className="fixed inset-0 z-[110] flex items-center justify-center px-4 bg-slate-900/25 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-lg bg-white border border-slate-200 shadow-xl">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center px-4 bg-slate-900/25 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg bg-white border border-slate-200 shadow-xl">
 
-          {/* Header / Brand */}
-          <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-            <img
-              src="/DPLogo.png"
-              alt="DataPulse"
-              className="h-7 w-auto object-contain"
-            />
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+              <img
+                src="/DPLogo.png"
+                alt="DataPulse"
+                className="h-7 w-auto object-contain"
+              />
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <span className="font-medium tracking-wide">DataPulse</span>
-              <span>•</span>
-              {resultModal.provider === 'google' ? (
-                <GoogleIcon />
-              ) : (
-                <Github className="h-4 w-4" />
-              )}
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="font-medium tracking-wide">DataPulse</span>
+                <span>•</span>
+                {resultModal.provider === 'google' ? (
+                  <GoogleIcon />
+                ) : (
+                  <Github className="h-4 w-4" />
+                )}
+              </div>
             </div>
+
+            {/* Body */}
+            <div className="p-6 text-center flex flex-col items-center">
+
+              {resultModal.type === "success" && (
+                <div
+                  className="mb-4 w-16 h-16 rounded-full bg-green-100 
+                            flex items-center justify-center 
+                            animate-[scaleIn_220ms_ease-out]"
+                >
+                  <svg
+                    className="w-8 h-8 text-green-600"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              )}
+
+              {resultModal.type === "error" && (
+                <div
+                  className="mb-4 w-16 h-16 rounded-full bg-red-100 
+                            flex items-center justify-center 
+                            animate-[scaleIn_220ms_ease-out]"
+                >
+                  <svg
+                    className="w-8 h-8 text-red-600"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </div>
+              )}
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                {resultModal.type === 'success'
+                  ? `${resultModal.provider} linked successfully`
+                  : `${resultModal.provider} link failed`}
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-600 leading-relaxed max-w-sm mx-auto">
+                {resultModal.type === 'success'
+                  ? `Your ${resultModal.provider} account is now securely connected to DataPulse.`
+                  : resultModal.message}
+              </p>
+            </div>
+
+            {/* Action */}
+            <div className="px-6 py-4 border-t border-slate-100">
+              <button
+                onClick={() => setResultModal(null)}
+                className="
+                  w-full 
+                  bg-green-600 hover:bg-green-700 
+                  px-6 py-2.5 
+                  text-[11px] font-bold text-white font-manrope tracking-widest 
+                  rounded-sm shadow-sm 
+                  transition-all active:scale-[0.98]
+                  flex items-center justify-center
+                "
+              >
+                Continue
+              </button>
+            </div>
+
           </div>
-
-          {/* Body */}
-          <div className="p-6 text-center">
-            <h2 className="text-lg font-semibold text-slate-900">
-              {resultModal.type === 'success'
-                ? 'Operation completed'
-                : 'Operation failed'}
-            </h2>
-
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed max-w-sm mx-auto">
-              {resultModal.message}
-            </p>
-          </div>
-
-          {/* Action */}
-          <div className="px-6 py-4 border-t border-slate-100">
-            <button
-              onClick={() => setResultModal(null)}
-               className="
-                    w-full 
-                    bg-slate-900 hover:bg-black 
-                    px-6 py-2.5 
-                    text-[11px] font-bold text-white font-manrope tracking-widest 
-                    rounded-sm shadow-sm 
-                    transition-all active:scale-[0.98]
-                    disabled:opacity-20 
-                    flex items-center justify-center gap-2
-                  "
-            >
-              Continue
-            </button>
-          </div>
-
         </div>
-      </div>
       </ModalShell>
     )}
 

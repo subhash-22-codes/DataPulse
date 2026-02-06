@@ -101,10 +101,42 @@ function AppRoutes() {
   // 3. STATE: RESOLVED (The Decision is Final)
   return (
     <Routes>
-      <Route path="/" element={isAuthenticated ? <Navigate to="/home" /> : <LandingPage />} />
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/home" /> : <Login />} />
-      <Route path="/register" element={isAuthenticated ? <Navigate to="/home" /> : <Register />} />
-      <Route path="/forgot-password" element={isAuthenticated ? <Navigate to="/home" /> : <ForgotPassword />} />
+      <Route
+        path="/"
+        element={
+          authPhase === "resolved" && isAuthenticated
+            ? <Navigate to="/home" />
+            : <LandingPage />
+        }
+      />
+
+      <Route
+        path="/login"
+        element={
+          authPhase === "resolved" && isAuthenticated
+            ? <Navigate to="/home" />
+            : <Login />
+        }
+      />
+
+      <Route
+        path="/register"
+        element={
+          authPhase === "resolved" && isAuthenticated
+            ? <Navigate to="/home" />
+            : <Register />
+        }
+      />
+
+      <Route
+        path="/forgot-password"
+        element={
+          authPhase === "resolved" && isAuthenticated
+            ? <Navigate to="/home" />
+            : <ForgotPassword />
+        }
+      />
+
       <Route path='/legal' element={<Legal />} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
