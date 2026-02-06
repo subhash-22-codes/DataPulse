@@ -430,73 +430,112 @@ async def google_callback(
 @router.get("/github/link")
 @limiter.limit("5/minute")
 async def github_link(request: Request, return_to: str = "/home"):
+
     if not return_to.startswith("/"):
         return_to = "/home"
-        
-    logger.info(f"🔗 [GITHUB] Initiating link. Target: {return_to}")
-    request.session["post_oauth_redirect"] = return_to 
-    
+
+    ALLOWED_PREFIXES = ["/home", "/dashboard", "/account"]
+
+    if not any(return_to.startswith(p) for p in ALLOWED_PREFIXES):
+        return_to = "/home"
+
+
+    state = secrets.token_urlsafe(32)
+    request.session["github_oauth_state"] = state
+    request.session["post_oauth_redirect"] = return_to
+
+    # FIXED LINE
+    logger.info("[GITHUB] start oauth flow")
+
     return await oauth.github.authorize_redirect(
-        request, 
+        request,
         GITHUB_REDIRECT_URI,
-        prompt="login"
+        state=state,
+        prompt="login",
     )
 
 @router.get("/github/callback")
 @limiter.limit("5/minute")
-async def github_callback( request: Request, background_tasks: BackgroundTasks,  db: Session = Depends(get_db)):
-    destination = request.session.pop("post_oauth_redirect", "/home")
-    
+async def github_callback(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    saved_state = request.session.get("github_oauth_state")
+    returned_state = request.query_params.get("state")
+
+    if not saved_state or returned_state != saved_state:
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/login?error=invalid_oauth_state"
+        )
+
+    destination = request.session.get("post_oauth_redirect", "/home")
+
     current_user = None
     try:
         current_user = get_current_user(request, db)
     except HTTPException:
-        current_user = None 
+        current_user = None
 
     error_redirect_path = "/account" if current_user else "/login"
 
     try:
         token = await oauth.github.authorize_access_token(request)
         if not token:
-            return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error=token_exchange_failed")
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}{error_redirect_path}?error=token_exchange_failed"
+            )
 
-        email_res = await oauth.github.get('user/emails', token=token)
-        primary_email = next((e['email'] for e in email_res.json() if e['primary'] and e['verified']), None)
-        
+        email_res = await oauth.github.get("user/emails", token=token)
+        primary_email = next(
+            (e["email"] for e in email_res.json() if e["primary"] and e["verified"]),
+            None,
+        )
+
         if not primary_email:
-            return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error=email_not_verified")
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}{error_redirect_path}?error=email_not_verified"
+            )
 
-        profile_res = await oauth.github.get('user', token=token)
+        profile_res = await oauth.github.get("user", token=token)
         profile = profile_res.json()
         gh_id = str(profile.get("id"))
 
         try:
             user = get_or_create_social_user(
-                db, 
-                email=primary_email, 
-                name=profile.get("name") or profile.get("login"), 
-                provider="github", 
+                db,
+                email=primary_email,
+                name=profile.get("name") or profile.get("login"),
+                provider="github",
                 provider_id=gh_id,
                 current_user=current_user,
-                background_tasks=background_tasks
+                background_tasks=background_tasks,
             )
-            
         except HTTPException as e:
-            error_msg = e.detail.replace(' ', '_')
-            return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error={error_msg}")
+            error_msg = e.detail.replace(" ", "_")
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}{error_redirect_path}?error={error_msg}"
+            )
+
+        request.session.pop("github_oauth_state", None)
+        request.session.pop("post_oauth_redirect", None)
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
-        
-        # 🛡️ Audit happens in background before redirect
-        create_tokens_and_set_cookies(request, response, user, db, 'github', background_tasks)
-        
-        db.commit()      
+
+        create_tokens_and_set_cookies(
+            request, response, user, db, "github", background_tasks
+        )
+
+        db.commit()
         return response
 
     except Exception as e:
-        logger.error(f"❌ GitHub Callback Failed: {str(e)}", exc_info=True)
-        return RedirectResponse(url=f"{FRONTEND_URL}{error_redirect_path}?error=github_auth_failed")
-
+        logger.error(
+            f"GitHub Callback Failed: {str(e)}", exc_info=True
+        )
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}{error_redirect_path}?error=github_auth_failed"
+        )
 
 
 @router.post("/google", response_model=AuthResponse)
