@@ -105,7 +105,7 @@ function AppRoutes() {
         path="/"
         element={
           authPhase === "resolved" && isAuthenticated
-            ? <Navigate to="/home" />
+            ? <Navigate to="/home" replace />
             : <LandingPage />
         }
       />
@@ -114,7 +114,7 @@ function AppRoutes() {
         path="/login"
         element={
           authPhase === "resolved" && isAuthenticated
-            ? <Navigate to="/home" />
+            ? <Navigate to="/home" replace />
             : <Login />
         }
       />
@@ -123,7 +123,7 @@ function AppRoutes() {
         path="/register"
         element={
           authPhase === "resolved" && isAuthenticated
-            ? <Navigate to="/home" />
+            ? <Navigate to="/home" replace />
             : <Register />
         }
       />
@@ -132,7 +132,7 @@ function AppRoutes() {
         path="/forgot-password"
         element={
           authPhase === "resolved" && isAuthenticated
-            ? <Navigate to="/home" />
+            ? <Navigate to="/home" replace />
             : <ForgotPassword />
         }
       />
