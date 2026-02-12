@@ -8,6 +8,7 @@ import { TeamMembersCard } from "./TeamMembersCard";
 import { DataSourceCard } from "./DataSourceCard";
 import { DataHistoryCard } from "./DataHistoryCard";
 import { SettingsCard } from "./SettingsCard";
+import { Link} from "react-router-dom";
 import { AlertsCard } from './AlertsCard'
 import { Workspace, DataUpload } from "../../types";
 import { Tab } from "@headlessui/react";
@@ -407,7 +408,122 @@ if (!workspace) {
                   />
               </div>
 
-              <div className="w-full">
+              <div className="w-full space-y-4">
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                  {/* Trends */}
+                  <Link
+                    to={`/workspace/${id}/trends`}
+                    className="
+                      group
+                      flex items-center justify-between
+                      px-5 py-4
+                      border border-slate-200
+                      bg-white
+                      hover:border-blue-400
+                      transition
+                    "
+                  >
+                    <div className="flex items-start gap-3">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-5 w-5 text-blue-600 mt-0.5"
+                      >
+                        <path d="M3 20H21" />
+                        <path d="M5 14L10 9L14 13L20 6" />
+                      </svg>
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Trends
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Historical volume and schema stability
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Incidents */}
+                  <Link
+                    to={`/workspace/${id}/incidents`}
+                    className="
+                      group
+                      flex items-center justify-between
+                      px-5 py-4
+                      border border-slate-200
+                      bg-white
+                      hover:border-amber-400
+                      transition
+                    "
+                  >
+                    <div className="flex items-start gap-3">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-5 w-5 text-amber-600 mt-0.5"
+                      >
+                        <path d="M12 3L2 21H22L12 3Z" />
+                        <path d="M12 9V13" />
+                        <circle cx="12" cy="17" r="0.6" />
+                      </svg>
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Incidents
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Active alerts and ingestion failures
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Column Health */}
+                  <Link
+                    to={`/workspace/${id}/columns-health`}
+                    className="
+                      group
+                      flex items-center justify-between
+                      px-5 py-4
+                      border border-slate-200
+                      bg-white
+                      hover:border-emerald-400
+                      transition
+                    "
+                  >
+                    <div className="flex items-start gap-3">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-5 w-5 text-emerald-600 mt-0.5"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <path d="M3 10H21" />
+                        <path d="M9 4V20" />
+                      </svg>
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Column Health
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Per-column missing and uniqueness trends
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+
+                </div>
+
+
                 <DataHistoryCard 
                   workspace={workspace} 
                   isProcessing={isProcessing} 
@@ -415,7 +531,10 @@ if (!workspace) {
                   isOwner={isOwner} 
                   onUploadsUpdate={handleHistoryLoaded}  
                 />
+
               </div>
+
+
             </Tab.Panel>
 
            <Tab.Panel className="focus:outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">

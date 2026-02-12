@@ -2,142 +2,107 @@ import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { api } from "../services/api";
 import {
-  Bell,
-  Trash2,
-  Inbox,
-  Loader2,
-  ArrowLeft,
-  ArrowUp,
-  ArrowDown,
+  Trash2, Inbox, Loader2, ArrowLeft, Database,
+  ArrowUp, ArrowDown, Table, Columns, ExternalLink, Clock, RotateCw, AlertTriangle,
+  WifiOff, CloudOff
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ModalShell } from "./ModelShell";
 
-/* =======================
-   Types (matches backend)
-======================= */
+type Priority = "low" | "info" | "warning" | "critical";
+
+interface Payload {
+  workspace_name?: string | null;
+  event?: string | null;
+  violations_count?: number | null;
+  rows_from?: number | null;
+  rows_to?: number | null;
+  cols_from?: number | null;
+  cols_to?: number | null;
+  schema_added?: number | null;
+  schema_removed?: number | null;
+}
 
 interface Notification {
   id: string;
+  workspace_id: string | null;
+  ai_insight: string | null;
   message: string;
   is_read: boolean;
-  priority: "low" | "info" | "warning" | "critical";
+  is_archived: boolean;
+  notification_type: string;
+  priority: Priority;
+  action_url: string | null;
   created_at: string;
-  action_url?: string | null;
+  payload: Payload | null;
 }
 
-/* =======================
-   Helpers
-======================= */
-
-const relativeTime = (date: string) => {
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hr ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days} day${days > 1 ? "s" : ""} ago`;
+const formatPreciseTime = (date: string) => {
+  const d = new Date(date);
+  return d.toLocaleString('en-GB', { 
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' 
+  });
 };
 
-const summarizeMessage = (message: string) => {
-  const workspace =
-    message.match(/Data updated in '(.+?)'/)?.[1] ?? "Workspace";
-
-  const parts: React.ReactNode[] = [];
-
-  const schema = message.match(/\+(\d+)\s*\/\s*-(\d+)/);
-  if (schema) {
-    const added = Number(schema[1]);
-    const removed = Number(schema[2]);
-
-    if (added > 0) {
-      parts.push(
-        <span key="schema-add" className="inline-flex items-center gap-1">
-          Structure <ArrowUp className="h-3 w-3 text-green-600" />
-          {added}
-        </span>
-      );
-    }
-
-    if (removed > 0) {
-      parts.push(
-        <span key="schema-remove" className="inline-flex items-center gap-1">
-          Structure <ArrowDown className="h-3 w-3 text-red-600" />
-          {removed}
-        </span>
-      );
-    }
-  }
-
-  const rows = message.match(/rows\s+(\d+)\s*→\s*(\d+)/);
-  if (rows) {
-    const from = Number(rows[1]);
-    const to = Number(rows[2]);
-
-    parts.push(
-      <span key="rows" className="inline-flex items-center gap-1">
-        Rows
-        {to > from ? (
-          <ArrowUp className="h-3 w-3 text-green-600" />
-        ) : (
-          <ArrowDown className="h-3 w-3 text-red-600" />
-        )}
-        {from} → {to}
-      </span>
-    );
-  }
-
-  const cols = message.match(/columns\s+(\d+)\s*→\s*(\d+)/);
-  if (cols) {
-    const from = Number(cols[1]);
-    const to = Number(cols[2]);
-
-    parts.push(
-      <span key="cols" className="inline-flex items-center gap-1">
-        Columns
-        {to > from ? (
-          <ArrowUp className="h-3 w-3 text-green-600" />
-        ) : (
-          <ArrowDown className="h-3 w-3 text-red-600" />
-        )}
-        {from} → {to}
-      </span>
-    );
-  }
-
-  return { workspace, parts };
+const getStatusLabel = (n: Notification) => {
+  const p = n.payload;
+  if (p?.event === "data_violation" || n.priority === "critical") 
+    return { text: "Action Needed", color: "text-red-700 bg-red-50 border-red-100" };
+  if (p?.event === "pipeline_failure" || n.priority === "warning") 
+    return { text: "Issue Found", color: "text-amber-700 bg-amber-50 border-amber-100" };
+  
+  // FIX: Handle non-data events (like deletions) so they aren't labeled as "Healthy"
+  if (!p && (n.notification_type === "alert" || n.priority === "info"))
+    return { text: "Update", color: "text-slate-700 bg-slate-50 border-slate-100" };
+    
+  return { text: "Healthy", color: "text-emerald-700 bg-emerald-50 border-emerald-100" };
 };
 
-/* =======================
-   Skeletons
-======================= */
+const getVerbalFeedback = (n: Notification) => {
+  const p = n.payload;
+  
+  // FIX: If payload is null, use the backend message as the primary text
+  let feedback = !p ? n.message : "";
 
-const NotificationSkeletonRow = () => (
-  <div className="flex items-start justify-between gap-3 px-3 py-2">
-    <div className="flex gap-2 w-full">
-      <div className="mt-1 h-4 w-4 rounded bg-slate-200 animate-pulse" />
-      <div className="flex-1 space-y-2">
-        <div className="h-3 w-40 bg-slate-200 rounded animate-pulse" />
-        <div className="h-3 w-3/4 bg-slate-200 rounded animate-pulse" />
-        <div className="h-2 w-24 bg-slate-200 rounded animate-pulse" />
+  if (p) {
+    if (p.event === "data_violation") {
+      feedback = `Quality check failed: ${p.violations_count || 1} violations detected in your dataset.`;
+    } else {
+      const rowsChanged = p.rows_from !== undefined && p.rows_to !== undefined && p.rows_from !== p.rows_to;
+      const colsChanged = p.cols_from !== undefined && p.cols_to !== undefined && p.cols_from !== p.cols_to;
+
+      if (rowsChanged && colsChanged) {
+        feedback = `Data structure and volume updated: Row count shifted from ${p.rows_from} to ${p.rows_to}, and columns changed from ${p.cols_from} to ${p.cols_to}.`;
+      } else if (rowsChanged) {
+        const direction = (p.rows_to ?? 0) > (p.rows_from ?? 0) ? "increased" : "decreased";
+        feedback = `Data volume ${direction}: Your previous upload had ${p.rows_from} rows, and it has now ${direction} to ${p.rows_to} rows.`;
+      } else if (colsChanged) {
+        feedback = `Schema modification: Row count remains stable at ${p.rows_from}, but columns have been updated from ${p.cols_from} to ${p.cols_to}.`;
+      } else {
+        feedback = `Dataset sync complete: Your data remains consistent with ${p.rows_to} rows and ${p.cols_to} columns.`;
+      }
+    }
+  }
+
+  // FIX: Append AI insight to give users helpful context (e.g., Trash bin restore info)
+  return n.ai_insight ? `${feedback} Tip: ${n.ai_insight}` : feedback;
+};
+
+const CardSkeleton = () => (
+  <div className="flex bg-white border-b border-gray-200 p-4 sm:px-6 sm:py-5 animate-pulse">
+    <div className="flex-1 space-y-4">
+      <div className="flex justify-between">
+        <div className="h-4 bg-gray-100 rounded w-1/4" />
+        <div className="h-3 bg-gray-100 rounded w-20" />
+      </div>
+      <div className="h-3 bg-gray-50 rounded w-3/4" />
+      <div className="flex gap-3 mt-4">
+        <div className="h-8 bg-gray-50 rounded w-24" />
+        <div className="h-8 bg-gray-50 rounded w-24" />
       </div>
     </div>
   </div>
 );
-
-const NotificationsSkeleton = () => (
-  <div className="rounded-md border border-slate-200 bg-white divide-y">
-    {Array.from({ length: 5 }).map((_, i) => (
-      <NotificationSkeletonRow key={i} />
-    ))}
-  </div>
-);
-
-/* =======================
-   Component
-======================= */
 
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -146,27 +111,19 @@ export const NotificationsPage: React.FC = () => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
-  const [mutating, setMutating] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
 
   const fetchNotifications = async () => {
+    setLoading(true);
+    setError(null);
     abortRef.current = new AbortController();
-
     try {
-      const res = await api.get<Notification[]>("/notifications", {
-        signal: abortRef.current?.signal,
-      });
-
-      const sorted = [...res.data].sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      );
-
+      const res = await api.get<Notification[]>("/notifications", { signal: abortRef.current.signal });
+      const sorted = res.data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
       setNotifications(sorted);
-      setError(null);
 
       if (sorted.some(n => !n.is_read)) {
         api.post("/notifications/read-all").catch(() => {});
@@ -174,23 +131,20 @@ export const NotificationsPage: React.FC = () => {
           prev.map(n => ({ ...n, is_read: true }))
         );
       }
-    } catch (err) {
-      if (
-        axios.isAxiosError(err) &&
-        err.code === "ERR_CANCELED"
-      ) {
-        return;
+
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        if (err.code === "ERR_NETWORK") {
+          setError("Connection Issue: Please check your network environment.");
+        } else if (err.response?.status === 500 || err.response?.status === 504) {
+          setError("Service Notice: The system is currently optimizing your workspace. Please refresh in a moment.");
+        } else if (err.code !== "ERR_CANCELED") {
+          setError("Notice: We encountered a temporary issue while syncing your updates.");
+        }
       }
-      setError("Failed to load notifications.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const retryFetch = () => {
-    setError(null);
-    setLoading(true);
-    fetchNotifications();
   };
 
   useEffect(() => {
@@ -199,182 +153,158 @@ export const NotificationsPage: React.FC = () => {
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (processingId || clearingAll) return;
-
+    if (processingId) return;
     setProcessingId(id);
-    setMutating(true);
-
-    const backup = notifications;
-    setNotifications(prev => prev.filter(n => n.id !== id));
-
     try {
       await api.delete(`/notifications/${id}`);
-      setError(null);
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch {
-      setNotifications(backup);
-      setError("Failed to delete notification.");
+      setError("Unable to complete deletion. Please try again.");
     } finally {
       setProcessingId(null);
-      setMutating(false);
     }
   };
 
-  const handleClearAll = async () => {
-    if (clearingAll) return;
+  const renderCard = (n: Notification) => {
+    const p = n.payload;
+    const status = getStatusLabel(n);
+    const feedback = getVerbalFeedback(n);
 
-    setClearingAll(true);
-    setMutating(true);
-    setShowClearModal(false);
+    return (
+      <div className="group flex bg-white hover:bg-[#F9FAFB] border-b border-gray-200 last:border-0 transition-colors">
+        <div className="flex-1 min-w-0 p-4 sm:px-6 sm:py-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] font-bold text-gray-900 truncate">
+                {p?.workspace_name || (n.notification_type === "alert" ? "Console Update" : "System Update")}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${status.color}`}>
+                {status.text}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-gray-400 font-medium">
+              <div className="hidden sm:flex items-center gap-1.5"><Clock className="h-3 w-3" /> {formatPreciseTime(n.created_at)}</div>
+              <button onClick={() => handleDelete(n.id)} className="opacity-100 sm:opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all">
+                {processingId === n.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
 
-    const backup = notifications;
-    setNotifications([]);
+          <div className="flex items-start gap-2 mb-4">
+            {n.priority === 'critical' ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5" /> : <Database className="h-3.5 w-3.5 text-blue-400 mt-0.5" />}
+            <p className="text-[12px] text-gray-600 font-medium leading-relaxed max-w-[700px]">
+              {feedback}
+            </p>
+          </div>
 
-    try {
-      await api.delete("/notifications");
-      setError(null);
-    } catch {
-      setNotifications(backup);
-      setError("Failed to clear notifications.");
-    } finally {
-      setClearingAll(false);
-      setMutating(false);
-    }
+          <div className="flex flex-wrap items-center gap-2">
+            {p?.rows_to !== undefined && (
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
+                <Table className="h-3 w-3 text-gray-400" />
+                <span className="text-gray-500">Rows:</span>
+                <span className="text-gray-900">{p.rows_from}</span>
+                {p.rows_to !== p.rows_from && (
+                  (p.rows_to ?? 0) > (p.rows_from ?? 0) 
+                    ? <ArrowUp className="h-3 w-3 text-emerald-600" /> 
+                    : <ArrowDown className="h-3 w-3 text-red-600" />
+                )}
+                <span className="text-gray-900 font-bold">{p.rows_to}</span>
+              </div>
+            )}
+            {p?.cols_to !== undefined && (
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
+                <Columns className="h-3 w-3 text-gray-400" />
+                <span className="text-gray-500">Columns:</span>
+                <span className="text-gray-900 font-bold">{p.cols_to}</span>
+              </div>
+            )}
+            <div className="sm:hidden text-[10px] text-gray-400 font-medium ml-auto">
+              {formatPreciseTime(n.created_at)}
+            </div>
+            {n.action_url && (
+              <a href={n.action_url} className="ml-auto hidden sm:flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline transition-all">
+                Details <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-4xl px-4 py-5">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-3 flex items-center gap-2 text-xs text-slate-400 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back
-        </button>
-
-        <div className="mb-2 flex items-center justify-between">
-          <h1 className="text-base font-semibold text-slate-900">
-            Notifications
-          </h1>
-
-          <button
-            onClick={() => setShowClearModal(true)}
-            disabled={notifications.length === 0 || clearingAll}
-            className="text-xs text-slate-400 hover:text-red-600 disabled:opacity-30"
-          >
-            Clear all
-          </button>
-        </div>
-
-        <p className="mb-4 text-xs text-slate-500">
-          Activity from your connected data sources. We highlight meaningful changes.
-        </p>
-
-        {error && notifications.length === 0 && (
-          <div className="mb-4 text-xs text-red-600 flex items-center gap-3">
-            <span>{error}</span>
-            <button
-              onClick={retryFetch}
-              className="text-xs font-medium text-slate-900 underline"
-            >
-              Retry
+    <div className="min-h-screen bg-[#FAFBFC] text-gray-900 font-sans antialiased">
+      <div className="max-w-[1000px] mx-auto px-4 py-6 sm:py-10">
+        <header className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between border-b border-gray-200 pb-5 gap-4">
+          <div>
+            <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-900 mb-3 transition-colors">
+              <ArrowLeft className="h-3 w-3" /> BACK
+            </button>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Recent Activity</h1>
+            <p className="text-[12px] text-gray-500 mt-1">Intelligent monitoring for your data pipeline and health.</p>
+          </div>
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t sm:border-0 pt-4 sm:pt-0">
+            <button onClick={fetchNotifications} className="p-2 text-gray-500 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center">
+              <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setShowClearModal(true)} disabled={notifications.length === 0} className="flex-1 sm:flex-none text-[12px] font-bold px-5 py-2.5 bg-white border border-gray-300 rounded text-gray-600 hover:text-red-600 transition-all shadow-sm">
+              Delete all
             </button>
           </div>
-        )}
+        </header>
 
-        {loading ? (
-          <NotificationsSkeleton />
-        ) : mutating && notifications.length === 0 ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-4 w-4 animate-spin text-slate-300" />
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="flex flex-col items-center py-20">
-            <Inbox className="h-7 w-7 text-slate-300" />
-            <p className="mt-2 text-sm text-slate-500">
-              No notifications yet
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-md border border-slate-200 bg-white divide-y">
-            {notifications.map(n => {
-              const { workspace, parts } =
-                summarizeMessage(n.message);
-
-              return (
-                <div
-                  key={n.id}
-                  className="flex items-start justify-between gap-3 px-3 py-2 hover:bg-slate-50"
-                >
-                  <div className="flex gap-2">
-                    <Bell className="mt-1 h-4 w-4 text-slate-400" />
-
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
-                        {workspace}
-                      </div>
-
-                      <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-600">
-                        {parts.map((p, i) => (
-                          <React.Fragment key={i}>
-                            {p}
-                            {i < parts.length - 1 && (
-                              <span className="text-slate-400">•</span>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </div>
-
-                      <div className="mt-0.5 text-[11px] text-slate-400">
-                        {relativeTime(n.created_at)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleDelete(n.id)}
-                    disabled={processingId === n.id || clearingAll}
-                    className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-40"
-                  >
-                    {processingId === n.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              );
-            })}
+        {error && (
+          <div className="mb-6 p-4 bg-white border border-red-100 rounded shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {error.includes("Connection") ? <WifiOff className="h-4 w-4 text-red-500" /> : <CloudOff className="h-4 w-4 text-red-500" />}
+              <span className="text-[12px] font-bold text-red-800">{error}</span>
+            </div>
+            <button onClick={fetchNotifications} className="text-[11px] font-black uppercase tracking-tighter text-red-900 underline">Refresh</button>
           </div>
         )}
+
+        <div className="bg-white border border-gray-200 rounded-md shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="divide-y divide-gray-100">
+              <CardSkeleton /> <CardSkeleton /> <CardSkeleton />
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="py-24 text-center">
+              <Inbox className="h-10 w-10 text-gray-200 mx-auto mb-4" />
+              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-widest">No New Activity</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">{notifications.map(renderCard)}</div>
+          )}
+        </div>
       </div>
 
       {showClearModal && (
         <ModalShell>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="w-full max-w-[320px] rounded-sm border border-slate-300 bg-white p-4 shadow-xl">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Clear notifications?
-              </h3>
-
-              <p className="mt-2 text-xs text-slate-500">
-                This will permanently remove all notifications.
-              </p>
-
-              <div className="mt-5 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowClearModal(false)}
-                  className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900"
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/10 backdrop-blur-sm p-4">
+            <div className="w-full max-w-[360px] bg-white rounded-lg p-6 shadow-2xl border border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900 mb-2">Delete all notifications?</h3>
+              <p className="text-[12px] text-gray-500 leading-relaxed">This will permanently remove your activity history. This cannot be undone.</p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button 
+                  onClick={() => setShowClearModal(false)} 
+                  className="px-4 py-2 text-[12px] font-bold font-manrope text-gray-400 hover:text-gray-900 rounded-none"
                 >
                   Cancel
                 </button>
 
-                <button
-                  onClick={handleClearAll}
+                <button 
+                  onClick={async () => { 
+                    setClearingAll(true); 
+                    await api.delete("/notifications"); 
+                    setNotifications([]); 
+                    setShowClearModal(false); 
+                    setClearingAll(false); 
+                  }} 
                   disabled={clearingAll}
-                  className="rounded-sm bg-neutral-900 hover:bg-neutral-800 px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                  className="px-5 py-2 bg-gray-900 text-white text-[12px] font-bold font-manrope rounded-none hover:bg-black transition-all flex items-center justify-center min-w-[100px]"
                 >
-                  Clear all
+                  {clearingAll ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : "Confirm delete"}
                 </button>
               </div>
             </div>

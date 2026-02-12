@@ -9,6 +9,8 @@ import toast from 'react-hot-toast';
 import { AnimatedNumber } from '../../components/AnimatedNumber';
 import { FormattedDate } from "../../components/FormattedDate";
 import type { UploadInsight } from "../../types";
+import { useNavigate } from "react-router-dom";
+
 
 // --- HELPER FUNCTIONS ---
 function classNames(...classes: string[]) {
@@ -307,14 +309,15 @@ const MasterList: React.FC<{
 };
 
 const DetailView: React.FC<{
+  workspaceId: string;
   selectedUpload: DataUpload | null;
   previousUpload?: DataUpload | null;
   isOwner: boolean;
   isTeamMember?: boolean;
   handleTrackColumn: (col: string) => void;
-}> = ({ selectedUpload, previousUpload, isOwner, isTeamMember, handleTrackColumn }) => {
+}> = ({ workspaceId,  selectedUpload, previousUpload, isOwner, isTeamMember, handleTrackColumn }) => {
   const chartData = formatChartData(selectedUpload?.analysis_results?.summary_stats);
-
+  const navigate = useNavigate();
   const rowCount = selectedUpload?.analysis_results?.row_count ?? 0;
   const colCount = selectedUpload?.analysis_results?.column_count ?? 0;
 
@@ -337,8 +340,6 @@ const DetailView: React.FC<{
       .slice(0, 5);
   }, [missingMap]);
 
-  const hasMissing = topMissing.length > 0;
-  const isClean = duplicateRows === 0 && !hasMissing;
 
   const selectedSchemaKeys = useMemo(() => {
     const schema = selectedUpload?.schema_info;
@@ -580,102 +581,237 @@ const DetailView: React.FC<{
 
 
       {/* 2-Column Dashboard Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN */}
         <div className="lg:col-span-5 space-y-6">
           {/* Quick Notes */}
-          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Notes</h3>
+              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                Quick Notes
+              </h3>
               <span className="px-2 py-0.5 bg-slate-100 text-[9px] font-bold text-slate-500 rounded-md">
                 {insights.length}
               </span>
             </div>
 
-            <div className="p-4 space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+            <div className="p-2 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
               {insights.length > 0 ? (
                 insights.map((item: UploadInsight, idx: number) => {
                   const severity = item?.severity || "low";
-                  const badge =
+
+                  const styles =
                     severity === "high"
-                      ? "bg-rose-50 text-rose-700 border-rose-100"
+                      ? "bg-rose-50"
                       : severity === "medium"
-                      ? "bg-amber-50 text-amber-700 border-amber-100"
-                      : "bg-slate-50 text-slate-600 border-slate-200";
+                      ? "bg-amber-50"
+                      : "bg-slate-50";
+
+                  const dot =
+                    severity === "high"
+                      ? "bg-rose-500"
+                      : severity === "medium"
+                      ? "bg-amber-500"
+                      : "bg-slate-400";
 
                   return (
                     <div
                       key={idx}
-                      className="rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed hover:border-slate-300 transition-colors"
+                      className={`rounded-md p-3 text-[11px] leading-relaxed ${styles}`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-slate-700 font-medium">{item?.message}</p>
-                        <span
-                          className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase border ${badge}`}
-                        >
-                          {severity}
-                        </span>
+                      <div className="flex items-start gap-2">
+                        <span className={`mt-1 w-1.5 h-1.5 rounded-full ${dot}`} />
+                        <p className="text-slate-700 font-medium">
+                          {item?.message}
+                        </p>
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="py-8 text-center text-slate-400 text-xs font-medium">No notes</div>
+                <div className="py-10 text-center text-slate-400 text-[11px] font-medium">
+                  No insights available for this upload
+                </div>
               )}
             </div>
           </div>
 
+
           {/* Data Check */}
           {quality && (
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Data Check</h3>
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+
                 <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Duplicates:</span>
-                  <span className="text-[11px] font-bold text-slate-900 tabular-nums">{duplicateRows}</span>
-                </div>
-              </div>
+                  <h3 className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                    Data Check
+                  </h3>
 
-              <div className="p-5">
-                {topMissing.length > 0 ? (
-                  <div className="space-y-4">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Missing Values</p>
+                  {/* Info Icon */}
+                  <div className="relative group">
+                    <div className="w-4 h-4 flex items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-500 cursor-default">
+                      i
+                    </div>
 
-                    <div className="space-y-4">
-                      {topMissing.map(([col, pct]) => (
-                        <div key={col} className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-semibold text-slate-700 truncate">{col}</p>
-                            <span className="text-[10px] font-bold text-slate-900 tabular-nums">
-                              {Number(pct).toFixed(1)}%
-                            </span>
-                          </div>
+                    {/* Tooltip */}
+                    <div className="absolute left-0 top-6 w-60 bg-white border border-slate-200 shadow-lg rounded-md p-3 text-[10px] text-slate-600 opacity-0 group-hover:opacity-100 pointer-events-none transition z-20">
 
-                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500 bg-slate-700/70"
-                              style={{ width: `${Math.min(Number(pct), 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span>No issues detected</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span>Low / moderate impact</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                        <span>High impact on analysis</span>
+                      </div>
+
+                      <p className="mt-2 text-slate-400">
+                        This card shows duplicate rows and missing column values.
+                      </p>
+
                     </div>
                   </div>
-                ) : (
-                  <div className={`flex items-center gap-2 p-3 rounded-lg text-[11px] font-semibold ${isClean ? "text-emerald-700 bg-emerald-50" : "text-amber-700 bg-amber-50"}`}>
-                    <p className="text-xs">{isClean ? "Data looks clean" : "Issues found"}</p>
+                </div>
+
+              </div>
+
+              {/* Body */}
+              <div className="px-4 py-3 space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+                {duplicateRows === 0 && topMissing.length === 0 && (
+                  <div className="w-full bg-emerald-50 border border-emerald-100 rounded-md px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <p className="text-[11px] font-semibold text-emerald-700">
+                        No data issues detected
+                      </p>
+                    </div>
+                    <p className="text-[10px] text-emerald-600 mt-1">
+                      No duplicate rows or missing values found in this upload.
+                    </p>
                   </div>
                 )}
+
+                {/* Duplicate Rows */}
+                {duplicateRows > 0 && (() => {
+                  let severityText = "";
+                  let severityColor = "";
+
+                  if (duplicateRows <= 5) {
+                    severityText = "Minor impact";
+                    severityColor = "text-amber-600";
+                  } else if (duplicateRows <= 20) {
+                    severityText = "Moderate impact";
+                    severityColor = "text-orange-600";
+                  } else {
+                    severityText = "High impact";
+                    severityColor = "text-rose-600";
+                  }
+
+                  return (
+                    <div className="w-full flex items-center justify-between">
+
+                      <div className="flex flex-col gap-0.5">
+                        <p className="text-[12px] font-semibold text-slate-700">
+                          Duplicate Rows
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {duplicateRows} detected
+                        </p>
+                        <p className={`text-[10px] font-medium ${severityColor}`}>
+                          {severityText}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          navigate(
+                            `/workspace/${workspaceId}/upload/${selectedUpload?.id}/issues?type=duplicates`
+                          )
+                        }
+                        className="text-[10px] font-semibold text-rose-600 hover:underline whitespace-nowrap"
+                      >
+                        View rows
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {duplicateRows > 0 && topMissing.length > 0 && (
+                  <div className="border-t-2 border-slate-300 my-2"></div>
+                )}
+
+                {/* Missing Values */}
+                {topMissing.length > 0 && (
+                  <p className="text-[12px] font-semibold text-slate-700">
+                    Missing Values
+                  </p>
+                )}
+
+                {topMissing.map(([col, pct]) => {
+                  const percent = Number(pct);
+
+                  let severityText = "";
+                  let severityColor = "";
+
+                  if (percent < 10) {
+                    severityText = "Low impact";
+                    severityColor = "text-amber-600";
+                  } else if (percent <= 20) {
+                    severityText = "Moderate impact";
+                    severityColor = "text-orange-600";
+                  } else {
+                    severityText = "High impact";
+                    severityColor = "text-rose-600";
+                  }
+
+                  return (
+                    <div key={col} className="w-full flex items-start justify-between border-t border-slate-100 pt-3">
+
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <p className="text-[11px] font-semibold text-slate-700 truncate">
+                          {col}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {percent.toFixed(1)}% missing
+                        </p>
+                        <p className={`text-[10px] font-medium ${severityColor}`}>
+                          {severityText}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          navigate(
+                            `/workspace/${workspaceId}/upload/${selectedUpload?.id}/issues?type=missing&column=${encodeURIComponent(col)}`
+                          )
+                        }
+                        className="text-[10px] font-semibold text-slate-700 hover:underline whitespace-nowrap"
+                      >
+                        View rows
+                      </button>
+
+                    </div>
+                  );
+                })}
+
               </div>
             </div>
           )}
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 flex flex-col">
 
           {/* Columns */}
-          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 z-10 bg-white">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Columns</h3>
               <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md truncate max-w-[180px]">
@@ -760,24 +896,46 @@ const DetailView: React.FC<{
                           {canConfigureTrends && (
                             <td className="px-5 py-3 text-right">
                               {isNumeric && (
-                                <button
-                                  onClick={() => handleTrackColumn(col)}
-                                  className="
-                                    inline-flex items-center gap-1.5
-                                    rounded-md px-2.5 py-1.5
-                                    text-[9px] font-bold text-blue-600
-                                    hover:bg-slate-100
-                                    border border-transparent hover:border-slate-200
-                                    transition-all active:scale-[0.98]
-                                  "
-                                  aria-label="Track trend for column"
-                                >
-                                  <LineChartIcon className="h-3 w-3" />
-                                  <span className="hidden sm:inline">Track</span>
-                                </button>
+                                <div className="flex items-center justify-end gap-2">
+
+                                  <button
+                                    onClick={() => handleTrackColumn(col)}
+                                    className="
+                                      inline-flex items-center justify-center
+                                      h-7 w-7 rounded-md
+                                      bg-slate-50 hover:bg-slate-100
+                                      border border-slate-200
+                                      text-slate-600 hover:text-blue-600
+                                      transition-colors
+                                    "
+                                    title="Track trend"
+                                  >
+                                    <LineChartIcon className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      navigate(
+                                        `/workspace/${workspaceId}/columns?column_name=${encodeURIComponent(col)}`
+                                      )
+                                    }
+                                    className="
+                                      inline-flex items-center justify-center
+                                      h-7 w-7 rounded-md
+                                      bg-slate-50 hover:bg-slate-100
+                                      border border-slate-200
+                                      text-slate-600 hover:text-slate-900
+                                      transition-colors
+                                    "
+                                    title="View history"
+                                  >
+                                    →
+                                  </button>
+
+                                </div>
                               )}
                             </td>
                           )}
+
                         </tr>
                       );
                     })}
@@ -1012,7 +1170,6 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUpload, setSelectedUpload] = useState<DataUpload | null>(null);
   const [viewMode, setViewMode] = useState<"snapshot" | "trend">("snapshot");
-
   const [trackedColumn, setTrackedColumn] = useState<string | null>(
     workspace.tracked_column || null
   );
@@ -1331,6 +1488,7 @@ export const DataHistoryCard: React.FC<DataHistoryCardProps> = ({
             <div className="flex-1 bg-slate-50/30 p-6 lg:p-8 overflow-y-auto custom-scrollbar">
               {viewMode === "snapshot" ? (
                 <DetailView
+                  workspaceId={workspace.id}
                   selectedUpload={selectedUpload}
                   previousUpload={previousUpload}
                   isOwner={isOwner}

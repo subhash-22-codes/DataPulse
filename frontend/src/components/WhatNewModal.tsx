@@ -92,9 +92,6 @@ export const WhatNewModal: React.FC<WhatNewModalProps> = ({
                     >
                       Release Notes
                     </Dialog.Title>
-                    <span className="font-mono text-xs text-gray-500">
-                      v1.1.0
-                    </span>
                   </div>
                   
                   <button

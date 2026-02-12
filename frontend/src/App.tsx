@@ -24,6 +24,12 @@ import { Legal } from './pages/Legal';
 import LandingPage from './pages/LandingPage';
 import PageNotFound from './pages/PageNotFound';
 import { Account } from './pages/Accounts';
+import  Incidents  from './pages/WorkSpaceDetail/Incidents';
+import { TableTrends } from "./pages/WorkSpaceDetail/TableTrends";
+import ColumnTrends from "./pages/WorkSpaceDetail/ColumnTrends";
+import  ColumnsHealth  from "./pages/WorkSpaceDetail/ColumnsHealth";
+import UploadIssuesPage from './pages/WorkSpaceDetail/UploadIssuesPage';
+
 
 /**
  * AppRoutes handles the actual routing logic.
@@ -141,6 +147,42 @@ function AppRoutes() {
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
       <Route path="/workspace/:id" element={<ProtectedRoute><WorkspaceDetail /></ProtectedRoute>} />
+      <Route
+        path="/workspace/:id/incidents"
+        element={<ProtectedRoute><Incidents /></ProtectedRoute>}
+      />
+
+      <Route
+        path="/workspace/:id/trends"
+        element={<ProtectedRoute><TableTrends /></ProtectedRoute>}
+      />
+      <Route
+        path="/workspace/:id/columns-health"
+        element={
+          <ProtectedRoute>
+            <ColumnsHealth />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route 
+        path="/workspace/:id/columns" 
+        element={
+          <ProtectedRoute>
+            <ColumnTrends />
+          </ProtectedRoute>
+        } 
+      />
+
+        <Route
+          path="/workspace/:workspaceId/upload/:uploadId/issues"
+          element={
+          <ProtectedRoute>
+            <UploadIssuesPage />
+          </ProtectedRoute>}
+        />
+
+
       <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
       <Route path="/trash" element={<ProtectedRoute><Trash /></ProtectedRoute>} />
       <Route path="*" element={<PageNotFound />} />

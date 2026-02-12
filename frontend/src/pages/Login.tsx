@@ -274,15 +274,6 @@ const Login: React.FC = () => {
            {/* Brand Footer Section */}
            <div className="pt-8 border-t border-white/10 flex justify-between items-center text-[11px] text-blue-200/60 tracking-wide">
             <p>© 2026 DataPulse</p>
-
-            <div className="flex items-center gap-4">
-              <span>v1.1.0</span>
-
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                All systems operational
-              </span>
-            </div>
           </div>
         </div>
       </div>

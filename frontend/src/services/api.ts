@@ -132,3 +132,71 @@ export const authService = {
  },
   
 };
+
+export const dataMetricsService = {
+  getIncidents(workspaceId: string) {
+    return api.get(`/workspaces/${workspaceId}/incidents`);
+  },
+
+  resolveIncident(workspaceId: string, incidentId: string) {
+    return api.post(
+      `/workspaces/${workspaceId}/incidents/${incidentId}/resolve`
+    );
+  },
+
+  getTableMetrics(workspaceId: string) {
+    return api.get(`/workspaces/${workspaceId}/table-metrics`);
+  },
+
+  getColumnMetrics(workspaceId: string, column: string) {
+    const params = new URLSearchParams({
+      column_name: column,
+    });
+
+    return api.get(
+      `/workspaces/${workspaceId}/column-metrics?${params.toString()}`
+    );
+  },
+  getColumns(workspaceId: string) {
+    return api.get(`/workspaces/${workspaceId}/columns`);
+  },
+
+};
+
+export const uploadIssuesService = {
+  getMissingRows(
+    workspaceId: string,
+    uploadId: string,
+    column: string,
+    limit: number = 50,
+    offset: number = 0
+  ) {
+    const params = new URLSearchParams({
+      column,
+      limit: String(limit),
+      offset: String(offset),
+    });
+
+    return api.get(
+      `/workspaces/${workspaceId}/uploads/${uploadId}/issues/missing?${params.toString()}`
+    );
+  },
+
+  getDuplicateRows(
+    workspaceId: string,
+    uploadId: string,
+    limit: number = 50,
+    offset: number = 0
+  ) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+
+    return api.get(
+      `/workspaces/${workspaceId}/uploads/${uploadId}/issues/duplicates?${params.toString()}`
+    );
+  },
+};
+
+

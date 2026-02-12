@@ -12,6 +12,8 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  userId?: string;
+  isSubmitted?: boolean;
 }
 
 export const FeedbackModal: React.FC<Props> = ({ isOpen, onClose }) => {
