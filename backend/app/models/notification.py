@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text, func
 from app.core.database import Base
 
@@ -24,3 +24,4 @@ class Notification(Base):
     priority = Column(String, nullable=False, default="info", server_default="info")
     action_url = Column(String, nullable=True)
     is_archived = Column(Boolean, default=False, nullable=False, server_default='false')
+    payload = Column(JSONB, nullable=True)

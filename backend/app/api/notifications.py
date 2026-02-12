@@ -24,6 +24,7 @@ class NotificationResponse(BaseModel):
     priority: str 
     action_url: Optional[str] = None 
     created_at: Optional[datetime] = None
+    payload: Optional[dict] = None
     
     model_config = ConfigDict(from_attributes=True)
 

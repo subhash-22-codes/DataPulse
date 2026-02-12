@@ -7,7 +7,7 @@ import datetime as dt
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from io import BytesIO
 import google.generativeai as genai
 import pytz
@@ -25,19 +25,21 @@ from app.models.notification import Notification
 from app.models.alert_rule import AlertRule
 from app.models.feedback import Feedback
 from app.models.workspace_user_settings import WorkspaceUserSettings
+from app.models.table_daily_metrics import TableDailyMetrics
+from app.models.column_daily_metrics import ColumnDailyMetrics
+from app.models.incidents import Incident
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
 import concurrent.futures
 import json
 import re
 from sqlalchemy.exc import OperationalError, InterfaceError
-
+from app.services.incident_engine import incident_engine
+from app.services.incident_engine import _create_incident
 from app.services.data_quality import analyze_dataframe_quality
 from app.services.storage_service import download_file_bytes
 from app.services.storage_service import upload_csv_bytes
 from app.services.upload_limits import is_workspace_upload_limit_reached
-
-
 
 
 # Create a ThreadPool at the module level to reuse threads
@@ -217,15 +219,23 @@ def check_alert_rules(
     if triggered_alerts:
         try:
             summary_msg = f"Alert: {len(triggered_alerts)} violations detected in '{workspace.name}'."
-            
+            payload = {
+                "workspace_name": workspace.name,
+                "event": "data_violation",
+                "violations_count": len(triggered_alerts),
+                "rules_triggered": triggered_alerts,   # optional but useful
+            }
+
             for user in users_to_notify:
                 new_notif = Notification(
                     user_id=user.id,
                     workspace_id=workspace.id,
                     message=summary_msg,
-                    idempotency_key=execution_fingerprint 
+                    idempotency_key=execution_fingerprint,
+                    payload=payload,
                 )
                 db.add(new_notif)
+
             db.commit()
             logger.info(f"💾 Records committed for fingerprint: {execution_fingerprint}")
 
@@ -1109,7 +1119,6 @@ def _run_email_in_background(recipients, email_context):
         EMAIL_SEM.release()
 
 
-
 def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
@@ -1142,7 +1151,19 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 csv_bytes = download_file_bytes(current_upload.storage_path)
             except Exception as e:
                 logger.error(f"❌ [WORKER] Failed to download CSV from storage: {e}", exc_info=True)
+
+                _create_incident(
+                    db=db,
+                    current_upload=current_upload,
+                    issue_type="ingestion_failure",
+                    severity="high",
+                    failure_reason="Storage download failed",
+                    affected_columns=None,
+                )
+
+                db.commit()
                 return
+
 
         # fallback for old uploads (still stored in DB)
         if csv_bytes is None and current_upload.file_content:
@@ -1180,8 +1201,20 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
         except Exception as e:
             logger.error(f"❌ Failed to parse CSV: {e}", exc_info=True)
+
+            _create_incident(
+                db=db,
+                current_upload=current_upload,
+                issue_type="ingestion_failure",
+                severity="high",
+                failure_reason="CSV parse error",
+                affected_columns=None,
+            )
+
+            db.commit()
             status_message = "job_error"
             return {"status": "error", "message": "Failed to parse CSV"}
+
 
         # ==========================================================
         # 3) SCHEMA + ROW COUNT CHANGE DETECTION
@@ -1251,6 +1284,20 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             summary_stats = {}
 
         quality_report, insights = analyze_dataframe_quality(df)
+        
+        for col, missing_pct in quality_report["missing_percent_by_column"].items():
+            unique_pct = quality_report["unique_percent_by_column"].get(col, 0.0)
+
+            col_metric = ColumnDailyMetrics(
+                workspace_id=current_upload.workspace_id,
+                upload_id=current_upload.id,
+                column_name=col,
+                metric_date=date.today(),
+                missing_percent=float(missing_pct),
+                unique_percent=float(unique_pct),
+            )
+
+            db.add(col_metric)
 
         analysis_results = {
             "row_count": new_row_count,
@@ -1268,6 +1315,26 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             "schema_has_changed": schema_has_changed,
             "schema_changes": schema_changes_dict,
         }
+        
+        # ---- NEW: run incident engine ----
+        incident_engine(
+            db=db,
+            current_upload=current_upload,
+            previous_upload=previous_upload,
+            analysis_results=analysis_results,
+        )
+
+        
+        daily_metric = TableDailyMetrics(
+            workspace_id=current_upload.workspace_id,
+            upload_id=current_upload.id,
+            metric_date=date.today(),
+            row_count=new_row_count,
+            column_count=new_col_count,
+        )
+
+        db.add(daily_metric)
+
 
         current_upload.schema_info = new_schema
         current_upload.analysis_results = analysis_results
@@ -1319,6 +1386,19 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 all_users = list(workspace.team_members) + [workspace.owner]
                 users_map = {str(u.id): u for u in all_users}
                 users_to_notify = list(users_map.values())
+                
+                payload = {
+                    "workspace_name": workspace.name,
+                    "event": "dataset_update",
+                    "rows_from": old_row_count if row_count_has_changed else None,
+                    "rows_to": new_row_count if row_count_has_changed else None,
+                    "cols_from": old_col_count if col_count_has_changed else None,
+                    "cols_to": new_col_count if col_count_has_changed else None,
+                    "schema_added": len(schema_changes_dict.get("added", []))
+                        if schema_has_changed else None,
+                    "schema_removed": len(schema_changes_dict.get("removed", []))
+                        if schema_has_changed else None,
+                }
 
                 for user in users_to_notify:
                     new_notification = Notification(
@@ -1326,8 +1406,10 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                         workspace_id=workspace.id,
                         message=notification_message,
                         ai_insight=ai_insight_text,
+                        payload=payload,
                     )
                     db.add(new_notification)
+
 
                 new_notifications_created = True
                 logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications.")

@@ -6,11 +6,16 @@ import logging
 import datetime as dt
 from typing import List, Optional
 import asyncio
+from fastapi import Query, HTTPException
+from io import BytesIO
+import pandas as pd
+import math
+import numpy as np
 # FastAPI & Pydantic
 from fastapi import (
     APIRouter, Depends, HTTPException, Header, UploadFile, 
     File, WebSocket, WebSocketDisconnect, Query, Response, 
-    BackgroundTasks, status, Request
+    BackgroundTasks, status, Request, Path
 )
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict, HttpUrl
 
@@ -25,10 +30,14 @@ from app.models.alert_rule import AlertRule
 from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
 from app.models.workspace_user_settings import WorkspaceUserSettings
+from app.models.incidents import Incident
+from app.models.table_daily_metrics import TableDailyMetrics
+from app.models.column_daily_metrics import ColumnDailyMetrics
 from app.services.tasks import executor
 from app.services.tasks import process_csv_task
 from app.services.storage_service import upload_csv_bytes
 from app.services.storage_service import delete_files
+from app.services.storage_service import download_file_bytes
 from app.api.alerts import AlertRuleResponse 
 from app.api.dependencies import get_current_user
 from app.core.limiter import limiter
@@ -1100,3 +1109,237 @@ async def trigger_manual_poll(
         return {"message": "Polling triggered successfully (DB)."}
         
     return {"message": "No valid data source configured for polling."}
+
+@router.post("/{workspace_id}/incidents/{incident_id}/resolve")
+def manual_resolve_incident(
+    workspace_id: str = Path(...),
+    incident_id: str = Path(...),
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(
+            Incident.id == incident_id,
+            Incident.workspace_id == workspace_id,
+        )
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    incident.status = "ignored"
+    incident.resolved_at = datetime.now(timezone.utc)
+    incident.last_seen = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(incident)
+
+    return {
+        "id": str(incident.id),
+        "status": incident.status,
+        "resolved_at": incident.resolved_at,
+    }
+
+@router.get("/{workspace_id}/incidents")
+def list_incidents(workspace_id: str, db: Session = Depends(get_db)):
+    incidents = (
+        db.query(Incident)
+        .filter(Incident.workspace_id == workspace_id)
+        .order_by(Incident.last_seen.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(i.id),
+            "issue_type": i.issue_type,
+            "severity": i.severity,
+            "status": i.status,
+            "trigger_file_name": i.trigger_file_name,
+            "upload_type": i.upload_type,
+            "first_seen": i.first_seen,
+            "last_seen": i.last_seen,
+            "resolved_at": i.resolved_at,
+            "row_drop_percent": i.row_drop_percent,
+            "schema_change_size": i.schema_change_size,
+            "missing_percent": i.missing_percent,
+            "affected_columns": i.affected_columns,
+            "failure_reason": i.failure_reason,
+        }
+        for i in incidents
+    ]
+
+
+@router.get("/{workspace_id}/column-metrics")
+def get_column_metrics(
+    workspace_id: str,
+    column_name: str,
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(ColumnDailyMetrics)
+        .filter(
+            ColumnDailyMetrics.workspace_id == workspace_id,
+            ColumnDailyMetrics.column_name == column_name,
+        )
+        .order_by(ColumnDailyMetrics.metric_date.asc())
+        .all()
+    )
+
+    return [
+        {
+            "date": r.created_at,
+            "column": r.column_name,
+            "missing_percent": r.missing_percent,
+            "unique_percent": r.unique_percent,
+        }
+        for r in rows
+    ]
+
+@router.get("/{workspace_id}/table-metrics")
+def get_table_metrics(workspace_id: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(TableDailyMetrics)
+        .filter(TableDailyMetrics.workspace_id == workspace_id)
+        .order_by(TableDailyMetrics.metric_date.asc())
+        .all()
+    )
+
+    return [
+        {
+            "metric_date": r.created_at,
+            "row_count": r.row_count,
+            "column_count": r.column_count,
+        }
+        for r in rows
+    ]
+
+@router.get("/{workspace_id}/columns")
+def list_columns(workspace_id: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(ColumnDailyMetrics.column_name)
+        .filter(ColumnDailyMetrics.workspace_id == workspace_id)
+        .distinct()
+        .all()
+    )
+
+    return [r[0] for r in rows]
+
+def _load_upload_dataframe(
+    workspace_id: str,
+    upload_id: str,
+    current_user: User,
+    db: Session,
+) -> pd.DataFrame:
+
+    workspace = get_workspace(workspace_id, current_user, db)
+
+    upload = (
+        db.query(DataUpload)
+        .filter(
+            DataUpload.id == upload_id,
+            DataUpload.workspace_id == workspace.id,
+        )
+        .first()
+    )
+
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    if not upload.storage_path:
+        raise HTTPException(status_code=400, detail="No stored file available")
+
+    try:
+        csv_bytes = download_file_bytes(upload.storage_path)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to download file")
+
+    MAX_ROWS = 25000
+
+    try:
+        df = pd.read_csv(BytesIO(csv_bytes), nrows=MAX_ROWS + 1)
+        if len(df) > MAX_ROWS:
+            df = df.head(MAX_ROWS)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to parse CSV")
+
+    return df
+
+def _sanitize_value(value):
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+    if isinstance(value, (np.floating, np.integer)):
+        return value.item()
+    return value
+
+
+def _paginate_dataframe(df: pd.DataFrame, limit: int, offset: int):
+    total = len(df)
+    paginated = df.iloc[offset: offset + limit]
+
+    rows = []
+    for idx, row in paginated.iterrows():
+        clean_row = {}
+        for key, value in row.to_dict().items():
+            clean_row[key] = _sanitize_value(value)
+
+        clean_row["row_index"] = int(idx)
+        rows.append(clean_row)
+
+    return total, rows
+
+@router.get("/{workspace_id}/uploads/{upload_id}/issues/missing")
+@limiter.limit("20/minute")
+def get_missing_rows(
+    request: Request,
+    workspace_id: str,
+    upload_id: str,
+    column: str = Query(...),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    df = _load_upload_dataframe(workspace_id, upload_id, current_user, db)
+
+    if column not in df.columns:
+        raise HTTPException(status_code=400, detail="Invalid column name")
+
+    missing_df = df[df[column].isna()]
+
+    total, rows = _paginate_dataframe(missing_df, limit, offset)
+
+    return {
+        "column": column,
+        "total_missing_rows": total,
+        "limit": limit,
+        "offset": offset,
+        "rows": rows,
+    }
+
+@router.get("/{workspace_id}/uploads/{upload_id}/issues/duplicates")
+@limiter.limit("20/minute")
+def get_duplicate_rows(
+    request: Request,
+    workspace_id: str,
+    upload_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    df = _load_upload_dataframe(workspace_id, upload_id, current_user, db)
+
+    duplicate_mask = df.duplicated(keep=False)
+    duplicates_df = df[duplicate_mask]
+
+    total, rows = _paginate_dataframe(duplicates_df, limit, offset)
+
+    return {
+        "total_duplicate_rows": total,
+        "limit": limit,
+        "offset": offset,
+        "rows": rows,
+    }
