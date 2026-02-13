@@ -23,6 +23,7 @@ interface Payload {
   cols_to?: number | null;
   schema_added?: number | null;
   schema_removed?: number | null;
+  actor_email?: string | null;
 }
 
 interface Notification {
@@ -49,48 +50,124 @@ const formatPreciseTime = (date: string) => {
 const getStatusLabel = (n: Notification) => {
   const p = n.payload;
 
-  // NEW: Dedicated polling error label (most important)
+  // 1. Polling errors (highest priority system signal)
   if (n.notification_type === "polling_error") {
     if (n.priority === "critical") {
-      return { text: "Polling Stopped", color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
+      return {
+        text: "Polling Stopped",
+        color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+      };
     }
-    return { text: "Polling Issue", color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold" };
+    return {
+      text: "Polling Issue",
+      color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold",
+    };
   }
 
-  if (p?.event === "data_violation" || n.priority === "critical") 
-    return { text: "Action Needed", color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
+  // 2. Team updates (FIX: previously falling into "Healthy")
+  if (n.notification_type === "team_update") {
+    if (p?.event === "team_removed") {
+      return {
+        text: "Access Removed",
+        color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+      };
+    }
+    if (p?.event === "team_added") {
+      return {
+        text: "Team Update",
+        color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold",
+      };
+    }
+    return {
+      text: "Workspace Update",
+      color: "text-slate-700 bg-slate-50 border-slate-100 font-manrope font-bold",
+    };
+  }
 
-  if (p?.event === "pipeline_failure" || n.priority === "warning") 
-    return { text: "Issue Found", color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold" };
-  
-  // Handle non-data events (like deletions or generic alerts)
-  if (!p && (n.notification_type === "alert" || n.priority === "info"))
-    return { text: "Update", color: "text-slate-700 bg-slate-50 border-slate-100 font-manrope font-bold" };
-    
-  return { text: "Healthy", color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold" };
+  // 3. Data/quality alerts
+  if (p?.event === "data_violation" || n.priority === "critical") {
+    return {
+      text: "Action Needed",
+      color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+    };
+  }
+
+   if (p?.event === "workspace_deleted") {
+    return {
+      text: "Workspace Deleted",
+      color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+    };
+  }
+
+  if (p?.event === "workspace_restored") {
+    return {
+      text: "Workspace Restored",
+      color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold",
+    };
+  }
+
+  if (p?.event === "pipeline_failure" || n.priority === "warning") {
+    return {
+      text: "Issue Found",
+      color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold",
+    };
+  }
+
+  // 4. Generic alerts without payload
+  if (!p && (n.notification_type === "alert" || n.priority === "info")) {
+    return {
+      text: "Update",
+      color: "text-slate-700 bg-slate-50 border-slate-100 font-manrope font-bold",
+    };
+  }
+
+  // 5. Default = healthy data event only
+  return {
+    text: "Healthy",
+    color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold",
+  };
 };
-
 
 const getVerbalFeedback = (n: Notification) => {
   const p = n.payload;
 
+  // 1. System-level direct messages
   if (n.notification_type === "polling_error") {
     return n.message;
   }
 
+  if (n.notification_type === "team_update") {
+    return n.message;
+  }
+
+  // 2. Workspace lifecycle events (use backend as source of truth)
+  if (p?.event === "workspace_deleted" || p?.event === "workspace_restored") {
+    return n.message;
+  }
+
+
+  // 3. Generic fallback
   let feedback = !p ? n.message : "";
 
   if (p) {
     if (p.event === "data_violation") {
       feedback = `Quality check failed: ${p.violations_count || 1} violations detected in your dataset.`;
     } else {
-      const rowsChanged = p.rows_from !== undefined && p.rows_to !== undefined && p.rows_from !== p.rows_to;
-      const colsChanged = p.cols_from !== undefined && p.cols_to !== undefined && p.cols_from !== p.cols_to;
+      const rowsChanged =
+        p.rows_from !== undefined &&
+        p.rows_to !== undefined &&
+        p.rows_from !== p.rows_to;
+
+      const colsChanged =
+        p.cols_from !== undefined &&
+        p.cols_to !== undefined &&
+        p.cols_from !== p.cols_to;
 
       if (rowsChanged && colsChanged) {
         feedback = `Data structure and volume updated: Row count shifted from ${p.rows_from} to ${p.rows_to}, and columns changed from ${p.cols_from} to ${p.cols_to}.`;
       } else if (rowsChanged) {
-        const direction = (p.rows_to ?? 0) > (p.rows_from ?? 0) ? "increased" : "decreased";
+        const direction =
+          (p.rows_to ?? 0) > (p.rows_from ?? 0) ? "increased" : "decreased";
         feedback = `Data volume ${direction}: Your previous upload had ${p.rows_from} rows, and it has now ${direction} to ${p.rows_to} rows.`;
       } else if (colsChanged) {
         feedback = `Schema modification: Row count remains stable at ${p.rows_from}, but columns have been updated from ${p.cols_from} to ${p.cols_to}.`;
@@ -105,6 +182,7 @@ const getVerbalFeedback = (n: Notification) => {
 
   return n.ai_insight ? `${feedback} Tip: ${n.ai_insight}` : feedback;
 };
+
 
 const CardSkeleton = () => (
   <div className="flex bg-white border-b border-gray-200 p-4 sm:px-6 sm:py-5 animate-pulse">
@@ -191,8 +269,8 @@ export const NotificationsPage: React.FC = () => {
     return (
       <div className="group flex bg-white hover:bg-[#F9FAFB] border-b border-gray-200 last:border-0 transition-colors">
         <div className="flex-1 min-w-0 p-4 sm:px-6 sm:py-5">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <div className="flex items-center gap-3 min-w-0">
               <span className="text-[12px] font-bold text-gray-900 truncate">
                 {p?.workspace_name || (n.notification_type === "alert" ? "Console Update" : "System Update")}
               </span>
@@ -200,9 +278,12 @@ export const NotificationsPage: React.FC = () => {
                 {status.text}
               </span>
             </div>
-            <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-gray-400 font-medium">
+            <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-gray-400 font-medium relative">
               <div className="hidden sm:flex items-center gap-1.5"><Clock className="h-3 w-3" /> {formatPreciseTime(n.created_at)}</div>
-              <button onClick={() => handleDelete(n.id)} className="opacity-100 sm:opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all">
+              <button
+                onClick={() => handleDelete(n.id)}
+                className="absolute right-0 top-[-12px] sm:static opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+              >
                 {processingId === n.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               </button>
             </div>

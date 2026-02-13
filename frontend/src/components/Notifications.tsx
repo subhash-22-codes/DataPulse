@@ -142,7 +142,7 @@ export const Notifications: React.FC = () => {
                         <div className="flex gap-3 pr-6">
                           <div className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${!n.is_read ? 'bg-blue-600' : 'bg-slate-200'}`} />
                           <div className="min-w-0">
-                            <p className="text-[12px] text-slate-700 leading-snug">
+                            <p className="text-[12px] text-slate-700 leading-snug line-clamp-2">
                               {n.message}
                             </p>
                             <p className="text-[10px] text-slate-400 mt-1 font-medium">

@@ -2,7 +2,7 @@ import React, { useEffect, useState, Fragment, useCallback, useRef } from "react
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, LayoutDashboard, Settings, AlertCircle, Bell } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Settings, AlertCircle, Bell } from "lucide-react";
 import { DescriptionCard } from "./DescriptionCard";
 import { TeamMembersCard } from "./TeamMembersCard";
 import { DataSourceCard } from "./DataSourceCard";
@@ -212,18 +212,35 @@ useEffect(() => {
       setIsProcessing(true);
   };
 
-  if (loading) {
+if (loading) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-        <p className="text-sm font-medium text-gray-500">
-          Loading workspace…
-        </p>
+    <div className="min-h-screen workspace-background bg-slate-50/50 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        
+        {/* Subtle Data Bars (Professional, not childish) */}
+        <div className="flex items-end gap-1.5 h-8">
+          <div className="w-1.5 h-3 bg-slate-300 rounded-sm animate-[pulse_1.4s_ease-in-out_infinite]" />
+          <div className="w-1.5 h-5 bg-blue-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.1s_infinite]" />
+          <div className="w-1.5 h-7 bg-emerald-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
+          <div className="w-1.5 h-4 bg-amber-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.3s_infinite]" />
+          <div className="w-1.5 h-6 bg-blue-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
+          <div className="w-1.5 h-3 bg-slate-300 rounded-sm animate-[pulse_1.4s_ease-in-out_0.5s_infinite]" />
+        </div>
+
+        {/* Clean Product Text */}
+        <span className="text-sm font-medium text-slate-500 tracking-tight">
+          Loading workspace
+        </span>
+
+        {/* Optional subtle subtext (very professional tone) */}
+        <span className="text-xs text-slate-400">
+          Fetching data sources & history
+        </span>
       </div>
     </div>
   );
 }
+
 
 
 if (error) {
