@@ -522,8 +522,6 @@ if (!workspace) {
                   </Link>
 
                 </div>
-
-
                 <DataHistoryCard 
                   workspace={workspace} 
                   isProcessing={isProcessing} 
@@ -531,10 +529,7 @@ if (!workspace) {
                   isOwner={isOwner} 
                   onUploadsUpdate={handleHistoryLoaded}  
                 />
-
               </div>
-
-
             </Tab.Panel>
 
            <Tab.Panel className="focus:outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -106,7 +106,7 @@ const ColumnsHealth = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
           {/* Sidebar — SQL Style Column Table */}
-          <div className="lg:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="lg:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm custom-scrollbar">
 
             <div className="px-4 py-3 border-b border-slate-100">
               <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
@@ -117,7 +117,7 @@ const ColumnsHealth = () => {
               </p>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto">
+            <div className="max-h-[70vh] overflow-y-auto custom-scrollbar">
 
               {loading && (
                 <div className="p-4 space-y-2">

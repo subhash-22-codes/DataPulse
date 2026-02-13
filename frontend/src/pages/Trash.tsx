@@ -96,7 +96,7 @@ export const Trash: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 relative z-10">
+    <div className="max-w-6xl mx-auto py-8 sm:py-12 px-4 sm:px-6 relative z-10">
       
       {/* --- NAVIGATION --- */}
       <button 
@@ -104,26 +104,69 @@ export const Trash: React.FC = () => {
         className="flex items-center gap-2 text-[12px] font-semibold text-slate-400 hover:text-slate-900 transition-colors mb-8 group"
       >
         <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
-        Back to Home
+        Back
       </button>
 
       {/* --- HEADER --- */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Trash</h1>
-          <p className="text-[13px] text-slate-500 mt-1 font-medium leading-relaxed">
-            Resources are kept for 30 days before they are permanently deleted.
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            Trash
+          </h1>
+          <p className="text-[13px] text-slate-500 mt-1 font-medium leading-relaxed max-w-md">
+            Deleted workspaces are retained for 30 days. You can restore them unless your active workspace limit is reached.
           </p>
         </div>
 
-        {/* --- MINIMAL QUOTA INDICATOR --- */}
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors ${activeCount >= 3 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
-          <Info className={`w-3.5 h-3.5 ${activeCount >= 3 ? 'text-amber-500' : 'text-slate-400'}`} />
-          <span className="text-[11px] font-bold uppercase tracking-tight">
-             Usage: {activeCount} / 3 active
-          </span>
+        {/* QUOTA INDICATOR WITH EXPLANATION */}
+        <div className="relative group">
+          <div
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors cursor-default
+            ${
+              activeCount >= 3
+                ? "bg-amber-50 border-amber-100 text-amber-700"
+                : "bg-slate-50 border-slate-100 text-slate-600"
+            }`}
+          >
+            <Info
+              className={`w-3.5 h-3.5 ${
+                activeCount >= 3 ? "text-amber-500" : "text-slate-400"
+              }`}
+            />
+            <span className="text-[11px] font-bold font-manrope tracking-wide">
+              Active Workspaces: {activeCount} / 3
+            </span>
+          </div>
+
+          {/* HOVER / TAP INFO CARD */}
+          <div
+            className="pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100
+            transition-opacity duration-150 absolute right-0 mt-2 w-72 max-w-[90vw]
+            rounded-lg border border-slate-200 bg-white shadow-lg p-3 z-50"
+          >
+            <p className="text-[12px] font-semibold text-slate-900 mb-1">
+              Restore Limit Reached
+            </p>
+
+            <p className="text-[12px] text-slate-600 leading-relaxed">
+              You currently have {activeCount} active workspaces. Your plan allows a maximum of 3 active workspaces at a time.
+            </p>
+
+            {activeCount >= 3 && (
+              <p className="text-[12px] text-amber-700 mt-2 font-medium">
+                To restore a workspace from Trash, disable or delete an existing active workspace first.
+              </p>
+            )}
+
+            {activeCount < 3 && (
+              <p className="text-[12px] text-slate-500 mt-2">
+                You can restore workspaces from Trash while under the active workspace limit.
+              </p>
+            )}
+          </div>
         </div>
       </div>
+
 
       {/* --- FORMAL DISCLAIMER (ONLY SHOWS WHEN 3/3) --- */}
       {activeCount >= 3 && deletedWorkspaces.length > 0 && (

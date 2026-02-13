@@ -585,7 +585,7 @@ const DetailView: React.FC<{
         {/* LEFT COLUMN */}
         <div className="lg:col-span-5 space-y-6">
           {/* Quick Notes */}
-          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[420px]">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                 Quick Notes
@@ -594,8 +594,7 @@ const DetailView: React.FC<{
                 {insights.length}
               </span>
             </div>
-
-            <div className="p-2 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="p-2 space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
               {insights.length > 0 ? (
                 insights.map((item: UploadInsight, idx: number) => {
                   const severity = item?.severity || "low";

@@ -124,47 +124,99 @@ useEffect(() => {
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
       {/* Header Section */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+
+          {/* Left Side */}
+          <div className="flex flex-col gap-4 max-w-2xl">
+            
+            {/* Back Navigation */}
             <button
               onClick={() => navigate(`/workspace/${workspaceId}`)}
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition"
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 transition w-fit"
             >
               <ArrowLeft className="h-4 w-4" />
-                      Back to Workspace
+              Back to Workspace
             </button>
+
+            {/* Title + Description */}
+            <div>
+              <h1 className="text-lg sm:text-2xl font-semibold text-slate-900 leading-tight">
+                {type === "missing"
+                  ? `Missing Values in "${column}"`
+                  : "Duplicate Rows Detected"}
+              </h1>
+
+              <p className="mt-2 text-sm text-slate-500 leading-relaxed max-w-xl">
+                {type === "missing"
+                  ? "Rows listed below contain null or empty values in the selected column. This view helps you locate exact data gaps for correction."
+                  : "Rows listed below belong to duplicate clusters. Both original and repeated records are shown for accurate data cleaning."}
+              </p>
+            </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-slate-900 space-y-1 mt-4">
-            {type === "missing"
-              ? `Missing Values in "${column}"`
-              : "Duplicate Rows Detected"}
-          </h1>
+          {/* Metric Block */}
+          <div className="w-full lg:w-auto bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 sm:px-5 sm:py-4">
+            
+            {/* MOBILE LAYOUT */}
+            <div className="flex flex-row items-start justify-between lg:hidden">
+              <div className="flex flex-col">
+                <p className="text-[11px] font-semibold text-slate-700 tracking-wide">
+                  {type === "duplicates" ? "Duplicate Occurrences" : "Affected Rows"}
+                </p>
 
-          <p className="mt-2 text-sm text-slate-500 max-w-2xl leading-relaxed">
-            {type === "missing"
-              ? "These rows contain empty or null values in the selected column. Review them carefully to understand data gaps or ingestion issues."
-              : "These rows appear more than once in this dataset. Duplicate records may affect analytics accuracy or downstream reporting."}
-          </p>
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                  {type === "duplicates"
+                    ? "(Includes original + repeated entries)"
+                    : "(Rows with null or empty values)"}
+                </p>
+              </div>
+
+              <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none">
+                {total}
+              </p>
+            </div>
+
+            {/* DESKTOP LAYOUT */}
+            <div className="hidden lg:flex lg:flex-col lg:items-end lg:text-right">
+              <p className="text-[11px] font-semibold text-slate-700 tracking-wide">
+                {type === "duplicates" ? "Duplicate Occurrences" : "Affected Rows"}
+              </p>
+
+              <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                {type === "duplicates"
+                  ? "(Includes original + repeated entries)"
+                  : "(Rows with null or empty values)"}
+              </p>
+
+              <p className="mt-2 text-3xl font-bold text-slate-900 tabular-nums leading-none">
+                {total}
+              </p>
+            </div>
+
+          </div>
+
         </div>
-
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-            Total Issues
-          </div>
-          <div className="text-3xl font-bold text-slate-900 tabular-nums">
-            {total}
-          </div>
-        </div>
-      </div>
 
       {/* Main Card */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
 
         {loading ? (
-          <div className="p-12 text-center text-sm text-slate-500">
-            Loading dataset snapshot...
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col items-center justify-center py-16 px-6">
+              
+              {/* Spinner */}
+              <div className="h-8 w-8 border-2 border-slate-200 border-t-slate-600 rounded-full animate-spin" />
+
+              {/* Title */}
+              <p className="mt-4 text-sm font-semibold text-slate-700">
+                Analyzing dataset snapshot
+              </p>
+
+              {/* Subtext */}
+              <p className="mt-1 text-xs text-slate-500 text-center max-w-xs">
+                Fetching row-level issues from the uploaded file. This may take a few seconds for larger datasets.
+              </p>
+            </div>
           </div>
         ) : total === 0 ? (
           <div className="p-12 text-center">
