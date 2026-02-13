@@ -302,6 +302,10 @@ async def update_workspace(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     update_data = workspace_update.model_dump(exclude_unset=True)
+    logger.info(
+        f"[WS UPDATE] Incoming update | ws={workspace_id} | fields={list(update_data.keys())}"
+    )
+
 
     data_source_fields = {
         "data_source",
@@ -322,9 +326,7 @@ async def update_workspace(
         "api_header_value",
     }
 
-    # --------------------------------------------------
-    # Detect real config change (value-based, safe)
-    # --------------------------------------------------
+
     config_changed = False
 
     for field in data_source_fields:
@@ -344,10 +346,12 @@ async def update_workspace(
         if old_value != new_value:
             config_changed = True
             break
+    logger.info(
+        f"[WS UPDATE] Config change detected={config_changed} | ws={workspace_id}"
+    )
 
-    # --------------------------------------------------
-    # Handle data source switch cleanup
-    # --------------------------------------------------
+
+
     if "data_source" in update_data:
         new_source = update_data["data_source"]
 
@@ -367,9 +371,6 @@ async def update_workspace(
                 setattr(db_workspace, f, None)
             db_workspace.is_polling_active = False
 
-    # --------------------------------------------------
-    # Other updates
-    # --------------------------------------------------
     if "description" in update_data:
         db_workspace.description_last_updated_at = dt.datetime.now(dt.timezone.utc)
 
@@ -414,24 +415,29 @@ async def update_workspace(
                 WorkspaceUserSettings.user_id.in_(old_members - new_members),
             ).delete(synchronize_session=False)
 
-    # --------------------------------------------------
-    # Apply updates
-    # --------------------------------------------------
     for key, value in update_data.items():
+        if key == "is_polling_active":
+            continue 
         if key == "api_url" and value is not None:
             value = str(value)
         setattr(db_workspace, key, value)
 
+
     user_toggled_on = update_data.get("is_polling_active") is True
 
-    # --------------------------------------------------
-    # Reset failure state only if config really changed
-    # --------------------------------------------------
+    if "is_polling_active" in update_data:
+        db_workspace.is_polling_active = update_data["is_polling_active"]
+    logger.info(
+        f"[WS UPDATE] Toggle intent={update_data.get('is_polling_active', 'NOT_SENT')} "
+        f"| final_is_polling_active={db_workspace.is_polling_active} "
+        f"| ws={workspace_id}"
+    )
+
     if config_changed:
         db_workspace.failure_count = 0
         db_workspace.last_failure_reason = None
         db_workspace.auto_disabled_at = None
-        db_workspace.is_polling_active = user_toggled_on
+
 
     owner_settings = db.query(WorkspaceUserSettings).filter(
         WorkspaceUserSettings.workspace_id == db_workspace.id,
@@ -449,19 +455,27 @@ async def update_workspace(
     db.commit()
     db.refresh(db_workspace)
 
-    # --------------------------------------------------
-    # Manual run: first enable OR config change
-    # --------------------------------------------------
+
+    explicit_toggle_on = user_toggled_on
     should_run_now = (
-        user_toggled_on
-        and db_workspace.is_polling_active
+        db_workspace.is_polling_active
         and (
-            db_workspace.last_polled_at is None
-            or config_changed
+            explicit_toggle_on  
+            or config_changed  
+            or db_workspace.last_polled_at is None 
         )
+    )
+    logger.info(
+        f"[WS UPDATE] Decision | ws={workspace_id} | "
+        f"should_run_now={should_run_now} | "
+        f"explicit_toggle_on={explicit_toggle_on} | "
+        f"config_changed={config_changed} | "
+        f"last_polled_at={db_workspace.last_polled_at} | "
+        f"polling_active={db_workspace.is_polling_active}"
     )
 
     if should_run_now:
+        logger.info(f"[WS UPDATE] 🚀 Triggering immediate validation run | ws={workspace_id}")
         current_loop = asyncio.get_running_loop()
         executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
     
@@ -593,7 +607,6 @@ def get_team_workspaces(
     ).all()
 
 
-# --- THIS IS THE NEW, UPGRADED "Digital Scanner" FUNCTION ---
 @router.post("/{workspace_id}/upload-csv", response_model=TaskResponse)
 @limiter.limit("5/minute")
 async def upload_csv_for_workspace(
@@ -609,7 +622,6 @@ async def upload_csv_for_workspace(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID format")
 
-    # 1) Fetch full ORM Workspace
     workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -617,9 +629,9 @@ async def upload_csv_for_workspace(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    enforce_upload_limit_or_raise(db, workspace.id) # Check upload limits
+    enforce_upload_limit_or_raise(db, workspace.id) 
 
-    # 2) Read CSV bytes (RAM Protection)
+
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB Limit
     try:
         file_bytes = await file.read(MAX_FILE_SIZE + 1)
@@ -629,13 +641,12 @@ async def upload_csv_for_workspace(
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read uploaded file")
 
-    # Validate UTF-8
+
     try:
         _ = file_bytes.decode("utf-8")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
 
-    # 3) Create DataUpload row first
     new_upload = DataUpload(
         workspace_id=workspace.id,
         file_path=file.filename,
@@ -647,7 +658,6 @@ async def upload_csv_for_workspace(
     db.add(new_upload)
     db.flush()
 
-    # 4) Upload file to Supabase Storage
     storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
 
     try:
@@ -659,7 +669,6 @@ async def upload_csv_for_workspace(
     new_upload.storage_path = storage_path
     new_upload.file_url = None
 
-    # 5) Workspace update
     workspace.data_source = "CSV"
     workspace.is_polling_active = False
 
@@ -668,7 +677,6 @@ async def upload_csv_for_workspace(
 
     task_id = str(new_upload.id)
 
-    # 6) Background task dispatch
     if APP_MODE == "production":
         loop = asyncio.get_event_loop()
         background_tasks.add_task(process_csv_task, task_id, loop)
@@ -683,7 +691,7 @@ async def upload_csv_for_workspace(
     }
 
 
-#  Endpoint to get a workspace's upload history ---
+
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
 def get_workspace_uploads(
     workspace_id: str,
@@ -712,15 +720,13 @@ def get_workspace_schema(
     user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    # 1. Reuse security logic
     ws = get_workspace(workspace_id, user, db)
 
-    # 2. Fetch ONLY the schema_info from the latest record
+
     schema_data = db.query(DataUpload.schema_info).filter(
         DataUpload.workspace_id == ws.id
     ).order_by(DataUpload.uploaded_at.desc()).first()
 
-    # 3. Clean Response
     if not schema_data or not schema_data[0]:
         return {"schema": {}, "has_data": False}
 
@@ -733,10 +739,8 @@ def get_workspace_upload_count(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Security: ensure user has access to workspace
     workspace = get_workspace(workspace_id, current_user, db)
 
-    # Efficient aggregate query
     upload_count = db.query(DataUpload).filter(
         DataUpload.workspace_id == workspace.id
     ).count()
@@ -746,9 +750,6 @@ def get_workspace_upload_count(
     }
 
 
-# ===================================================
-# Endpoint for Trend Analysis Data
-# ===================================================
 @router.get("/{workspace_id}/trend", response_model=TrendResponse)
 def get_trend_data(
     workspace_id: str,
@@ -757,10 +758,9 @@ def get_trend_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 1. Security Check (Uses optimized get_workspace)
+    
     workspace = get_workspace(workspace_id, current_user, db)
 
-    # 2. Optimized Query: Select ONLY specific columns
     results = db.query(
         DataUpload.uploaded_at, 
         DataUpload.analysis_results
@@ -773,9 +773,7 @@ def get_trend_data(
 
     trend_data = []
     
-    # 3. Processing Loop
     for uploaded_at, stats in results:
-        # If the date is missing, skip this point entirely. 
         if uploaded_at is None:
             continue
 
@@ -785,17 +783,14 @@ def get_trend_data(
                 summary = stats.get("summary_stats", {})
                 col_stats = summary.get(column_name, {})
                 
-                # Extract value
                 raw_value = col_stats.get("mean")
                 
-                # Ensure it's a float, otherwise the frontend might break
                 if raw_value is not None:
                     value = float(raw_value)
                     
             except (AttributeError, TypeError, ValueError):
                 pass
-        
-        # Only add to the list if we actually found a value. 
+
         if value is not None:
             trend_data.append(TrendDataPoint(date=uploaded_at, value=value))
 

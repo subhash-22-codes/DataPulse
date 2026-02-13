@@ -296,6 +296,7 @@ def kill_poller(
     loop: asyncio.AbstractEventLoop = None,
 ):
     terminal = False
+    ws = None
 
     try:
         ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
@@ -325,9 +326,67 @@ def kill_poller(
 
             db.commit()
 
+        try:
+            # Notify owner + team (deduped)
+            all_users = list(ws.team_members) + [ws.owner]
+            users_map = {str(u.id): u for u in all_users}
+            users_to_notify = list(users_map.values())
+
+            if terminal:
+                # Hard fail (polling stopped)
+                notif_message = f"Polling stopped for '{ws.name}': {user_message}"
+                priority = "critical"
+                notif_type = "polling_error"
+                idempotency_key = f"poll_hard_fail:{ws.id}:{user_message}"
+            else:
+                # Soft fail (retrying)
+                notif_message = f"Polling issue in '{ws.name}': {user_message}"
+                priority = "warning"
+                notif_type = "polling_error"
+                idempotency_key = f"poll_soft_fail:{ws.id}:{user_message}:{ws.failure_count}"
+
+            # Prevent duplicate spam notifications
+            existing = (
+                db.query(Notification)
+                .filter(Notification.idempotency_key == idempotency_key)
+                .first()
+            )
+
+            if not existing and users_to_notify:
+                payload = {
+                    "event": "polling_failure",
+                    "workspace_name": ws.name,
+                    "reason": user_message,
+                    "is_hard_fail": is_hard_fail,
+                    "auto_disabled": terminal,
+                    "failure_count": ws.failure_count,
+                }
+
+                for user in users_to_notify:
+                    notif = Notification(
+                        user_id=user.id,
+                        workspace_id=ws.id,
+                        message=notif_message,
+                        notification_type=notif_type,
+                        priority=priority,
+                        idempotency_key=idempotency_key,
+                        action_url=f"/workspace/{ws.id}",
+                        payload=payload,
+                    )
+                    db.add(notif)
+
+                db.commit()
+                logger.info(
+                    f"[KILL_POLLER] Created polling notification for {len(users_to_notify)} users | ws={ws.id}"
+                )
+
+        except Exception as notif_err:
+            db.rollback()
+            logger.error(f"[KILL_POLLER] Notification creation failed: {notif_err}", exc_info=True)
+
     except Exception as e:
         db.rollback()
-        logger.error(f"[KILL_POLLER] DB Update Failed: {e}")
+        logger.error(f"[KILL_POLLER] DB Update Failed: {e}", exc_info=True)
         return
 
     if not loop or not loop.is_running():
@@ -357,7 +416,8 @@ def kill_poller(
         )
         logger.info(f"Broadcasted {payload['type']} to UI for {workspace_id}")
     except Exception as e:
-        logger.error(f"WebSocket Broadcast Failed: {e}")
+        logger.error(f"WebSocket Broadcast Failed: {e}", exc_info=True)
+
 
 def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
