@@ -350,8 +350,6 @@ async def update_workspace(
         f"[WS UPDATE] Config change detected={config_changed} | ws={workspace_id}"
     )
 
-
-
     if "data_source" in update_data:
         new_source = update_data["data_source"]
 
@@ -398,10 +396,69 @@ async def update_workspace(
 
         old_members = {u.id for u in db_workspace.team_members}
         new_members = {u.id for u in final_members}
-
+        
         db_workspace.team_members = final_members
+        
+        added_user_ids = new_members - old_members
+        removed_user_ids = old_members - new_members
 
-        for user_id in new_members - old_members:
+        actor_name = current_user.name or current_user.email
+        ws_name = db_workspace.name
+
+        try:
+            # Build lookup map from already-loaded objects (ZERO extra DB queries)
+            final_members_map = {u.id: u for u in final_members}
+
+            # Notify ADDED users (no extra DB hit)
+            for user_id in added_user_ids:
+                user = final_members_map.get(user_id)
+                if not user or user.id == current_user.id:
+                    continue
+
+                notif = Notification(
+                    user_id=user.id,
+                    workspace_id=db_workspace.id,
+                    message=f"You’ve been added to the workspace \"{ws_name}\" by {actor_name}.",
+                    notification_type="team_update",
+                    priority="info",
+                    action_url=f"/workspaces/{db_workspace.id}",
+                    payload={
+                        "event": "team_added",
+                        "workspace_name": ws_name,
+                        "added_by": actor_name,
+                    },
+                    idempotency_key=f"team_added:{db_workspace.id}:{user.id}",
+                )
+                db.add(notif)
+
+            # Notify REMOVED users (one clean query, acceptable)
+            if removed_user_ids:
+                removed_users = db.query(User).filter(User.id.in_(removed_user_ids)).all()
+
+                for user in removed_users:
+                    if user.id == current_user.id:
+                        continue
+
+                    notif = Notification(
+                        user_id=user.id,
+                        workspace_id=db_workspace.id,
+                        message=f"You’ve been removed from \"{ws_name}\" by {actor_name}.",
+                        notification_type="team_update",
+                        priority="info",
+                        payload={
+                            "event": "team_removed",
+                            "workspace_name": ws_name,
+                            "removed_by": actor_name,
+                        },
+                        idempotency_key=f"team_removed:{db_workspace.id}:{user.id}",
+                    )
+                    db.add(notif)
+
+        except Exception as notif_err:
+            logger.error(f"[TEAM NOTIFY] Failed: {notif_err}", exc_info=True)
+
+        # Reuse computed diff (cleaner)
+        for user_id in added_user_ids:
             db.add(
                 WorkspaceUserSettings(
                     workspace_id=db_workspace.id,
@@ -409,10 +466,10 @@ async def update_workspace(
                 )
             )
 
-        if old_members - new_members:
+        if removed_user_ids:
             db.query(WorkspaceUserSettings).filter(
                 WorkspaceUserSettings.workspace_id == db_workspace.id,
-                WorkspaceUserSettings.user_id.in_(old_members - new_members),
+                WorkspaceUserSettings.user_id.in_(removed_user_ids),
             ).delete(synchronize_session=False)
 
     for key, value in update_data.items():
@@ -908,56 +965,95 @@ async def confirm_delete_workspace(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-  
     now = datetime.now(timezone.utc)
-    
-    if not current_user.delete_confirmation_otp or current_user.delete_confirmation_otp != payload.otp:
+
+    # OTP validation
+    if (
+        not current_user.delete_confirmation_otp
+        or current_user.delete_confirmation_otp != payload.otp
+    ):
         raise HTTPException(status_code=400, detail="Invalid verification code.")
-    
-    if not current_user.delete_confirmation_expiry or now > current_user.delete_confirmation_expiry:
+
+    if (
+        not current_user.delete_confirmation_expiry
+        or now > current_user.delete_confirmation_expiry
+    ):
         raise HTTPException(status_code=400, detail="Verification code has expired.")
 
-    ws_uuid = uuid.UUID(workspace_id)
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
-        Workspace.owner_id == current_user.id
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False
     ).first()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found.")
 
+    members = list(workspace.team_members) if workspace.team_members else []
+    owner_email = current_user.email
+    ws_name = workspace.name
 
     workspace.is_deleted = True
     workspace.deleted_at = now
-    
-    for member in workspace.team_members:
+
+    for member in members:
         team_note = Notification(
             user_id=member.id,
             workspace_id=workspace.id,
-            message=f"The workspace '{workspace.name}' has been deleted by the owner.",
-            ai_insight="Access to this workspace is no longer available."
+            message=f"Workspace \"{ws_name}\" was deleted by the workspace owner {current_user.name} ({owner_email}). Access to this workspace is no longer available.",
+            ai_insight="All datasets, uploads, and analytics access under this workspace are now unavailable.",
+            notification_type="system",
+            priority="info",
+            idempotency_key=f"workspace_deleted:{workspace.id}:{member.id}",
+            payload={
+                "event": "workspace_deleted",
+                "workspace_id": str(workspace.id),
+                "workspace_name": ws_name,
+                "actor_email": owner_email,
+                "members_affected": len(members)
+            }
         )
         db.add(team_note)
 
     owner_note = Notification(
         user_id=current_user.id,
         workspace_id=workspace.id,
-        message=f"You successfully deleted '{workspace.name}'.",
-        ai_insight="You can restore this from the Trash Bin within 30 days."
+        message=f"You deleted the workspace \"{ws_name}\". It has been moved to Trash and can be restored within 30 days.",
+        ai_insight="The workspace has been moved to Trash and can be restored within 30 days before permanent deletion.",
+        notification_type="system",
+        priority="info",
+        action_url="/trash",
+        idempotency_key=f"workspace_delete_owner:{workspace.id}:{current_user.id}",
+        payload={
+            "event": "workspace_deleted",
+            "workspace_id": str(workspace.id),
+            "workspace_name": ws_name,
+            "deleted_at": now.isoformat(),
+            "members_affected": len(members)
+        }
     )
     db.add(owner_note)
-    
+
     current_user.delete_confirmation_otp = None
     current_user.delete_confirmation_expiry = None
-    
+
     db.commit()
+
     background_tasks.add_task(
         send_telegram_alert,
-        f"BLUE ALERT: Workspace Deleted Successfully\n"
-        f"Owner: {current_user.email}\n"
-        f"Workspace ID: {workspace_id}"
+        f"WORKSPACE SOFT DELETE\n"
+        f"Owner: {owner_email}\n"
+        f"Workspace: {ws_name}\n"
+        f"Workspace ID: {workspace_id}\n"
+        f"Members Affected: {len(members)}\n"
+        f"Deleted At (UTC): {now.isoformat()}"
     )
-    
+
     return
 
 @router.post("/{workspace_id}/restore", status_code=200)
@@ -973,7 +1069,6 @@ def restore_workspace(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace ID")
 
-    # 1. Find the target workspace in trash
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
@@ -983,7 +1078,6 @@ def restore_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found in trash.")
 
-    # 2. QUOTA CHECK: Can they afford to bring this back?
     active_count = db.query(func.count(Workspace.id)).filter(
         Workspace.owner_id == current_user.id,
         Workspace.is_deleted == False
@@ -991,17 +1085,61 @@ def restore_workspace(
 
     if active_count >= 3:
         raise HTTPException(
-            status_code=429, 
+            status_code=429,
             detail="Cannot restore. You already have 3 active workspaces. Delete one permanently to free up a slot."
         )
 
-    # 3. RESTORE ACTION
+    members = list(workspace.team_members) if workspace.team_members else []
+    ws_name = workspace.name
+    owner_email = current_user.email
+    now = datetime.now(timezone.utc)
+
     workspace.is_deleted = False
     workspace.deleted_at = None
-    db.commit()
-    
-    return {"message": "Workspace restored successfully"}
 
+    for member in members:
+        team_note = Notification(
+            user_id=member.id,
+            workspace_id=workspace.id,
+            message=f"Workspace \"{ws_name}\" has been restored by the workspace owner ({owner_email}).",
+            ai_insight="Access to datasets and analytics in this workspace is now available again.",
+            notification_type="system",
+            priority="info",
+            action_url=f"/workspace/{workspace.id}",
+            idempotency_key=f"workspace_restored:{workspace.id}:{member.id}",
+            payload={
+                "event": "workspace_restored",
+                "workspace_id": str(workspace.id),
+                "workspace_name": ws_name,
+                "actor_email": owner_email,
+                "members_restored": len(members),
+                "restored_at": now.isoformat()
+            }
+        )
+        db.add(team_note)
+
+    owner_note = Notification(
+        user_id=current_user.id,
+        workspace_id=workspace.id,
+        message=f"You restored the workspace \"{ws_name}\".",
+        ai_insight="The workspace and all team access have been reinstated.",
+        notification_type="system",
+        priority="info",
+        action_url=f"/workspace/{workspace.id}",
+        idempotency_key=f"workspace_restored_owner:{workspace.id}:{current_user.id}",
+        payload={
+            "event": "workspace_restored",
+            "workspace_id": str(workspace.id),
+            "workspace_name": ws_name,
+            "restored_at": now.isoformat(),
+            "members_restored": len(members)
+        }
+    )
+    db.add(owner_note)
+
+    db.commit()
+
+    return {"message": "Workspace restored successfully"}
 
 
 @router.delete("/{workspace_id}/permanently", status_code=204)
