@@ -159,22 +159,27 @@ def toggle_alert_rule(
     return rule
 
 @router.delete("/{rule_id}", status_code=204)
+@limiter.limit("10/minute")
 def delete_alert_rule(
+    request: Request,
     rule_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Delete an alert rule. Only the owner of the parent workspace can delete.
-    """
-    rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
+    rule = (
+        db.query(AlertRule)
+        .join(Workspace, AlertRule.workspace_id == Workspace.id)
+        .filter(
+            AlertRule.id == rule_id,
+            Workspace.owner_id == current_user.id
+        )
+        .first()
+    )
+
     if not rule:
+        # Do NOT reveal whether rule exists but belongs to someone else
         raise HTTPException(status_code=404, detail="Alert rule not found")
 
-    workspace = db.query(Workspace).filter(Workspace.id == rule.workspace_id).first()
-    if not workspace or workspace.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this alert rule")
-    
     db.delete(rule)
     db.commit()
     return Response(status_code=204)

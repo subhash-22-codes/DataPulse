@@ -1441,12 +1441,45 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     f"Data updated in '{workspace.name}': {change_summary}"
                 )
 
+                # ----------------------------------------------------------
+                # 🔴 STEP 1 FIX: Proper priority classification (in-app only)
+                # ----------------------------------------------------------
+                priority = "info"
+
+                if schema_has_changed:
+                    removed_cols = len(schema_changes_dict.get("removed", []))
+                    added_cols = len(schema_changes_dict.get("added", []))
+
+                    # Removing columns = breaking / dangerous
+                    if removed_cols > 0:
+                        priority = "critical"
+                    else:
+                        # Schema expansion still important signal
+                        priority = "warning"
+
+                elif row_count_has_changed:
+                    # Safe guard against division by zero
+                    if old_row_count and new_row_count < old_row_count:
+                        drop_percent = ((old_row_count - new_row_count) / old_row_count) * 100
+                        # Large data drop = high severity (data loss / pipeline issue)
+                        priority = "critical" if drop_percent >= 40 else "warning"
+                    else:
+                        # Row increase is usually normal ingestion growth
+                        priority = "info"
+
+                elif col_count_has_changed:
+                    if new_col_count < old_col_count:
+                        # Column removal without full schema diff context is still risky
+                        priority = "warning"
+                    else:
+                        # Column increase = safe expansion
+                        priority = "info"
 
                 # ✅ Notify all team members + owner (safe dedupe by user.id)
                 all_users = list(workspace.team_members) + [workspace.owner]
                 users_map = {str(u.id): u for u in all_users}
                 users_to_notify = list(users_map.values())
-                
+
                 payload = {
                     "workspace_name": workspace.name,
                     "event": "dataset_update",
@@ -1454,10 +1487,8 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     "rows_to": new_row_count if row_count_has_changed else None,
                     "cols_from": old_col_count if col_count_has_changed else None,
                     "cols_to": new_col_count if col_count_has_changed else None,
-                    "schema_added": len(schema_changes_dict.get("added", []))
-                        if schema_has_changed else None,
-                    "schema_removed": len(schema_changes_dict.get("removed", []))
-                        if schema_has_changed else None,
+                    "schema_added": schema_changes_dict.get("added") if schema_has_changed else None,
+                    "schema_removed": schema_changes_dict.get("removed") if schema_has_changed else None,
                 }
 
                 for user in users_to_notify:
@@ -1467,14 +1498,16 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                         message=notification_message,
                         ai_insight=ai_insight_text,
                         payload=payload,
+                        notification_type="data_update", 
+                        priority=priority, 
+                        action_url=f"/workspace/{workspace.id}",             
                     )
                     db.add(new_notification)
 
-
                 new_notifications_created = True
-                logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications.")
+                logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications with priority={priority}.")
 
-                # Prepare Email context
+                # Prepare Email context (UNCHANGED)
                 percent_change = "0%"
                 if old_row_count > 0:
                     percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
@@ -1513,7 +1546,6 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     if user.id in enabled_user_ids
                 ]
 
-
                 logger.info("[WORKER] Scheduling detailed alert email (non-blocking)...")
 
                 if recipients:
@@ -1527,6 +1559,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
 
         db.commit()
+
         logger.info(f"💾 [WORKER] Success. Upload {upload_id} committed.")
 
         # Push notification ping (only in prod)
