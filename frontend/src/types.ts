@@ -72,7 +72,7 @@ export interface Workspace {
   name: string;
   description?: string;
   team_members?: TeamMember[];
-  data_source?: string;
+  data_source?: "CSV" | "API" | "DB" | null;
   created_at: string;
   owner_id: string;
   owner: Owner;

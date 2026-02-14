@@ -215,26 +215,21 @@ useEffect(() => {
 if (loading) {
   return (
     <div className="min-h-screen workspace-background bg-slate-50/50 flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-5">
         
-        {/* Subtle Data Bars (Professional, not childish) */}
-        <div className="flex items-end gap-1.5 h-8">
-          <div className="w-1.5 h-3 bg-slate-300 rounded-sm animate-[pulse_1.4s_ease-in-out_infinite]" />
-          <div className="w-1.5 h-5 bg-blue-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.1s_infinite]" />
-          <div className="w-1.5 h-7 bg-emerald-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
-          <div className="w-1.5 h-4 bg-amber-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.3s_infinite]" />
-          <div className="w-1.5 h-6 bg-blue-500/80 rounded-sm animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
-          <div className="w-1.5 h-3 bg-slate-300 rounded-sm animate-[pulse_1.4s_ease-in-out_0.5s_infinite]" />
+        {/* Clear, Thick Data Bars (no fade, no childish pulse feel) */}
+        <div className="flex items-end gap-2 h-10">
+          <div className="w-2 h-4 bg-slate-400 rounded-sm animate-[pulse_1.2s_ease-in-out_infinite]" />
+          <div className="w-2 h-7 bg-blue-600 rounded-sm animate-[pulse_1.2s_ease-in-out_0.1s_infinite]" />
+          <div className="w-2 h-9 bg-emerald-600 rounded-sm animate-[pulse_1.2s_ease-in-out_0.2s_infinite]" />
+          <div className="w-2 h-6 bg-amber-500 rounded-sm animate-[pulse_1.2s_ease-in-out_0.3s_infinite]" />
+          <div className="w-2 h-8 bg-blue-600 rounded-sm animate-[pulse_1.2s_ease-in-out_0.4s_infinite]" />
+          <div className="w-2 h-5 bg-slate-500 rounded-sm animate-[pulse_1.2s_ease-in-out_0.5s_infinite]" />
         </div>
 
-        {/* Clean Product Text */}
-        <span className="text-sm font-medium text-slate-500 tracking-tight">
+        {/* Simple, professional wording */}
+        <span className="text-sm font-semibold font-manrope text-slate-500 tracking-tight">
           Loading workspace
-        </span>
-
-        {/* Optional subtle subtext (very professional tone) */}
-        <span className="text-xs text-slate-400">
-          Fetching data sources & history
         </span>
       </div>
     </div>
@@ -242,10 +237,9 @@ if (loading) {
 }
 
 
-
 if (error) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen workspace-background bg-slate-50/50 flex items-center justify-center px-4">
       <div className="flex w-full max-w-[320px] flex-col items-center rounded-sm border border-slate-200 bg-white p-8 shadow-sm">
         
         {/* Soft, simple icon */}
@@ -253,34 +247,51 @@ if (error) {
           <AlertCircle className="h-5 w-5 stroke-[1.5]" />
         </div>
 
-        {/* Minimal Header - Easy to read */}
+        {/* Header */}
         <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-          We couldn't load that
+          Unable to load workspace
         </h2>
 
-        {/* Helpful description - Sentence case for empathy */}
-        <p className="mt-2 text-[12px] font-medium text-slate-500 leading-relaxed">
-          {error || "There was a temporary problem connecting to this workspace. Please try again."}
+        {/* Description */}
+        <p className="mt-2 text-[12px] font-medium text-slate-500 leading-relaxed text-center">
+          {error || "Temporary issue while loading this workspace."}
         </p>
 
-        {/* Action Button - Caps stay here for "Industrial" Authority */}
-        <button
-          onClick={() => navigate("/home")}
-          className="
-            mt-8 w-full
-            h-10
-            flex items-center justify-center
-            rounded-sm bg-blue-600 
-            text-[10px] font-bold text-white font-manrope tracking-[0.15em]
-            transition-all hover:bg-blue-700 active:scale-[0.98]
-          "
-        >
-          Back to Home
-        </button>
+        {/* Actions */}
+        <div className="mt-8 w-full flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={fetchWorkspace}
+            className="
+              w-full
+              h-10
+              flex items-center justify-center
+              rounded-sm bg-blue-600 
+              text-[10px] font-bold text-white font-manrope tracking-[0.15em]
+              transition-all hover:bg-blue-700 active:scale-[0.98]
+            "
+          >
+            Retry
+          </button>
+
+          <button
+            onClick={() => navigate("/home")}
+            className="
+              w-full
+              h-10
+              flex items-center justify-center
+              rounded-sm border border-slate-200 bg-white
+              text-[10px] font-bold text-slate-700 font-manrope tracking-[0.15em]
+              transition-all hover:bg-slate-50 active:scale-[0.98]
+            "
+          >
+            Back to Home
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
 
 if (!workspace) {
   return (

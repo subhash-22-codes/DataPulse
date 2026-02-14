@@ -20,6 +20,7 @@ export const Trash: React.FC = () => {
   const navigate = useNavigate();
   const [deletedWorkspaces, setDeletedWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeCount, setActiveCount] = useState(0);
   const [isRestoring, setIsRestoring] = useState<string | null>(null);
   
@@ -28,19 +29,25 @@ export const Trash: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTrash = async () => {
+    setIsLoading(true);
+    setError(null); // reset previous error
+
     try {
       const [trashRes, workspacesRes] = await Promise.all([
         api.get<Workspace[]>('/workspaces/trash'),
         api.get<Workspace[]>('/workspaces')
       ]);
+
       setDeletedWorkspaces(trashRes.data);
       setActiveCount(workspacesRes.data.length);
-    } catch (error) {
-      console.error("Fetch failed", error);
+    } catch (err) {
+      console.error("Fetch failed", err);
+      setError("Failed to load trash"); // <-- THIS is the key fix
     } finally {
       setIsLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchTrash();
@@ -86,14 +93,6 @@ export const Trash: React.FC = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-[60vh] gap-3">
-        <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
-        <span className="text-[11px] font-medium text-slate-400">Loading trash...</span>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-6xl mx-auto py-8 sm:py-12 px-4 sm:px-6 relative z-10">
@@ -179,13 +178,68 @@ export const Trash: React.FC = () => {
       )}
 
       {/* --- CONTENT --- */}
-      {deletedWorkspaces.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-slate-50 border border-slate-100 rounded-lg">
-          <Archive className="w-8 h-8 text-slate-200 mb-2" strokeWidth={1.5} />
-          <p className="text-sm font-semibold text-slate-900">No items in trash</p>
-          <p className="text-xs text-slate-400 mt-0.5">Your deleted workspaces will appear here.</p>
+        {isLoading ? (
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="divide-y divide-slate-50 animate-pulse">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="p-5 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    
+                    {/* Info skeleton */}
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-center gap-3 mb-1.5">
+                        <div className="h-4 w-44 bg-slate-300 rounded-sm" />
+                        <div className="h-4 w-14 bg-slate-200 rounded-sm" />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <div className="h-3 w-28 bg-slate-200 rounded-sm" />
+                        <div className="h-3 w-64 bg-slate-200 rounded-sm" />
+                      </div>
+                    </div>
+
+                    {/* Buttons skeleton (matches your exact actions area) */}
+                    <div className="flex items-center gap-2 sm:gap-4 shrink-0 mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-slate-100">
+                      <div className="h-8 w-28 bg-slate-200 rounded-md" />
+                      <div className="h-8 w-8 bg-slate-200 rounded-md" />
+                    </div>
+
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : error ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-200 rounded-lg">
+          <AlertTriangle className="w-6 h-6 text-amber-500 mb-3" />
+          
+          <p className="text-sm font-semibold text-slate-900">
+            Unable to load trash
+          </p>
+
+          <p className="text-xs text-slate-500 mt-1 text-center">
+            Server is unavailable or the request failed.
+          </p>
+
+          <button
+            onClick={fetchTrash}
+            className="
+              mt-6 h-9 px-5
+              rounded-sm bg-blue-600
+              text-[11px] font-bold text-white font-manrope tracking-widest
+              hover:bg-blue-700 transition-all active:scale-[0.98]
+            "
+          >
+            Try again
+          </button>
         </div>
-      ) : (
+        ) : deletedWorkspaces.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-50 border border-slate-100 rounded-lg">
+            <Archive className="w-8 h-8 text-slate-200 mb-2" strokeWidth={1.5} />
+            <p className="text-sm font-semibold text-slate-900">No items in trash</p>
+            <p className="text-xs text-slate-400 mt-0.5">Your deleted workspaces will appear here.</p>
+          </div>
+        ) : (
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
           <div className="divide-y divide-slate-50">
             {deletedWorkspaces.map((workspace) => (

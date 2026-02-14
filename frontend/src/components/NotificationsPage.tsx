@@ -21,8 +21,8 @@ interface Payload {
   rows_to?: number | null;
   cols_from?: number | null;
   cols_to?: number | null;
-  schema_added?: number | null;
-  schema_removed?: number | null;
+  schema_added?: string[] | null;
+  schema_removed?: string[] | null;
   actor_email?: string | null;
 }
 
@@ -64,7 +64,7 @@ const getStatusLabel = (n: Notification) => {
     };
   }
 
-  // 2. Team updates (FIX: previously falling into "Healthy")
+  // 2. Team updates
   if (n.notification_type === "team_update") {
     if (p?.event === "team_removed") {
       return {
@@ -84,7 +84,30 @@ const getStatusLabel = (n: Notification) => {
     };
   }
 
-  // 3. Data/quality alerts
+  // 3. 🔴 NEW: Data update notifications (CRUCIAL for your backend change)
+  if (n.notification_type === "data_update") {
+    if (n.priority === "critical") {
+      return {
+        text: "Action Needed",
+        color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+      };
+    }
+
+    if (n.priority === "warning") {
+      return {
+        text: "Data Changed",
+        color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold",
+      };
+    }
+
+    // info / low = normal ingestion update
+    return {
+      text: "Data Updated",
+      color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold",
+    };
+  }
+
+  // 4. Data/quality alerts
   if (p?.event === "data_violation" || n.priority === "critical") {
     return {
       text: "Action Needed",
@@ -92,7 +115,7 @@ const getStatusLabel = (n: Notification) => {
     };
   }
 
-   if (p?.event === "workspace_deleted") {
+  if (p?.event === "workspace_deleted") {
     return {
       text: "Workspace Deleted",
       color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
@@ -113,7 +136,7 @@ const getStatusLabel = (n: Notification) => {
     };
   }
 
-  // 4. Generic alerts without payload
+  // 5. Generic alerts without payload
   if (!p && (n.notification_type === "alert" || n.priority === "info")) {
     return {
       text: "Update",
@@ -121,7 +144,7 @@ const getStatusLabel = (n: Notification) => {
     };
   }
 
-  // 5. Default = healthy data event only
+  // 6. Default fallback
   return {
     text: "Healthy",
     color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold",
@@ -142,25 +165,40 @@ const getVerbalFeedback = (n: Notification) => {
 
   // 2. Workspace lifecycle events (use backend as source of truth)
   if (p?.event === "workspace_deleted" || p?.event === "workspace_restored") {
-    return n.message;
-  }
+      return n.message;
+    }
 
+    // 3. Generic fallback (kept EXACT behavior)
+    let feedback = !p ? n.message : "";
 
-  // 3. Generic fallback
-  let feedback = !p ? n.message : "";
-
-  if (p) {
+    if (p) {
     if (p.event === "data_violation") {
       feedback = `Quality check failed: ${p.violations_count || 1} violations detected in your dataset.`;
     } else {
+      // 🔴 NEW: Show real schema diff if backend sends it
+      const hasSchemaDiff =
+        Array.isArray(p.schema_added) &&
+        Array.isArray(p.schema_removed) &&
+        (p.schema_added.length > 0 || p.schema_removed.length > 0);
+
+      if (hasSchemaDiff) {
+        const added = p.schema_added?.length ? `Added: ${p.schema_added.join(", ")}` : "";
+        const removed = p.schema_removed?.length ? `Removed: ${p.schema_removed.join(", ")}` : "";
+
+        const schemaText = [added, removed].filter(Boolean).join(" | ");
+        feedback = `Schema updated: ${schemaText}.`;
+        return n.ai_insight ? `${feedback} Tip: ${n.ai_insight}` : feedback;
+      }
+
+      // 🔒 EXISTING LOGIC (unchanged)
       const rowsChanged =
-        p.rows_from !== undefined &&
-        p.rows_to !== undefined &&
+        p.rows_from != null &&
+        p.rows_to != null &&
         p.rows_from !== p.rows_to;
 
       const colsChanged =
-        p.cols_from !== undefined &&
-        p.cols_to !== undefined &&
+        p.cols_from != null &&
+        p.cols_to != null &&
         p.cols_from !== p.cols_to;
 
       if (rowsChanged && colsChanged) {
@@ -168,12 +206,13 @@ const getVerbalFeedback = (n: Notification) => {
       } else if (rowsChanged) {
         const direction =
           (p.rows_to ?? 0) > (p.rows_from ?? 0) ? "increased" : "decreased";
+
         feedback = `Data volume ${direction}: Your previous upload had ${p.rows_from} rows, and it has now ${direction} to ${p.rows_to} rows.`;
       } else if (colsChanged) {
         feedback = `Schema modification: Row count remains stable at ${p.rows_from}, but columns have been updated from ${p.cols_from} to ${p.cols_to}.`;
       } else {
         feedback =
-          p.rows_to !== undefined && p.cols_to !== undefined
+          p.rows_to != null && p.cols_to != null
             ? `Dataset processed successfully. ${p.rows_to} rows and ${p.cols_to} columns verified.`
             : "Dataset processed successfully. No structural changes detected.";
       }
@@ -182,6 +221,7 @@ const getVerbalFeedback = (n: Notification) => {
 
   return n.ai_insight ? `${feedback} Tip: ${n.ai_insight}` : feedback;
 };
+
 
 
 const CardSkeleton = () => (
@@ -261,131 +301,171 @@ export const NotificationsPage: React.FC = () => {
     }
   };
 
-  const renderCard = (n: Notification) => {
-    const p = n.payload;
-    const status = getStatusLabel(n);
-    const feedback = getVerbalFeedback(n);
+ const renderCard = (n: Notification) => {
+  const p = n.payload;
+  const status = getStatusLabel(n);
+  const feedback = getVerbalFeedback(n);
 
-    return (
-      <div className="group flex bg-white hover:bg-[#F9FAFB] border-b border-gray-200 last:border-0 transition-colors">
-        <div className="flex-1 min-w-0 p-4 sm:px-6 sm:py-5">
-          <div className="flex items-start justify-between mb-2 sm:mb-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-[12px] font-bold text-gray-900 truncate">
-                {p?.workspace_name || (n.notification_type === "alert" ? "Console Update" : "System Update")}
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${status.color}`}>
-                {status.text}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-gray-400 font-medium relative">
-              <div className="hidden sm:flex items-center gap-1.5"><Clock className="h-3 w-3" /> {formatPreciseTime(n.created_at)}</div>
-              <button
-                onClick={() => handleDelete(n.id)}
-                className="absolute right-0 top-[-12px] sm:static opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-              >
-                {processingId === n.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </button>
-            </div>
+  const hasSchemaDiff =
+    Array.isArray(p?.schema_added) && p.schema_added.length > 0 ||
+    Array.isArray(p?.schema_removed) && p.schema_removed.length > 0;
+
+  return (
+    <div className="group flex bg-white hover:bg-[#F9FAFB] border-b border-gray-200 last:border-0 transition-colors">
+      <div className="flex-1 min-w-0 p-4 sm:px-6 sm:py-5">
+        {/* HEADER */}
+        <div className="flex items-start justify-between mb-2 sm:mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-[12px] font-bold text-gray-900 truncate">
+              {p?.workspace_name || (n.notification_type === "alert" ? "Console Update" : "System Update")}
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${status.color}`}>
+              {status.text}
+            </span>
           </div>
 
-          <div className="flex items-start gap-2 mb-4">
-            {n.priority === 'critical' ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5" /> : <Database className="h-3.5 w-3.5 text-blue-400 mt-0.5" />}
-            <p className="text-[12px] text-gray-600 font-medium leading-relaxed max-w-[700px]">
-              {feedback}
-            </p>
-          </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* ROWS */}
-              {p?.rows_to !== undefined && (
-                <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
-                  <Table className="h-3 w-3 text-gray-400" />
-                  <span className="text-gray-500">Rows:</span>
-
-                  {p.rows_from !== undefined ? (
-                    <>
-                      <span className="text-gray-900">{p.rows_from}</span>
-
-                      {p.rows_to !== p.rows_from ? (
-                        (p.rows_to ?? 0) > (p.rows_from ?? 0) ? (
-                          <ArrowUp className="h-3 w-3 text-emerald-600" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3 text-red-600" />
-                        )
-                      ) : (
-                        <span className="text-gray-400 text-[10px] font-semibold">
-                          (no change)
-                        </span>
-                      )}
-
-                      <span className="text-gray-900 font-bold">{p.rows_to}</span>
-                    </>
-                  ) : (
-                    <span className="text-gray-900 font-bold">{p.rows_to}</span>
-                  )}
-                </div>
-              )}
-
-              {/* COLUMNS (make it consistent with rows) */}
-              {p?.cols_to !== undefined && (
-                <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
-                  <Columns className="h-3 w-3 text-gray-400" />
-                  <span className="text-gray-500">Columns:</span>
-
-                  {p.cols_from !== undefined ? (
-                    <>
-                      <span className="text-gray-900">{p.cols_from}</span>
-
-                      {p.cols_to !== p.cols_from ? (
-                        (p.cols_to ?? 0) > (p.cols_from ?? 0) ? (
-                          <ArrowUp className="h-3 w-3 text-emerald-600" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3 text-red-600" />
-                        )
-                      ) : (
-                        <span className="text-gray-400 text-[10px] font-semibold">
-                          (no change)
-                        </span>
-                      )}
-
-                      <span className="text-gray-900 font-bold">{p.cols_to}</span>
-                    </>
-                  ) : (
-                    <span className="text-gray-900 font-bold">{p.cols_to}</span>
-                  )}
-                </div>
-              )}
-
-              {n.action_url && (
-                <Link
-                  to={n.action_url}
-                  className="
-                    inline-flex items-center gap-1
-                    text-[11px] font-semibold
-                    text-slate-500
-                    hover:text-slate-900
-                    transition-colors
-                    mt-1
-                    sm:mt-0
-                    sm:ml-auto
-                    whitespace-nowrap
-                  "
-                >
-                  View details
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              )}
-
-              <div className="text-[10px] text-gray-400 font-medium ml-auto sm:hidden whitespace-nowrap">
-                {formatPreciseTime(n.created_at)}
-              </div>
-
+          <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-gray-400 font-medium relative">
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Clock className="h-3 w-3" />
+              {formatPreciseTime(n.created_at)}
             </div>
 
+            <button
+              onClick={() => handleDelete(n.id)}
+              className="absolute right-0 top-[-12px] sm:static opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+            >
+              {processingId === n.id ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* FEEDBACK */}
+        <div className="flex items-start gap-2 mb-4">
+          {n.priority === "critical" ? (
+            <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5" />
+          ) : (
+            <Database className="h-3.5 w-3.5 text-blue-400 mt-0.5" />
+          )}
+          <p className="text-[12px] text-gray-600 font-medium leading-relaxed max-w-[700px]">
+            {feedback}
+          </p>
+        </div>
+
+        {/* ROWS + COLUMNS + ACTION CHIPS */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ROWS */}
+          {p?.rows_to !== undefined && (
+            <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
+              <Table className="h-3 w-3 text-gray-400" />
+              <span className="text-gray-500">Rows:</span>
+
+              {p.rows_from !== undefined ? (
+                <>
+                  <span className="text-gray-900">{p.rows_from}</span>
+
+                  {p.rows_to !== p.rows_from ? (
+                    (p.rows_to ?? 0) > (p.rows_from ?? 0) ? (
+                      <ArrowUp className="h-3 w-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3 text-red-600" />
+                    )
+                  ) : (
+                    <span className="text-gray-400 text-[10px] font-semibold">
+                      (no change)
+                    </span>
+                  )}
+
+                  <span className="text-gray-900 font-bold">{p.rows_to}</span>
+                </>
+              ) : (
+                <span className="text-gray-900 font-bold">{p.rows_to}</span>
+              )}
+            </div>
+          )}
+
+          {/* COLUMNS */}
+          {p?.cols_to !== undefined && (
+            <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded text-[11px] font-medium">
+              <Columns className="h-3 w-3 text-gray-400" />
+              <span className="text-gray-500">Columns:</span>
+
+              {p.cols_from !== undefined ? (
+                <>
+                  <span className="text-gray-900">{p.cols_from}</span>
+
+                  {p.cols_to !== p.cols_from ? (
+                    (p.cols_to ?? 0) > (p.cols_from ?? 0) ? (
+                      <ArrowUp className="h-3 w-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3 text-red-600" />
+                    )
+                  ) : (
+                    <span className="text-gray-400 text-[10px] font-semibold">
+                      (no change)
+                    </span>
+                  )}
+
+                  <span className="text-gray-900 font-bold">{p.cols_to}</span>
+                </>
+              ) : (
+                <span className="text-gray-900 font-bold">{p.cols_to}</span>
+              )}
+            </div>
+          )}
+
+          {/* VIEW DETAILS */}
+          {n.action_url && (
+            <Link
+              to={n.action_url}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900 transition-colors mt-1 sm:mt-0 sm:ml-auto whitespace-nowrap"
+            >
+              View details
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+
+          {/* MOBILE TIME */}
+          <div className="text-[10px] text-gray-400 font-medium ml-auto sm:hidden whitespace-nowrap">
+            {formatPreciseTime(n.created_at)}
+          </div>
+        </div>
+
+        {/* 🔴 SCHEMA SECTION (FULL WIDTH, RESPONSIVE, NO FLEX BREAK) */}
+        {hasSchemaDiff && (
+          <div className="mt-3 w-full rounded-md border border-amber-100 bg-amber-50 p-3">
+            <div className="flex items-start gap-2">
+              <Database className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-semibold text-amber-800 mb-1">
+                  Schema Changes
+                </p>
+
+                {Array.isArray(p?.schema_added) && p.schema_added.length > 0 && (
+                  <p className="text-[11px] text-emerald-700 break-words">
+                    <span className="font-semibold">Added:</span>{" "}
+                    {p.schema_added.join(", ")}
+                  </p>
+                )}
+
+                {Array.isArray(p?.schema_removed) && p.schema_removed.length > 0 && (
+                  <p className="text-[11px] text-red-600 break-words mt-1">
+                    <span className="font-semibold">Removed:</span>{" "}
+                    {p.schema_removed.join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="min-h-screen bg-[#FAFBFC] text-gray-900 font-sans antialiased">

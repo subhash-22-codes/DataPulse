@@ -6,57 +6,143 @@ import { Users, Plus, WifiOff, FileText, Globe, Calendar, Server, ArrowRight, Cl
 import { AxiosError } from "axios";
 import { Workspace } from "../types";
 import { CreateWorkspaceModal } from "../components/CreateWorkspaceModal";
-import { Skeleton } from "../components/Skeleton";
 
-
-// --- UPDATED WORKSPACE CARD COMPONENT ---
 const WorkspaceCard: React.FC<{
-  ws: Workspace;
+  ws: Workspace; 
   onClick: (id: string) => void;
   isOwner: boolean;
   workspaceIndex?: number;
-}> = ({ ws, onClick, isOwner, workspaceIndex }) => {
-
-  const getWorkspaceImage = () => {
-    const index = workspaceIndex ?? 0;
-    const imageNumber = (index % 3) + 1;
-    return isOwner
-      ? `/images/Workspace${imageNumber}.png`
-      : `/images/Teamspace${imageNumber}.png`;
-  };
-
-  const imageSrc = getWorkspaceImage();
+}> = ({ ws, onClick, isOwner }) => {
 
   const formatDate = (date?: string) => {
-    if (!date) return '—';
+    if (!date) return "—";
     return new Date(date).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
+  const getOwnerImage = () => {
+    if (ws.data_source === "CSV") {
+      return "/images/Workspace1.png";
+    }
+
+    if (ws.data_source === "API") {
+      return "/images/Workspace2.png";
+    }
+
+    if (ws.data_source === "DB") {
+      return "/images/Workspace3.png";
+    }
+
+    return "/images/Workspace.png"; // fallback (no source)
+  };
+
+
+  const getTeamImage = () => {
+  if (ws.data_source === "CSV") {
+    return "/images/Workspace1.png";
+  }
+
+  if (ws.data_source === "API") {
+    return "/images/Workspace2.png";
+  }
+
+  if (ws.data_source === "DB") {
+    return "/images/Workspace3.png";
+  }
+
+  return "/images/Teamspace.png";
+};
+
+
+  const getWorkspaceInfo = () => {
+    const image = isOwner ? getOwnerImage() : getTeamImage();
+
+    if (!isOwner) {
+      if (!ws.data_source) {
+        return {
+          text: "This workspace has no connected data source yet. Please ask the owner to connect a source to start tracking data.",
+          image,
+        };
+      }
+
+      if (ws.data_source === "CSV") {
+        return {
+          text: "This workspace uses CSV uploads as its data source. Data updates will reflect when new files are uploaded by the team.",
+          image,
+        };
+      }
+
+      if (ws.data_source === "API") {
+        return {
+          text: ws.is_polling_active
+            ? "Live API monitoring is active. Data changes are being tracked automatically in the background."
+            : "API is connected but polling is currently paused. Live data changes are not being tracked right now.",
+          image,
+        };
+      }
+
+      if (ws.data_source === "DB") {
+        return {
+          text: ws.is_polling_active
+            ? "Database monitoring is active. Changes in the data are continuously detected for the team."
+            : "Database is connected but polling is paused. No real-time database tracking is happening currently.",
+          image,
+        };
+      }
+    }
+
+    if (!ws.data_source) {
+      return {
+        text: "No data source connected. Connect a CSV file, API, or Database to start tracking data changes, incidents, and trends.",
+        image,
+      };
+    }
+
+    if (ws.data_source === "CSV") {
+      return {
+        text: "This workspace is powered by CSV uploads. Upload new datasets anytime to refresh analytics and change detection.",
+        image,
+      };
+    }
+
+    if (ws.data_source === "API") {
+      return {
+        text: ws.is_polling_active
+          ? "API polling is active. Your workspace is automatically monitoring live data changes and updates."
+          : "API is connected but polling is paused. Resume polling to enable automatic change tracking.",
+        image,
+      };
+    }
+
+    if (ws.data_source === "DB") {
+      return {
+        text: ws.is_polling_active
+          ? "Database polling is active. Real-time changes are being monitored continuously in this workspace."
+          : "Database is connected but polling is paused. Real-time monitoring is currently disabled.",
+        image,
+      };
+    }
+
+    return { text: "", image };
+  };
+
+  const info = getWorkspaceInfo();
 
   return (
     <div
       onClick={() => onClick(ws.id)}
       className="
         flex h-full cursor-pointer flex-col
-        rounded-lg border border-gray-200 bg-white
+        rounded-sm border border-gray-200 bg-white
         p-4 shadow-sm
-        transition
-        hover:border-gray-300 hover:shadow-md
+        transition-all duration-200 ease-out
+        hover:border-gray-300 hover:shadow-md hover:-translate-y-0.5
       "
     >
-      {/* Top: Identity */}
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md bg-gray-50">
-          <img
-            src={imageSrc}
-            alt={isOwner ? 'Workspace' : 'Team workspace'}
-            className="h-full w-full object-contain"
-          />
-        </div>
-
+      {/* Top: Title + Info */}
+      <div className="group flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-gray-900">
             {ws.name}
@@ -68,6 +154,82 @@ const WorkspaceCard: React.FC<{
             </p>
           )}
         </div>
+
+       {/* Round Info Icon + Top Tooltip (with pointer) */}
+        <div
+          className="relative flex items-center shrink-0 group/tooltip"
+          onClick={(e) => e.stopPropagation()}
+        >
+         <button
+          type="button"
+          className="
+            /* 1. The Guard: Force a perfect square no matter what */
+            inline-flex items-center justify-center
+            w-6 h-6 min-w-[24px] min-h-[24px]
+            sm:w-7 sm:h-7 sm:min-w-[28px] sm:min-h-[28px]
+            flex-shrink-0 
+            
+            /* 2. The Shape */
+            rounded-full border border-gray-200 bg-white
+            
+            /* 3. The Content: Centering the 'i' */
+            text-[11px] font-bold text-gray-500
+            overflow-hidden
+            
+            /* 4. Interactions */
+            transition-all duration-200
+            hover:border-gray-400 hover:text-gray-900 hover:shadow-sm
+            cursor-help focus:outline-none
+          "
+          aria-label="Workspace info"
+        >
+          {/* Wrap the 'i' to ensure its line-height doesn't push the button height */}
+          <span className="flex items-center justify-center h-full w-full italic font-serif leading-[0]">
+            i
+          </span>
+        </button>
+          {/* Tooltip Card: Solid & High Contrast */}
+          <div
+            className="
+              pointer-events-none absolute right-0 bottom-full mb-2.5 z-50 
+              w-64 sm:w-80 /* Increased desktop width slightly for breathing room */
+              rounded-md border border-gray-200 bg-white
+              p-3.5 /* Slightly more padding for the bigger content */
+              shadow-md
+              
+              /* Animation */
+              opacity-0 translate-y-1
+              transition-all duration-150 ease-out
+              group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0
+            "
+          >
+            {/* Pointer */}
+            <div className="absolute -bottom-[5px] right-3 h-0 w-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-white" />
+            <div className="absolute -bottom-[6px] right-3 -z-10 h-0 w-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-200" />
+
+            <div className="flex items-start gap-3.5"> {/* Slightly bigger gap */}
+              
+              {/* 1. The Image: Bigger size for clarity */}
+              {/* w-16 (64px) on mobile, w-20 (80px) on desktop. Makes 16:9 pop. */}
+              <div className="w-16 sm:w-20 flex-shrink-0 pt-0.5"> 
+                <img
+                  src={info.image}
+                  alt=""
+                  /* Added explicit height limit just in case, but w-full/h-auto does the work */
+                  className="w-full h-auto max-h-[50px] object-contain drop-shadow-sm"
+                />
+              </div>
+
+              {/* 2. The Text */}
+              <div className="flex-1">
+                <p className="text-[11px] leading-relaxed text-gray-600 font-medium">
+                  {info.text}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* Middle: Metadata */}
@@ -85,34 +247,34 @@ const WorkspaceCard: React.FC<{
 
       {/* Bottom: State */}
       <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-3">
-        {/* Data source */}
         {ws.data_source ? (
           <div
-            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
-              ws.data_source === 'API'
-                ? 'bg-indigo-50 text-indigo-700'
-                : ws.data_source === 'DB'
-                ? 'bg-purple-50 text-purple-700'
-                : 'bg-green-50 text-green-700'
+            className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium ${
+              ws.data_source === "API"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : ws.data_source === "DB"
+                ? "border-violet-200 bg-violet-50 text-violet-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}
           >
-            {ws.data_source === 'API' && <Globe className="h-3 w-3" />}
-            {ws.data_source === 'DB' && <Server className="h-3 w-3" />}
-            {ws.data_source === 'CSV' && <FileText className="h-3 w-3" />}
+            {ws.data_source === "API" && <Globe className="h-3 w-3" />}
+            {ws.data_source === "DB" && <Server className="h-3 w-3" />}
+            {ws.data_source === "CSV" && <FileText className="h-3 w-3" />}
             <span>
-              {ws.data_source === 'API'
-                ? 'Live API'
-                : ws.data_source === 'DB'
-                ? 'Database'
-                : 'CSV import'}
+              {ws.data_source === "API"
+                ? "Live API"
+                : ws.data_source === "DB"
+                ? "Database"
+                : "CSV Upload"}
             </span>
           </div>
         ) : (
-          <span className="text-xs text-gray-400">No data source</span>
+          <span className="text-xs text-gray-400">
+            No data source connected
+          </span>
         )}
 
-        {/* Status */}
-        {(ws.data_source === 'API' || ws.data_source === 'DB') && (
+        {(ws.data_source === "API" || ws.data_source === "DB") && (
           ws.is_polling_active ? (
             <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -134,38 +296,48 @@ const WorkspaceCard: React.FC<{
 // --- SUB-COMPONENT 2: The Skeleton Loader (No changes needed) ---
 const HomeSkeleton: React.FC = () => {
   const SkeletonCard = () => (
-    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-10 w-10 rounded-md" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-24" />
+    <div className="flex h-full flex-col rounded-sm border border-gray-100 bg-white p-4 shadow-sm animate-pulse">
+      {/* 1. Header: Title + Info Button shape */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 space-y-2.5">
+          {/* Workspace Name */}
+          <div className="h-4 w-3/4 rounded bg-gray-200" />
+          {/* Owner (if not owner) */}
+          <div className="h-3 w-1/2 rounded bg-gray-100" />
         </div>
+        
+        {/* The (i) icon circle shape */}
+        <div className="h-6 w-6 shrink-0 rounded-full bg-gray-100" />
       </div>
 
-      {/* Meta */}
-      <div className="mt-3">
-        <Skeleton className="h-3 w-28" />
+      {/* 2. Middle: Metadata (Date & Collaborators) */}
+      <div className="mt-4 flex items-center gap-4">
+        <div className="h-3 w-24 rounded bg-gray-100" />
+        <div className="h-3 w-20 rounded bg-gray-100" />
       </div>
 
-      {/* Footer */}
-      <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-3">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-3 w-14" />
+      {/* 3. Footer: Status Badge & State */}
+      <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-3">
+        {/* Data Source Badge Shape */}
+        <div className="h-5 w-16 rounded-sm bg-gray-100" />
+        {/* Active/Paused Indicator Shape */}
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-2 rounded-full bg-gray-200" />
+          <div className="h-3 w-10 rounded bg-gray-200" />
+        </div>
       </div>
     </div>
   );
 
   const SectionSkeleton = ({ count = 3 }: { count?: number }) => (
     <section>
-      {/* Header */}
-      <div className="mb-5 space-y-2">
-        <Skeleton className="h-4 w-40" />
-        <Skeleton className="h-3 w-56" />
+      {/* Section Header */}
+      <div className="mb-6 space-y-3">
+        <div className="h-5 w-48 rounded bg-gray-200" />
+        <div className="h-3 w-64 rounded bg-gray-100" />
       </div>
 
-      {/* Grid */}
+      {/* Grid: Matches your responsive logic */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: count }).map((_, i) => (
           <SkeletonCard key={i} />
@@ -447,27 +619,24 @@ const Home: React.FC = () => {
                                 ))
                                 ) : dataReady ? (
               
-                              <div className="col-span-full">
-                                <div
-                                  className="
-                                    relative overflow-hidden
-                                    rounded-2xl
-                                    border border-gray-200
-                                    bg-gradient-to-br from-white via-white to-blue-50
-                                    shadow-sm
-                                  "
-                                >
-                                  {/* Decorative background */}
-                                  <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-blue-200/30 blur-3xl" />
-
+                             <div className="col-span-full">
+                              <div
+                                className="
+                                  relative overflow-hidden
+                                  rounded-sm
+                                  border border-gray-200
+                                  bg-white
+                                  shadow-[0_1px_2px_rgba(0,0,0,0.04)]
+                                "
+                              >
                                   <div className="relative grid gap-10 p-6 sm:p-8 md:grid-cols-2 items-center">
                                     
                                     {/* LEFT: Action + Promise */}
                                     <div className="space-y-6 text-center md:text-left">
                                       
                                       {/* Eyebrow */}
-                                      <p className="text-[11px] font-bold uppercase tracking-widest text-blue-600">
-                                        Get started
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                        Workspace
                                       </p>
 
                                       {/* Headline */}
@@ -477,10 +646,10 @@ const Home: React.FC = () => {
                                         in one shared workspace
                                       </h3>
 
-                                      {/* Explanation (clarified) */}
-                                      <p className="max-w-md mx-auto md:mx-0 text-sm text-gray-600">
+                                      {/* Explanation */}
+                                      <p className="max-w-md mx-auto md:mx-0 text-sm text-gray-600 leading-relaxed">
                                         A workspace connects your data sources, watches for changes,
-                                        and keeps updates organized in one place — without manual tracking.
+                                        and keeps updates organized in one place without manual tracking.
                                       </p>
 
                                       {/* Primary action */}
@@ -489,18 +658,23 @@ const Home: React.FC = () => {
                                           onClick={() => setIsCreateModalOpen(true)}
                                           className="
                                             inline-flex items-center justify-center gap-2
-                                            rounded-sm 
-                                            bg-blue-600 
+                                            rounded-sm
+                                            bg-blue-600
+                                            hover:bg-blue-700
                                             px-5 py-2.5
                                             text-[11px] font-bold text-white tracking-widest
-                                            shadow-sm hover:bg-blue-700 font-manrope hover:shadow-md
-                                            transition-all active:scale-[0.98]
+                                            shadow-sm hover:shadow-md
+                                            transition-all duration-150
+                                            active:scale-[0.98]
+                                            font-manrope
                                             group
                                           "
+
                                         >
                                           <span>Create workspace</span>
                                           <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                                         </button>
+
                                       </div>
 
                                       {/* Micro-clarity */}
@@ -516,33 +690,32 @@ const Home: React.FC = () => {
                                     <div className="order-first md:order-last space-y-6">
                                       
                                       {/* Illustration */}
-                                      <div className="relative flex justify-center md:justify-end">
-                                        <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
+                                      <div className="flex justify-center md:justify-end">
                                         <img
-                                          src="/images/workspace_owner.png"
+                                          src="/images/Workspace.png"
                                           alt="Workspace overview"
-                                          className="relative z-10 w-48 sm:w-56 md:w-64 object-contain"
+                                          className="w-48 sm:w-56 md:w-64 object-contain opacity-95"
                                         />
                                       </div>
 
                                       {/* Capabilities */}
                                       <div className="grid gap-3 max-w-md mx-auto md:ml-auto">
                                         <div className="flex items-center gap-3 text-sm text-gray-600">
-                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-gray-200 bg-gray-50 text-gray-700">
                                             <Database className="h-4 w-4" />
                                           </div>
                                           Connect CSV files, APIs, or databases
                                         </div>
 
                                         <div className="flex items-center gap-3 text-sm text-gray-600">
-                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-gray-200 bg-gray-50 text-gray-700">
                                             <Activity className="h-4 w-4" />
                                           </div>
                                           Monitor trends and data changes over time
                                         </div>
 
                                         <div className="flex items-center gap-3 text-sm text-gray-600">
-                                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50/70 text-blue-600">
+                                          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-gray-200 bg-gray-50 text-gray-700">
                                             <Users className="h-4 w-4" />
                                           </div>
                                           Invite teammates to collaborate
@@ -551,9 +724,8 @@ const Home: React.FC = () => {
                                     </div>
 
                                   </div>
-                                </div>
                               </div>
-
+                            </div>
 
                              ) : null}
                                
@@ -598,7 +770,7 @@ const Home: React.FC = () => {
                                 <div
                                   className="
                                     relative overflow-hidden
-                                    rounded-xl border border-gray-200
+                                    rounded-sm border border-gray-200
                                     bg-gradient-to-br from-white via-white to-blue-50/30
                                     shadow-sm
                                   "
@@ -609,7 +781,7 @@ const Home: React.FC = () => {
                                     <div className="relative mb-4">
                                       <div className="absolute inset-0 bg-blue-200/30 blur-2xl rounded-full" />
                                       <img
-                                        src="/images/team_collab.png"
+                                        src="/images/Teamspace.png"
                                         alt="Shared workspaces"
                                         className="relative z-10 w-36 object-contain opacity-90"
                                       />
