@@ -1024,7 +1024,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             pass
 
         
-
 def schedule_data_fetches() -> None:
     logger.info("⏰ [SCHEDULER] Checking for due data fetches...")
 
@@ -1035,6 +1034,21 @@ def schedule_data_fetches() -> None:
         return
 
     try:
+        try:
+            has_active = (
+                db.query(Workspace.id)
+                .filter(Workspace.is_polling_active == True)
+                .limit(1)
+                .first()
+            )
+        except (OperationalError, InterfaceError) as e:
+            logger.error(f"🛑 DB unreachable during existence check. Skipping scheduler run: {e}")
+            return
+
+        if not has_active:
+            logger.debug("💤 [SCHEDULER] No active polling workspaces. Skipping cycle.")
+            return  # exits in ~1-2ms, minimal DB + CPU usage
+
         now = datetime.now(timezone.utc)
 
         try:
@@ -1043,17 +1057,16 @@ def schedule_data_fetches() -> None:
                 Workspace.name,
                 Workspace.polling_interval,
                 Workspace.last_polled_at,
-                Workspace.data_source
+                Workspace.data_source,
             ).filter(
                 Workspace.is_polling_active == True
             ).all()
-
         except (OperationalError, InterfaceError) as e:
             logger.error(f"🛑 DB unreachable. Skipping scheduler run: {e}")
             return
 
         if not workspaces:
-            logger.info("-> No active workspaces found.")
+            logger.debug("💤 [SCHEDULER] Active flag flipped during run. Nothing to process.")
             return
 
         triggered_count = 0
@@ -1084,12 +1097,14 @@ def schedule_data_fetches() -> None:
                         is_due = True
 
                 if is_due:
-                    logger.info(f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool...")
+                    logger.info(
+                        f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool..."
+                    )
 
                     executor.submit(
                         process_data_fetch_task,
                         str(ws.id),
-                        None
+                        None,
                     )
                     triggered_count += 1
 
@@ -1099,6 +1114,8 @@ def schedule_data_fetches() -> None:
 
         if triggered_count > 0:
             logger.info(f"🚀 Offloaded {triggered_count} jobs to background threads.")
+        else:
+            logger.debug("🕒 [SCHEDULER] No workspaces due this cycle.")
 
     except Exception as e:
         logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
@@ -1108,6 +1125,7 @@ def schedule_data_fetches() -> None:
             db.close()
         except Exception:
             pass
+
 
         
 def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
