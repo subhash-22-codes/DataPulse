@@ -678,9 +678,19 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
     email_normalized = req.email.lower().strip()
     
     user = db.query(User).filter(User.email == email_normalized).first()
+    
+    if user and user.password_hash is None and (user.google_id or user.github_id):
+        provider = user.signup_method or "social provider"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This account was created using {provider}. Please login using that method."
+        )
 
     if user and user.is_verified and user.password_hash:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account already active. Please login.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account already active. Please login."
+        )
     
     now = dt.datetime.now(dt.timezone.utc)
     if user and user.last_otp_requested_at:
@@ -766,13 +776,14 @@ def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: Backgr
 @router.post("/send-password-reset")
 @limiter.limit("3/minute")
 def send_password_reset(request: Request, req: SendPasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    email = req.email.lower().strip()
+    user = db.query(User).filter(User.email == email).first()
     if user:
         
         otp = generate_otp()
-        expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=10)
+        expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)
         
-        user.otp_code = otp
+        user.otp_code = bcrypt.hash(otp)
         user.otp_expiry = expiry 
         db.commit()
         
@@ -786,15 +797,19 @@ def send_password_reset(request: Request, req: SendPasswordResetRequest, backgro
 @router.post("/reset-password")
 @limiter.limit("5/minute")
 def reset_password(request: Request, req: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    email = req.email.lower().strip()
+    user = db.query(User).filter(User.email == email).first()
     
-    if not user or user.otp_code != req.reset_code:
-        raise HTTPException(status_code=400, detail="Invalid reset code.")
+    if not user or not user.otp_code:
+        raise HTTPException(status_code=400, detail="Invalid or incorrect reset code.")
 
     now = dt.datetime.now(dt.timezone.utc)
-    
+
     if not user.otp_expiry or now > user.otp_expiry:
-        raise HTTPException(status_code=400, detail="Code expired.")
+        raise HTTPException(status_code=400, detail="The reset code has expired. Please request a new one.")
+
+    if not bcrypt.verify(req.reset_code, user.otp_code):
+        raise HTTPException(status_code=400, detail="Invalid or incorrect reset code.")
 
     user.password_hash = bcrypt.hash(req.new_password)
     user.otp_code = None
@@ -804,9 +819,8 @@ def reset_password(request: Request, req: ResetPasswordRequest, db: Session = De
     db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
     db.commit()
     
-    return {"msg": "Password updated successfully."}
+    return {"msg": "Your password has been updated successfully."}
 
-#   SESSION MANAGEMENT
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     rt = request.cookies.get("refresh_token")
