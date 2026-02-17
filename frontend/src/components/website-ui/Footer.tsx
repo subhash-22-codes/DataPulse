@@ -1,10 +1,8 @@
 import React, { useState } from 'react'; 
 import { Mail, MapPin, ChevronDown } from 'lucide-react'; 
-// Adjust import path: Go up two levels to reach 'src/hooks'
 import { useInView } from './hooks/useInView'; 
-import { useNavigate } from "react-router-dom";
-// --- FOOTER LINK COMPONENT ---
-// Professional hover states and transitions
+import { Link } from 'react-router-dom';
+
 const FooterLink: React.FC<{ onClick?: () => void; href?: string; children: React.ReactNode }> = ({ onClick, href, children }) => (
   <li>
     <a
@@ -22,7 +20,6 @@ const FooterLink: React.FC<{ onClick?: () => void; href?: string; children: Reac
   </li>
 );
 
-// --- ACCORDION COMPONENT (Mobile Only) ---
 const AccordionItem: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
@@ -50,7 +47,6 @@ const AccordionItem: React.FC<{ title: string; children: React.ReactNode }> = ({
 
 export default function Footer() {
   const [footerRef, isFooterVisible] = useInView({ threshold: 0.1 });
-  const navigate = useNavigate();
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -166,24 +162,27 @@ export default function Footer() {
       <p>&copy; {new Date().getFullYear()} DataPulse Inc. All rights reserved.</p>
 
       <div className="flex gap-8">
-        <button
-          onClick={() => navigate("/legal")}
+        <Link
+          to="/legal"
+          state={{ from: location.pathname }}
           className="hover:text-slate-600 transition-colors"
         >
           Privacy Policy
-        </button>
-        <button
-          onClick={() => navigate("/legal")}
+        </Link>
+        <Link
+          to='/legal#tos-acceptance'
+          state={{ from: location.pathname }}
           className="hover:text-slate-600 transition-colors"
         >
           Terms of Service
-        </button>
-        <button
-          onClick={() => navigate("/legal")}
+        </Link>
+        <Link
+          to='/legal'
+          state={{ from: location.pathname }}
           className="hover:text-slate-600 transition-colors"
         >
           Cookie Settings
-        </button>
+        </Link>
       </div>
     </div>
 

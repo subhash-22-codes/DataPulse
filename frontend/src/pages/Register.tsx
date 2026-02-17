@@ -491,7 +491,7 @@ const Register: React.FC = () => {
             </button>
           </div>
           <div className="text-center pt-4 border-t border-slate-100 mt-4 text-xs text-slate-400">
-             By creating an account, you agree to our <Link to="/legal" className="underline hover:text-slate-600">Terms</Link> and <Link to="/legal" className="underline hover:text-slate-600">Privacy</Link>.
+             By creating an account, you agree to our <Link to="/legal" state={{ from: location.pathname }} className="underline hover:text-slate-600">Terms</Link> and <Link to="/legal" state={{ from: location.pathname }} className="underline hover:text-slate-600">Privacy</Link>.
           </div>
         </div>
       </div>

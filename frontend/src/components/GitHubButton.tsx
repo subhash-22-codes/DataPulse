@@ -67,6 +67,7 @@ const GitHubLoginButton: React.FC = () => {
 
         <span>{isLoading ? "Connecting..." : "Sign in with GitHub"}</span>
       </button>
+      
     </div>
   );
 };

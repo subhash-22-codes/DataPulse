@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus, Printer } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 export const Legal: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>('intro');
   const navigate = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     const handleScroll = () => {
       const sections = document.querySelectorAll('section[id]');
@@ -65,6 +66,17 @@ export const Legal: React.FC = () => {
     { id: 'governing', label: 'Governing Law' },
   ];
 
+  const handleBack = () => {
+    const from = (location.state as any)?.from;
+
+    if (from) {
+      navigate(from);
+    } else {
+      // Fallback if opened directly or via bookmark
+      navigate("/login");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-200 selection:text-black">
 
@@ -90,7 +102,7 @@ export const Legal: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={handleBack}
               className="inline-flex items-center gap-2 h-9 px-4 bg-slate-900 text-white rounded-sm text-[11px] font-bold transition-all hover:bg-slate-800 active:scale-[0.95]"
             >
               <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />

@@ -225,11 +225,15 @@ const Login: React.FC = () => {
 
             {/* Legal Links (Preserved) */}
             <div className="text-center pt-6 border-t border-slate-100 mt-6">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  By signing in, you agree to our{' '}
-                  <Link to="/legal" className="underline hover:text-slate-600">Terms of Service</Link> and{' '}
-                  <Link to="/legal" className="underline hover:text-slate-600">Privacy Policy</Link>.
-                </p>
+              <p className="text-xs text-slate-400">
+                <Link to="/legal#tos-acceptance" state={{ from: location.pathname }} className="underline hover:text-slate-600">
+                  Terms of Service
+                </Link>
+                {' · '}
+                <Link to="/legal" state={{ from: location.pathname }} className="underline hover:text-slate-600">
+                  Privacy Policy
+                </Link>
+              </p>
             </div>
 
           </div>
