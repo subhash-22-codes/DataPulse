@@ -369,7 +369,6 @@ def kill_poller(
                         message=notif_message,
                         notification_type=notif_type,
                         priority=priority,
-                        idempotency_key=idempotency_key,
                         action_url=f"/workspace/{ws.id}",
                         payload=payload,
                     )
