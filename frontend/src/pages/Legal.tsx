@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus, Printer } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+
+type LegalLocationState = {
+  from?: string;
+};
 export const Legal: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>('intro');
   const navigate = useNavigate();
@@ -66,16 +70,17 @@ export const Legal: React.FC = () => {
     { id: 'governing', label: 'Governing Law' },
   ];
 
-  const handleBack = () => {
-    const from = (location.state as any)?.from;
+ const handleBack = () => {
+  const state = location.state as LegalLocationState | null;
+  const from = state?.from;
 
-    if (from) {
-      navigate(from);
-    } else {
-      // Fallback if opened directly or via bookmark
-      navigate("/login");
-    }
-  };
+  if (from && typeof from === "string") {
+    navigate(from, { replace: true });
+    return;
+  }
+
+  navigate("/login", { replace: true });
+};
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-200 selection:text-black">
