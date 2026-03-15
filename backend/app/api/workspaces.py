@@ -10,7 +10,10 @@ from fastapi import Query, HTTPException
 from io import BytesIO
 import pandas as pd
 import math
+import traceback
 import numpy as np
+import time
+from fastapi.concurrency import run_in_threadpool
 # FastAPI & Pydantic
 from fastapi import (
     APIRouter, Depends, HTTPException, Header, UploadFile, 
@@ -48,6 +51,7 @@ from app.services.upload_limits import enforce_upload_limit_or_raise
 # --- Setup ---
 logger = logging.getLogger(__name__)
 APP_MODE = os.getenv("APP_MODE", "development")
+MODE_LOCAL = os.getenv("MODE_LOCAL", "false").lower()
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
@@ -674,35 +678,53 @@ async def upload_csv_for_workspace(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
+    start_time = time.time()
+    logger.info(f"[CSV_UPLOAD] Request received | workspace_id={workspace_id} | filename={file.filename}")
+
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
+        logger.warning(f"[CSV_UPLOAD] Invalid workspace ID format | workspace_id={workspace_id}")
         raise HTTPException(status_code=400, detail="Invalid workspace ID format")
 
     workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
     if not workspace:
+        logger.warning(f"[CSV_UPLOAD] Workspace not found | workspace_id={workspace_id}")
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     if workspace.owner_id != current_user.id:
+        logger.warning(
+            f"[CSV_UPLOAD] Unauthorized upload attempt | workspace_id={workspace_id} | user_id={current_user.id}"
+        )
         raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
 
-    enforce_upload_limit_or_raise(db, workspace.id) 
+    enforce_upload_limit_or_raise(db, workspace.id)
 
+    if MODE_LOCAL == "true":
+        MAX_FILE_SIZE = 50 * 1024 * 1024
+    else:
+        MAX_FILE_SIZE = 15 * 1024 * 1024
 
-    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB Limit
+    read_start = time.time()
+
     try:
         file_bytes = await file.read(MAX_FILE_SIZE + 1)
+
         if len(file_bytes) > MAX_FILE_SIZE:
             await file.close()
-            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 5MB.")
-    except Exception:
+            logger.warning(
+                f"[CSV_UPLOAD] File too large | workspace_id={workspace_id} | size={len(file_bytes)}"
+            )
+            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 15MB.")
+
+    except Exception as e:
+        logger.error(f"[CSV_UPLOAD] Failed to read uploaded file | error={str(e)}")
         raise HTTPException(status_code=400, detail="Could not read uploaded file")
 
-
-    try:
-        _ = file_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid UTF-8 CSV file")
+    logger.info(
+        f"[CSV_UPLOAD] File received | size_bytes={len(file_bytes)} | read_time={time.time() - read_start:.2f}s"
+    )
 
     new_upload = DataUpload(
         workspace_id=workspace.id,
@@ -717,11 +739,23 @@ async def upload_csv_for_workspace(
 
     storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
 
+    upload_start = time.time()
+
     try:
-        upload_csv_bytes(storage_path, file_bytes)
+        # This runs the blocking Supabase upload in a threadpool
+        await run_in_threadpool(upload_csv_bytes, storage_path, file_bytes)
+
     except Exception as e:
+        traceback.print_exc()
+        logger.error(
+            f"[CSV_UPLOAD] Storage upload failed | upload_id={new_upload.id} | error={str(e)}"
+        )
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload file to storage")
+
+    logger.info(
+        f"[CSV_UPLOAD] Storage upload completed | upload_id={new_upload.id} | duration={time.time() - upload_start:.2f}s"
+    )
 
     new_upload.storage_path = storage_path
     new_upload.file_url = None
@@ -732,21 +766,30 @@ async def upload_csv_for_workspace(
     db.commit()
     db.refresh(new_upload)
 
+    logger.info(
+        f"[CSV_UPLOAD] Upload record committed | upload_id={new_upload.id} | workspace_id={workspace.id}"
+    )
+
     task_id = str(new_upload.id)
 
     if APP_MODE == "production":
         loop = asyncio.get_event_loop()
         background_tasks.add_task(process_csv_task, task_id, loop)
+        logger.info(f"[CSV_UPLOAD] Background task scheduled | upload_id={task_id}")
     else:
         if celery_app:
             task = celery_app.send_task("process_csv_task", args=[task_id])
             task_id = task.id
+            logger.info(f"[CSV_UPLOAD] Celery task dispatched | celery_task_id={task_id}")
+
+    logger.info(
+        f"[CSV_UPLOAD] Pipeline finished | upload_id={new_upload.id} | total_time={time.time() - start_time:.2f}s"
+    )
 
     return {
         "task_id": task_id,
         "message": "File upload successful, processing started."
     }
-
 
 
 @router.get("/{workspace_id}/uploads", response_model=List[DataUploadResponse])
@@ -1388,7 +1431,7 @@ def _load_upload_dataframe(
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to download file")
 
-    MAX_ROWS = 25000
+    MAX_ROWS = 1000000
 
     try:
         df = pd.read_csv(BytesIO(csv_bytes), nrows=MAX_ROWS + 1)

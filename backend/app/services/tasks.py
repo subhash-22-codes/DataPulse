@@ -4,6 +4,7 @@ import asyncio
 import requests
 import logging
 import datetime as dt
+import time
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
 from pathlib import Path
@@ -41,22 +42,23 @@ from app.services.storage_service import download_file_bytes
 from app.services.storage_service import upload_csv_bytes
 from app.services.upload_limits import is_workspace_upload_limit_reached
 
-
 # Create a ThreadPool at the module level to reuse threads
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 APP_MODE = os.getenv("APP_MODE")
+MODE_LOCAL = os.getenv("MODE_LOCAL", "false").lower()
 
-gemini_model = None
-if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info("✅ Gemini AI model initialized globally.")
-    except Exception as e:
-        logger.error(f"⚠️ Failed to initialize Gemini AI: {e}")
-
+#--------------------------------------------------------------------------
+# gemini_model = None
+# if GEMINI_API_KEY:
+#     try:
+#         genai.configure(api_key=GEMINI_API_KEY)
+#         gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+#         logger.info("Gemini AI model initialized globally.")
+#     except Exception as e:
+#         logger.error(f"Failed to initialize Gemini AI: {e}")
+#---------------------------------------------------------------------------
 def convert_utc_to_ist_str(utc_dt):
     if not utc_dt: return "N/A"
     try:
@@ -67,60 +69,60 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
+#---------------------------------------------------------------------------------------------------
+# AI_SYSTEM_PROMPT = """
+# SYSTEM PROMPT (DO NOT CHANGE OUTPUT FORMAT):
+# You are a Senior Data Analyst generating insights for a production SaaS dashboard.
 
-AI_SYSTEM_PROMPT = """
-SYSTEM PROMPT (DO NOT CHANGE OUTPUT FORMAT):
-You are a Senior Data Analyst generating insights for a production SaaS dashboard.
+# CRITICAL OUTPUT RULES:
+# - Output ONLY plain Markdown
+# - NO HTML tags (<p>, <ul>, etc.)
+# - NO code blocks (no ``` or ` )
+# - NO emojis or headings
+# - NO assumptions beyond the provided data
 
-CRITICAL OUTPUT RULES:
-- Output ONLY plain Markdown
-- NO HTML tags (<p>, <ul>, etc.)
-- NO code blocks (no ``` or ` )
-- NO emojis or headings
-- NO assumptions beyond the provided data
+# REQUIRED STRUCTURE:
+# 1. Exactly ONE paragraph (1-2 sentences) summarizing the impact.
+# 2. Exactly TWO bullet points using - (dash + space), each a business question.
 
-REQUIRED STRUCTURE:
-1. Exactly ONE paragraph (1-2 sentences) summarizing the impact.
-2. Exactly TWO bullet points using - (dash + space), each a business question.
+# FAILURE HANDLING:
+# If no meaningful insight can be derived, output a single plain sentence explaining that clearly.
+# """.strip()
 
-FAILURE HANDLING:
-If no meaningful insight can be derived, output a single plain sentence explaining that clearly.
-""".strip()
+# def get_ai_insight(schema_changes: dict) -> str | None:
+#     if not gemini_model:
+#         logger.warning("Gemini model not available. Skipping AI insight.")
+#         return None
 
-def get_ai_insight(schema_changes: dict) -> str | None:
-    if not gemini_model:
-        logger.warning("Gemini model not available. Skipping AI insight.")
-        return None
-
-    added = schema_changes.get('added', [])
-    removed = schema_changes.get('removed', [])
+#     added = schema_changes.get('added', [])
+#     removed = schema_changes.get('removed', [])
     
-    if not added and not removed:
-        return "No significant schema changes were detected to analyze."
+#     if not added and not removed:
+#         return "No significant schema changes were detected to analyze."
 
-    # Construct the User Query
-    user_query = (
-        f"Analyze these schema changes:\n"
-        f"Added Columns: {', '.join(added) if added else 'None'}\n"
-        f"Removed Columns: {', '.join(removed) if removed else 'None'}"
-    )
+#     # Construct the User Query
+#     user_query = (
+#         f"Analyze these schema changes:\n"
+#         f"Added Columns: {', '.join(added) if added else 'None'}\n"
+#         f"Removed Columns: {', '.join(removed) if removed else 'None'}"
+#     )
 
-    try:
-        logger.info("🧠 [AI] Requesting strict markdown insight...")
+#     try:
+#         logger.info("🧠 [AI] Requesting strict markdown insight...")
         
-        full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
+#         full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
         
-        response = gemini_model.generate_content(full_prompt)
-        raw_text = response.text.strip()
-        clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
+#         response = gemini_model.generate_content(full_prompt)
+#         raw_text = response.text.strip()
+#         clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
         
-        logger.info("✨ [AI] Insight generated successfully.")
-        return clean_text
+#         logger.info("✨ [AI] Insight generated successfully.")
+#         return clean_text
 
-    except Exception as e:
-        logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
-        return "AI analysis is currently unavailable due to a technical error."
-    
+#     except Exception as e:
+#         logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
+#         return "AI analysis is currently unavailable due to a technical error."
+#------------------------------------------------------------------------------------------------------    
 
 def run_async_safely(coro: Coroutine[Any, Any, Any], loop: asyncio.AbstractEventLoop = None) -> None:
    
@@ -138,7 +140,7 @@ def run_async_safely(coro: Coroutine[Any, Any, Any], loop: asyncio.AbstractEvent
             fallback_loop.run_until_complete(coro)
             fallback_loop.close()
         except Exception as final_error:
-             logger.error(f"🔥 [WORKER] Async execution completely failed: {final_error}")
+             logger.error(f"[WORKER] Async execution completely failed: {final_error}")
 
 def check_alert_rules(
     db: Session, 
@@ -148,7 +150,7 @@ def check_alert_rules(
     loop: asyncio.AbstractEventLoop = None
 ) -> None:
 
-    logger.info(f"🔍 [ENGINE] Scanning rules for Workspace: {workspace.name}...")
+    logger.info(f"[ENGINE] Scanning rules for Workspace: {workspace.name}...")
 
     rules = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id, 
@@ -213,7 +215,7 @@ def check_alert_rules(
             })
 
         except Exception as e:
-            logger.error(f"⚠️ Error evaluating rule {rule.id}: {e}")
+            logger.error(f"[ENGINE] Error evaluating rule {rule.id}: {e}")
             continue
         
     if triggered_alerts:
@@ -237,11 +239,11 @@ def check_alert_rules(
                 db.add(new_notif)
 
             db.commit()
-            logger.info(f"💾 Records committed for fingerprint: {execution_fingerprint}")
+            logger.info(f"[ENGINE] Records committed for fingerprint: {execution_fingerprint}")
 
         except Exception as e:
             db.rollback()
-            logger.error(f"❌ Database error, aborting: {e}")
+            logger.error(f"[ENGINE] Database error, aborting: {e}")
             return
 
         user_ids = [u.id for u in users_to_notify]
@@ -282,9 +284,9 @@ def check_alert_rules(
             run_async_safely(send_threshold_alert_email(recipients, email_context), loop)
 
         
-        logger.info(f"✅ Side effects sent for {len(triggered_alerts)} alerts.")
+        logger.info(f"[ENGINE] Side effects sent for {len(triggered_alerts)} alerts.")
     else:
-        logger.info("✅ Scan complete: No violations found.")
+        logger.info(f"[ENGINE] Scan complete: No violations found.")
 
 
 def kill_poller(
@@ -440,7 +442,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         header_value = workspace.api_header_value
 
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] Failed to read workspace: {e}", exc_info=True)
+        logger.error(f"[API FETCHER] Failed to read workspace: {e}", exc_info=True)
         return
     finally:
         db.close()
@@ -627,7 +629,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         df = pd.json_normalize(data)
         csv_content = df.to_csv(index=False)
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] CSV build failed: {e}", exc_info=True)
+        logger.error(f"[API FETCHER] CSV build failed: {e}", exc_info=True)
         db2: Session = SessionLocal()
         try:
             kill_poller(
@@ -729,7 +731,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     try:
         process_csv_task(str(new_upload.id), loop)
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] process_csv_task failed: {e}", exc_info=True)
+        logger.error(f"[API FETCHER] process_csv_task failed: {e}", exc_info=True)
 
         
 
@@ -824,7 +826,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # ✅ Build connection URL for user's DB
+        # Build connection URL for user's DB
         try:
             encoded_password = quote_plus(workspace.db_password)
             port = int(workspace.db_port or 5432)
@@ -836,7 +838,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
             connection_url = f"postgresql://{user}:{encoded_password}@{host}:{port}/{dbname}"
 
-            # ✅ User DB engine must NOT keep pooled connections forever
+            # User DB engine must NOT keep pooled connections forever
             # This prevents "connection hoarding" when multiple jobs run.
             user_engine = create_engine(
                 connection_url,
@@ -853,7 +855,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 },
             )
 
-            # ✅ Run the query safely (LIMIT enforced outside)
+            # Run the query safely (LIMIT enforced outside)
             safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
 
             with user_engine.connect() as connection:
@@ -934,7 +936,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 )
             return
 
-        # ✅ Empty result
+        # Empty result
         if df.empty:
             logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace.name}")
             kill_poller(
@@ -958,7 +960,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # ✅ Store as CSV upload
+        # Store as CSV upload
         csv_content = df.to_csv(index=False)
         csv_bytes = csv_content.encode("utf-8")
 
@@ -998,7 +1000,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
 
     except Exception as e:
-        logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
+        logger.error(f"[DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
         try:
             kill_poller(
                 db,
@@ -1029,7 +1031,7 @@ def schedule_data_fetches() -> None:
     try:
         db: Session = SessionLocal()
     except Exception as e:
-        logger.error(f"🔥 DB Session creation failed: {e}")
+        logger.error(f"[SCHEDULER] DB Session creation failed: {e}")
         return
 
     try:
@@ -1041,11 +1043,11 @@ def schedule_data_fetches() -> None:
                 .first()
             )
         except (OperationalError, InterfaceError) as e:
-            logger.error(f"🛑 DB unreachable during existence check. Skipping scheduler run: {e}")
+            logger.error(f"[SCHEDULER] DB unreachable during existence check. Skipping scheduler run: {e}")
             return
 
         if not has_active:
-            logger.debug("💤 [SCHEDULER] No active polling workspaces. Skipping cycle.")
+            logger.debug("[SCHEDULER] No active polling workspaces. Skipping cycle.")
             return  # exits in ~1-2ms, minimal DB + CPU usage
 
         now = datetime.now(timezone.utc)
@@ -1061,11 +1063,11 @@ def schedule_data_fetches() -> None:
                 Workspace.is_polling_active == True
             ).all()
         except (OperationalError, InterfaceError) as e:
-            logger.error(f"🛑 DB unreachable. Skipping scheduler run: {e}")
+            logger.error(f"[SCHEDULER] DB unreachable. Skipping scheduler run: {e}")
             return
 
         if not workspaces:
-            logger.debug("💤 [SCHEDULER] Active flag flipped during run. Nothing to process.")
+            logger.debug("[SCHEDULER] Active flag flipped during run. Nothing to process.")
             return
 
         triggered_count = 0
@@ -1097,7 +1099,7 @@ def schedule_data_fetches() -> None:
 
                 if is_due:
                     logger.info(
-                        f"🎯 SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool..."
+                        f"SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool..."
                     )
 
                     executor.submit(
@@ -1108,16 +1110,16 @@ def schedule_data_fetches() -> None:
                     triggered_count += 1
 
             except Exception as e:
-                logger.error(f"⚠️ Error analyzing workspace {ws.id}: {e}")
+                logger.error(f"Error analyzing workspace {ws.id}: {e}")
                 continue
 
         if triggered_count > 0:
-            logger.info(f"🚀 Offloaded {triggered_count} jobs to background threads.")
+            logger.info(f"Offloaded {triggered_count} jobs to background threads.")
         else:
-            logger.debug("🕒 [SCHEDULER] No workspaces due this cycle.")
+            logger.debug("[SCHEDULER] No workspaces due this cycle.")
 
     except Exception as e:
-        logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
+        logger.error(f"Critical Scheduler Failure: {e}", exc_info=True)
 
     finally:
         try:
@@ -1128,7 +1130,7 @@ def schedule_data_fetches() -> None:
 
         
 def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
-    logger.info(f"🛡️ [GATE] Validating execution request for workspace: {workspace_id}")
+    logger.info(f"[GATE] Validating execution request for workspace: {workspace_id}")
 
     if loop is None:
         try:
@@ -1156,13 +1158,11 @@ def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop =
             fetch_db_data(str(ws.id), loop)
             
     except Exception as e:
-        logger.error(f"🔥 [GATE] Internal Gate Failure: {e}")
+        logger.error(f"[GATE] Internal Gate Failure: {e}")
     finally:
         db.close()
         
-# ======================
-#  The "Analyzer Robot" 
-# ======================
+
 def clean_nan(obj):
     if isinstance(obj, dict):
         return {k: clean_nan(v) for k, v in obj.items()}
@@ -1197,7 +1197,8 @@ def _run_email_in_background(recipients, email_context):
 
 
 def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
-    logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
+    logger.info(f"[WORKER] Starting REAL processing for upload ID: {upload_id}...")
+    start_time = time.time()
     db: Session = SessionLocal()
 
     workspace_id_str = None
@@ -1206,7 +1207,10 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     error_msg = None
 
     # SAFE LIMIT: Prevent OOM on Render Free Tier (512MB)
-    MAX_ROWS = 25000
+    if MODE_LOCAL == "true":
+        MAX_ROWS = 50000000  # no limit for local dev (assumes more resources)
+    else:
+        MAX_ROWS = 500000
 
     users_to_notify = []  # prevent UnboundLocalError
 
@@ -1218,16 +1222,15 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
         workspace_id_str = str(current_upload.workspace_id)
 
-        # ==========================================================
         # 1) LOAD CSV BYTES
-        # ==========================================================
+        
         csv_bytes: bytes | None = None
 
         if current_upload.storage_path:
             try:
                 csv_bytes = download_file_bytes(current_upload.storage_path)
             except Exception as e:
-                logger.error(f"❌ [WORKER] Failed to download CSV from storage: {e}", exc_info=True)
+                logger.error(f"[WORKER] Failed to download CSV from storage: {e}", exc_info=True)
 
                 _create_incident(
                     db=db,
@@ -1254,21 +1257,23 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             logger.warning(f"[WORKER] No CSV content found for upload {upload_id}.")
             return
 
-        # ==========================================================
+
         # 2) PARSE CSV (row cap for RAM safety)
-        # ==========================================================
+
         is_truncated = False
 
         try:
             df = pd.read_csv(BytesIO(csv_bytes), nrows=MAX_ROWS + 1)
+            logger.info(f"[METRIC] Rows processed: {len(df)}")
+            logger.info(f"[METRIC] Columns detected: {len(df.columns)}")
             del csv_bytes
 
             if len(df) > MAX_ROWS:
                 is_truncated = True
-                logger.warning(f"⚠️ [WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
+                logger.warning(f"[WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
                 df = df.head(MAX_ROWS)
 
-            # ✅ safer conversion (no deprecated errors="ignore")
+            # safer conversion (no deprecated errors="ignore")
             for col in df.columns:
                 try:
                     df[col] = pd.to_numeric(df[col])
@@ -1277,7 +1282,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     pass
 
         except Exception as e:
-            logger.error(f"❌ Failed to parse CSV: {e}", exc_info=True)
+            logger.error(f"[WORKER] Failed to parse CSV: {e}", exc_info=True)
 
             _create_incident(
                 db=db,
@@ -1293,9 +1298,8 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             return {"status": "error", "message": "Failed to parse CSV"}
 
 
-        # ==========================================================
         # 3) SCHEMA + ROW COUNT CHANGE DETECTION
-        # ==========================================================
+
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         new_row_count = int(len(df))
         new_col_count = int(len(df.columns))
@@ -1348,9 +1352,8 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             "removed": sorted(list(old_cols - new_cols)),
         }
 
-        # ==========================================================
         # 4) STATS + QUALITY
-        # ==========================================================
+
         num_df = df.select_dtypes(include="number")
 
         if num_df.shape[1] > 0:
@@ -1383,8 +1386,6 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             "is_truncated": is_truncated,
             "quality_report": quality_report,
             "insights": insights,
-
-            # ✅ extra fields for frontend change summary
             "previous_row_count": old_row_count,
             "previous_column_count": old_col_count,
             "row_count_changed": row_count_has_changed,
@@ -1393,7 +1394,6 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             "schema_changes": schema_changes_dict,
         }
         
-        # ---- NEW: run incident engine ----
         incident_engine(
             db=db,
             current_upload=current_upload,
@@ -1423,9 +1423,8 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             del stats_df
         del num_df
 
-        # ==========================================================
         # 5) NOTIFICATIONS + EMAIL + ALERT RULES
-        # ==========================================================
+
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
         if workspace:
             if schema_has_changed or row_count_has_changed or col_count_has_changed:
@@ -1458,9 +1457,6 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     f"Data updated in '{workspace.name}': {change_summary}"
                 )
 
-                # ----------------------------------------------------------
-                # 🔴 STEP 1 FIX: Proper priority classification (in-app only)
-                # ----------------------------------------------------------
                 priority = "info"
 
                 if schema_has_changed:
@@ -1492,7 +1488,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                         # Column increase = safe expansion
                         priority = "info"
 
-                # ✅ Notify all team members + owner (safe dedupe by user.id)
+                # Notify all team members + owner (safe dedupe by user.id)
                 all_users = list(workspace.team_members) + [workspace.owner]
                 users_map = {str(u.id): u for u in all_users}
                 users_to_notify = list(users_map.values())
@@ -1522,9 +1518,8 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     db.add(new_notification)
 
                 new_notifications_created = True
-                logger.info(f"🔔 [WORKER] Created {len(users_to_notify)} notifications with priority={priority}.")
+                logger.info(f"[WORKER] Created {len(users_to_notify)} notifications with priority={priority}.")
 
-                # Prepare Email context (UNCHANGED)
                 percent_change = "0%"
                 if old_row_count > 0:
                     percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
@@ -1574,10 +1569,12 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
             # Check Alerts (keep as-is)
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
+        end_time = time.time()
+        logger.info(f"[METRIC] Processing time: {end_time - start_time:.2f} seconds")    
 
         db.commit()
 
-        logger.info(f"💾 [WORKER] Success. Upload {upload_id} committed.")
+        logger.info(f"[WORKER] Success. Upload {upload_id} committed.")
 
         # Push notification ping (only in prod)
         if APP_MODE == "production" and new_notifications_created and users_to_notify:
@@ -1591,13 +1588,13 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     ),
                     loop,
                 )
-            logger.info("📡 [WORKER] Pushed NEW_NOTIFICATION_ALERT signal to affected users.")
+            logger.info("[WORKER] Pushed NEW_NOTIFICATION_ALERT signal to affected users.")
 
         status_message = "job_complete"
         return {"status": "success"}
 
     except Exception as e:
-        logger.error(f"❌ [WORKER] Processing Error: {e}", exc_info=True)
+        logger.error(f"[WORKER] Processing Error: {e}", exc_info=True)
         error_msg = str(e)
         status_message = "job_error"
         return {"status": "error", "message": error_msg}
@@ -1612,7 +1609,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             if status_message == "job_error" and error_msg:
                 payload["error"] = error_msg
 
-            logger.info(f"📡 [WORKER] Broadcasting {status_message} to workspace {workspace_id_str}...")
+            logger.info(f"[WORKER] Broadcasting {status_message} to workspace {workspace_id_str}...")
 
             run_async_safely(
                 manager.broadcast_to_workspace(workspace_id_str, payload),
@@ -1625,9 +1622,6 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             pass
 
 
-# =====================
-#  The "OTP Email Chef" 
-# =====================
 async def send_otp_email_task_async(to_email: str, otp: str, subject_type: str) -> None:
-    logger.info(f"📨 [WORKER] Preparing to send OTP email to {to_email}...")
+    logger.info(f"[WORKER] Preparing to send OTP email to {to_email}...")
     await send_otp_email(to_email, otp, subject_type)
