@@ -176,9 +176,9 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
 const handleCsvUpload = async () => {
   if (!selectedFile) return toast.error("Please select a CSV file to upload.");
 
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  const MAX_FILE_SIZE = 15 * 1024 * 1024; //15MB in bytes
   if (selectedFile.size > MAX_FILE_SIZE) {
-    return toast.error("File is too large! Maximum limit is 5MB.", {
+    return toast.error("File is too large! Maximum limit is 15MB.", {
       style: { fontSize: "13px", background: "#991b1b", color: "#fff" },
     });
   }
@@ -222,7 +222,7 @@ const handleCsvUpload = async () => {
         // validation errors sometimes come like this
         msg = detail[0].msg;
       } else if (err.response?.status === 413) {
-        msg = "File too large. Max 5MB.";
+        msg = "File too large. Max 15MB.";
       }
     }
 
@@ -338,7 +338,7 @@ const handleCsvUpload = async () => {
                                                 <span>Click to upload</span>
                                                 <input id="file-upload-input" name="file-upload" type="file" className="sr-only" accept=".csv" onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)} />
                                             </label>
-                                            <p className="text-xs text-slate-500">or drag and drop CSV (Max 5MB)</p>
+                                            <p className="text-xs text-slate-500">or drag and drop CSV (Max 15MB)</p>
                                         </div>
                                     </div>
                                 </div>
