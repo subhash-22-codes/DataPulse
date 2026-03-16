@@ -763,10 +763,10 @@ export const Legal: React.FC = () => {
                           <strong>50 saved uploads</strong> per workspace
                         </li>
                         <li>
-                          <strong>5MB</strong> maximum size per uploaded CSV file
+                          <strong>15MB</strong> maximum size per uploaded CSV file
                         </li>
                         <li>
-                          <strong>25,000 rows</strong> maximum per database query result
+                          <strong>500,000 rows</strong> maximum per database query result
                         </li>
                         <li>
                           <strong>Up to 10 metric alerts</strong> per workspace, delivered in a single consolidated email when triggered
