@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Activity, Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import GitHubLoginButton from '../components/GitHubButton';
 import { useAuth } from '../context/AuthContext';
@@ -241,47 +241,26 @@ const Login: React.FC = () => {
       </div>
       </div>
 
-      {/* RIGHT SIDE - BRANDING (60% Width - PRESERVED EXACTLY) */}
-      <div className="hidden lg:flex lg:w-[60%] bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden items-center justify-center p-16">
-        
-        {/* Subtle Noise Texture */}
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-soft-light"></div>
-        
-        <div className="relative z-10 w-full max-w-2xl text-white space-y-12">
-            
-           {/* Branding Header Section */}
-           <div className="space-y-6">
-              <div className="inline-flex items-center gap-2.5 rounded-lg bg-blue-500/10 px-4 py-2 border border-blue-400/20 backdrop-blur-sm">
-                 <Activity className="h-5 w-5 text-blue-200" />
-                 <span className="font-semibold tracking-wide text-white text-sm">DataPulse</span>
-              </div>
-              <h2 className="text-4xl xl:text-5xl font-bold leading-tight text-white">
-                 Continue <span className="text-blue-200 font-extrabold italic">where you left off.</span>
-              </h2>
-              <p className="text-xl text-blue-100/90 leading-relaxed font-light max-w-xl">
-               Secure access to your existing workspaces and data.
-              </p>
-           </div>
+     <div className="hidden lg:flex lg:w-[60%] bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative items-center justify-center overflow-hidden">
 
-           {/* Preserved Features Grid */}
-           <div className="space-y-4 max-w-md">
-              <div className="flex items-center gap-3 text-blue-100/80 text-sm">
-                <ShieldCheck className="h-4 w-4" />
-                <span>Workspaces remain isolated and secure</span>
-              </div>
+      <div className="absolute w-[200px] h-[200px] bg-white/5 rounded-full blur-3xl" />
 
-              <div className="flex items-center gap-3 text-blue-100/80 text-sm">
-                <Lock className="h-4 w-4" />
-                <span>Your data stays private and encrypted </span>
-              </div>
-            </div>
-           {/* Brand Footer Section */}
-           <div className="pt-8 border-t border-white/10 flex justify-between items-center text-[11px] text-blue-200/60 tracking-wide">
-            <p>© 2026 DataPulse</p>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center text-center gap-2">
+
+        <img
+          src="/images/login_pic.png"
+          alt="login visual"
+          className="w-[170px] xl:w-[190px] opacity-85 mix-blend-multiply pointer-events-none select-none"
+        />
+
+        <p className="font-manrope font-bold text-[11px] text-blue-100/80 tracking-wide">
+          Continue where you left off
+        </p>
+        
+
       </div>
 
+    </div>
     </div>
   );
 };
