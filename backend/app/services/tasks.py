@@ -423,7 +423,7 @@ def kill_poller(
 def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
 
-    MAX_BYTES = 5 * 1024 * 1024
+    MAX_BYTES = 15 * 1024 * 1024
 
     # 1) DB: read workspace config fast, then CLOSE DB
     db: Session = SessionLocal()
@@ -492,8 +492,8 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 kill_poller(
                     db2,
                     workspace_id,
-                    user_message="The data source is too large (>5MB). Please reduce the payload size.",
-                    internal_reason="Hard Fail: Payload exceeds 5MB limit",
+                    user_message="The data source is too large (>15MB). Please reduce the payload size.",
+                    internal_reason="Hard Fail: Payload exceeds 15MB limit",
                     is_hard_fail=True,
                     loop=loop,
                 )
@@ -534,8 +534,8 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                     kill_poller(
                         db2,
                         workspace_id,
-                        user_message="Data stream exceeds the 5MB limit allowed on this plan.",
-                        internal_reason="Hard Fail: Stream exceeded 5MB limit",
+                        user_message="Data stream exceeds the 15MB limit allowed on this plan.",
+                        internal_reason="Hard Fail: Stream exceeded 15MB limit",
                         is_hard_fail=True,
                         loop=loop,
                     )
@@ -737,7 +737,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
 def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
    
-    MAX_ROWS = 25000
+    MAX_ROWS = 500000
     logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
 
     db: Session = SessionLocal()
