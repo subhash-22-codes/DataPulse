@@ -77,9 +77,9 @@ const Hero = () => {
   const marqueeAreas = [...focusAreas, ...focusAreas];
 
   const stats = [
-  { num: "350K+", label: "Rows per Pipeline Run" },
-  { num: "3.5-5.5s", label: "End-to-End Processing" },
-  { num: "Free Tier", label: "Deployed Infra" },
+  { num: "350K+", label: "Rows per Run" },
+  { num: "3.5–5.5s", label: "Pipeline Execution" },
+  { num: "Free Tier", label: "Deployment" },
 ];
 
    const handleWatchDemo = () => {
