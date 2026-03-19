@@ -23,4 +23,4 @@ def setup_logging():
         
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    print("✅ Professional logging configured.")
+    print("Professional logging configured.")

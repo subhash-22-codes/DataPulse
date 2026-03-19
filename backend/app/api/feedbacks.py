@@ -28,7 +28,7 @@ async def create_feedback(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. One-Time Check: Use the new User column
+    # One-Time Check: Use the new User column
     if current_user.is_feedback_submitted:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -36,14 +36,14 @@ async def create_feedback(
         )
 
     try:
-        # 2. Save the feedback
+        # Save the feedback
         new_feedback = Feedback(
             user_id=current_user.id,
             message=payload.message,
         )
         db.add(new_feedback)
         
-        # 3. Flip the switch: Lock the user out forever
+        # Flip the switch: Lock the user out forever
         current_user.is_feedback_submitted = True
         
         db.commit()

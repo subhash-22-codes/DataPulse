@@ -12,13 +12,10 @@ from pydantic import BaseModel, field_validator
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
-# --- CONSTANTS (SaaS Standards) ---
 ALLOWED_METRICS = {"mean", "max", "min", "count", "std", "50%"}
 ALLOWED_CONDITIONS = {"greater_than", "less_than", "equals", "not_equals"}
 
-# ==========================
-#  Schemas
-# ==========================
+
 class AlertRuleCreate(BaseModel):
     workspace_id: uuid.UUID
     column_name: str
@@ -52,9 +49,6 @@ class AlertRuleResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# ==========================
-#  Routes
-# ==========================
 @router.post("/", response_model=AlertRuleResponse, status_code=201)
 def create_alert_rule(
     rule: AlertRuleCreate,
@@ -68,7 +62,6 @@ def create_alert_rule(
     if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # --- NEW: DUPLICATE PREVENTION (Reviewer Optional Polish) ---
     # Check if a rule for the SAME column, metric, and condition already exists
     duplicate_rule = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id,
@@ -84,19 +77,18 @@ def create_alert_rule(
             detail=f"An active alert for {rule.column_name} ({rule.metric} {rule.condition}) already exists."
         )
 
-    # --- QUOTA CHECK ---
+    # QUOTA CHECK
     active_alerts_count = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id,
         AlertRule.is_active == True
     ).count()
 
-    if active_alerts_count >= 10:
+    if active_alerts_count >= 10: # only 10 active alerts allowed per workspace
         raise HTTPException(
             status_code=429,
             detail="Workspace limit reached. You can have a maximum of 10 active alerts."
         )
 
-    # 2. SCHEMA VALIDATION & NULL GUARDS
     latest_upload = db.query(DataUpload).filter(
         DataUpload.workspace_id == workspace.id,
         DataUpload.uploaded_at.isnot(None)
@@ -111,7 +103,7 @@ def create_alert_rule(
     if rule.column_name not in latest_upload.schema_info:
         raise HTTPException(status_code=400, detail=f"Column '{rule.column_name}' not found.")
 
-    # 3. Save the Rule
+    # Save the Rule
     new_rule = AlertRule(**rule.model_dump())
     db.add(new_rule)
     db.commit()
@@ -126,9 +118,7 @@ def toggle_alert_rule(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Toggles the is_active status of an alert rule with quota enforcement.
-    """
+
     rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -137,7 +127,6 @@ def toggle_alert_rule(
     if not workspace or workspace.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # --- NEW: QUOTA CHECK FOR TOGGLE ---
     # Only check the limit if the user is trying to TURN ON an alert
     if not rule.is_active:
         active_alerts_count = db.query(AlertRule).filter(

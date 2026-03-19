@@ -95,5 +95,5 @@ async def export_workspace_data(
         "files": files
     }
 
-    logger.info(f"✅ Workspace export links created: {workspace.name} ({len(files)} files)")
+    logger.info(f"[USER_ACTION] Workspace export links created: {workspace.name} ({len(files)} files)")
     return metadata

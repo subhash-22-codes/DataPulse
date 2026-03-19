@@ -9,19 +9,13 @@ from starlette.websockets import WebSocketState
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
-    """
-    Manages WebSocket connections for:
-    - workspace broadcasting (workspace_id)
-    - user notifications (user_id)
-    """
+ 
     def __init__(self):
         self.workspace_connections: Dict[str, List[WebSocket]] = {}
         self.user_connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, ws_type: str, item_id: str, websocket: WebSocket):
-        """
-        Register a WebSocket client. Accept must be done by the caller after auth.
-        """
+
         if ws_type == 'workspace':
             if item_id not in self.workspace_connections:
                 self.workspace_connections[item_id] = []
@@ -35,9 +29,7 @@ class ConnectionManager:
             logger.info(f"WS client connected to user channel: {item_id}")
 
     def disconnect(self, ws_type: str, item_id: str, websocket: WebSocket):
-        """
-        Remove a WebSocket client from connections.
-        """
+ 
         connections = self.workspace_connections if ws_type == 'workspace' else self.user_connections
         conn_name = 'workspace' if ws_type == 'workspace' else 'user channel'
 
@@ -64,14 +56,11 @@ class ConnectionManager:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
 
     async def push_to_user(self, user_id: str, message: dict):
-        """
-        Send a JSON message to all active sessions for a specific user.
-        """
+  
         if user_id in self.user_connections:
             connections = list(self.user_connections[user_id])
             logger.debug(f"Pushing notification to {len(connections)} sockets for user {user_id}")
-            
-            # 🔥 Corrected: Check if state is CONNECTED before sending to prevent crashes
+
             send_tasks = [
                 conn.send_json(message) 
                 for conn in connections 

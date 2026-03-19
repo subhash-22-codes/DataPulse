@@ -108,7 +108,7 @@ def convert_utc_to_ist_str(utc_dt):
 #     )
 
 #     try:
-#         logger.info("🧠 [AI] Requesting strict markdown insight...")
+#         logger.info("[AI] Requesting strict markdown insight...")
         
 #         full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
         
@@ -116,11 +116,11 @@ def convert_utc_to_ist_str(utc_dt):
 #         raw_text = response.text.strip()
 #         clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
         
-#         logger.info("✨ [AI] Insight generated successfully.")
+#         logger.info(" [AI] Insight generated successfully.")
 #         return clean_text
 
 #     except Exception as e:
-#         logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
+#         logger.error(f" [AI] Error generating insight: {e}", exc_info=True)
 #         return "AI analysis is currently unavailable due to a technical error."
 #------------------------------------------------------------------------------------------------------    
 
@@ -173,7 +173,7 @@ def check_alert_rules(
     ).first()
 
     if already_processed:
-        logger.info(f"🛡️ [GUARD] Already processed {execution_fingerprint}. Skipping.")
+        logger.info(f" [GUARD] Already processed {execution_fingerprint}. Skipping.")
         return
 
     ops = {
@@ -225,7 +225,7 @@ def check_alert_rules(
                 "workspace_name": workspace.name,
                 "event": "data_violation",
                 "violations_count": len(triggered_alerts),
-                "rules_triggered": triggered_alerts,   # optional but useful
+                "rules_triggered": triggered_alerts,  
             }
 
             for user in users_to_notify:
@@ -425,7 +425,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
     MAX_BYTES = 15 * 1024 * 1024
 
-    # 1) DB: read workspace config fast, then CLOSE DB
     db: Session = SessionLocal()
     try:
         workspace = (
@@ -447,7 +446,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     finally:
         db.close()
 
-    # Validation (no DB needed)
     if not api_url or not api_url.startswith("http"):
         db2: Session = SessionLocal()
         try:
@@ -481,7 +479,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
     headers = {header_name: header_value} if header_name and header_value else {}
 
-    # 2) NETWORK: do the slow API call WITHOUT holding DB session
     try:
         response = requests.get(api_url, headers=headers, timeout=(10, 30), stream=True)
 
@@ -590,7 +587,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             db2.close()
         return
 
-    # 3) PARSE: still no DB needed
     try:
         data = json.loads(content)
     except Exception as e:
@@ -624,7 +620,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             db2.close()
         return
 
-    # 4) BUILD CSV: still no DB
     try:
         df = pd.json_normalize(data)
         csv_content = df.to_csv(index=False)
@@ -644,7 +639,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             db2.close()
         return
 
-    # 5) DB: write upload + update workspace fast, then CLOSE DB
     db3: Session = SessionLocal()
     try:
         workspace2 = (
@@ -704,7 +698,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 loop = None
 
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] DB write crash: {e}", exc_info=True)
+        logger.error(f"[API FETCHER] DB write crash: {e}", exc_info=True)
         try:
             db3.rollback()
         except Exception:
@@ -727,7 +721,6 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     finally:
         db3.close()
 
-    # 6) Kick CSV processing AFTER DB is closed
     try:
         process_csv_task(str(new_upload.id), loop)
     except Exception as e:
@@ -738,7 +731,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
    
     MAX_ROWS = 500000
-    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
+    logger.info(f"[DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
 
     db: Session = SessionLocal()
     user_engine = None
@@ -754,7 +747,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             logger.warning(f"-> [DB FETCHER] Polling disabled for {workspace.name}. Aborting.")
             return
 
-        # ✅ Basic config sanity
         required = [workspace.db_host, workspace.db_user, workspace.db_password, workspace.db_name, workspace.db_query]
         if not all(required):
             kill_poller(
@@ -767,15 +759,12 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # ✅ Clean and validate query
         raw_query = (workspace.db_query or "").strip()
         clean_query = raw_query.rstrip(";").strip()
 
-        # Strip comments to prevent keyword bypass
         query_no_comments = re.sub(r"(--.*)|(/\*[\s\S]*?\*/)", " ", clean_query)
         lower_query = query_no_comments.lower().strip()
 
-        # Must be SELECT
         if not lower_query.startswith("select"):
             kill_poller(
                 db,
@@ -787,7 +776,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # Block multi-statement
         if ";" in clean_query:
             kill_poller(
                 db,
@@ -799,7 +787,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # Forbidden keywords
         forbidden_keywords = {
             "insert", "update", "delete", "drop", "truncate", "alter", "create",
             "grant", "revoke", "vacuum", "copy", "pg_read_file", "pg_write_file",
@@ -826,7 +813,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # Build connection URL for user's DB
+
         try:
             encoded_password = quote_plus(workspace.db_password)
             port = int(workspace.db_port or 5432)
@@ -859,12 +846,10 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
 
             with user_engine.connect() as connection:
-                # resource sandboxing
                 try:
                     connection.execute(text("SET work_mem = '4MB';"))
                     connection.execute(text("SET temp_buffers = '2MB';"))
                 except Exception:
-                    # Not all DBs allow these (permissions). Don't kill job for this.
                     pass
 
                 df = pd.read_sql(text(safe_query), connection)
@@ -881,7 +866,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 return
 
         except Exception as conn_err:
-            # classify error -> hard fail vs soft fail
+
             err_msg = str(conn_err).lower()
 
             auth_patterns = ["authentication failed", "login failed", "password", "no pg_hba.conf"]
@@ -936,7 +921,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
                 )
             return
 
-        # Empty result
         if df.empty:
             logger.warning(f"-> [DB FETCHER] Query returned 0 rows for {workspace.name}")
             kill_poller(
@@ -960,7 +944,6 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             )
             return
 
-        # Store as CSV upload
         csv_content = df.to_csv(index=False)
         csv_bytes = csv_content.encode("utf-8")
 
@@ -1026,7 +1009,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
 
         
 def schedule_data_fetches() -> None:
-    logger.info("⏰ [SCHEDULER] Checking for due data fetches...")
+    logger.info("[SCHEDULER] Checking for due data fetches...")
 
     try:
         db: Session = SessionLocal()
@@ -1048,7 +1031,7 @@ def schedule_data_fetches() -> None:
 
         if not has_active:
             logger.debug("[SCHEDULER] No active polling workspaces. Skipping cycle.")
-            return  # exits in ~1-2ms, minimal DB + CPU usage
+            return  
 
         now = datetime.now(timezone.utc)
 
@@ -1151,7 +1134,7 @@ def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop =
 
         if ws.data_source == 'API':
             logger.info(f"-> [GATE] Launching API Fetcher for '{ws.name}'...")
-            fetch_api_data(str(ws.id), loop) # Passes the (potentially None) loop
+            fetch_api_data(str(ws.id), loop) 
             
         elif ws.data_source == 'DB':
             logger.info(f"-> [GATE] Launching DB Fetcher for '{ws.name}'...")
@@ -1177,7 +1160,7 @@ EMAIL_SEM = threading.BoundedSemaphore(3)
 
 def _run_email_in_background(recipients, email_context):
     if not EMAIL_SEM.acquire(blocking=False):
-        logger.warning("⚠️ [EMAIL] Skipping email: too many concurrent email jobs")
+        logger.warning("[EMAIL] Skipping email: too many concurrent email jobs")
         return
 
     loop = None
@@ -1186,7 +1169,7 @@ def _run_email_in_background(recipients, email_context):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(send_detailed_alert_email(recipients, email_context))
     except Exception as e:
-        logger.error(f"❌ [EMAIL] Failed: {e}", exc_info=True)
+        logger.error(f"[EMAIL] Failed: {e}", exc_info=True)
     finally:
         if loop:
             try:
@@ -1208,7 +1191,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
 
     # SAFE LIMIT: Prevent OOM on Render Free Tier (512MB)
     if MODE_LOCAL == "true":
-        MAX_ROWS = 50000000  # no limit for local dev (assumes more resources)
+        MAX_ROWS = 50000000  # no limit for local dev 
     else:
         MAX_ROWS = 500000
 
@@ -1273,7 +1256,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 logger.warning(f"[WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
                 df = df.head(MAX_ROWS)
 
-            # safer conversion (no deprecated errors="ignore")
+            # safer conversion 
             for col in df.columns:
                 try:
                     df[col] = pd.to_numeric(df[col])
@@ -1567,7 +1550,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                         daemon=True,
                     ).start()
 
-            # Check Alerts (keep as-is)
+            # Check Alerts 
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
         end_time = time.time()
         logger.info(f"[METRIC] Processing time: {end_time - start_time:.2f} seconds")    

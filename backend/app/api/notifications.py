@@ -28,7 +28,7 @@ class NotificationResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
-# --- Routes ---
+# Routes 
 
 @router.get("/", response_model=List[NotificationResponse])
 def get_notifications(

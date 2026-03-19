@@ -9,9 +9,7 @@ import pandas as pd
 MAX_ROWS_ANALYSIS = 100_000
 
 
-# --------------------------------------------------
 # Heuristic Helpers
-# --------------------------------------------------
 
 def _looks_like_id_column_name(col: str) -> bool:
     c = col.lower().strip()
@@ -42,9 +40,7 @@ def _looks_like_name_series(s: pd.Series) -> bool:
     return (hits / len(sample)) >= 0.6
 
 
-# --------------------------------------------------
 # Core Metric Computation
-# --------------------------------------------------
 
 def _compute_quality_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     total_rows = int(len(df))
@@ -144,10 +140,7 @@ def _compute_quality_metrics(df: pd.DataFrame) -> Dict[str, Any]:
 
     return quality_report
 
-
-# --------------------------------------------------
 # Insight Generation
-# --------------------------------------------------
 
 def _generate_quality_insights(
     df: pd.DataFrame,
@@ -247,9 +240,8 @@ def _generate_quality_insights(
     return insights[:max_insights]
 
 
-# --------------------------------------------------
+
 # Public API
-# --------------------------------------------------
 
 def analyze_dataframe_quality(
     df: pd.DataFrame,

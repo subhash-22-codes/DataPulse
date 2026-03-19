@@ -200,21 +200,21 @@ If unsure, say so.
             )
 
         return ChatResponse(
-            reply="I’m not sure I understood that. Could you rephrase?",
+            reply="I'm not sure I understood that. Could you rephrase?",
             preview=True
         )
 
     except google_exceptions.ResourceExhausted:
         logger.warning("Gemini quota exhausted", extra={"uid": user_id})
         return ChatResponse(
-            reply="I’ve hit my usage limit for now. Try again in a bit.",
+            reply="I've hit my usage limit for now. Try again in a bit.",
             preview=True
         )
 
     except asyncio.TimeoutError:
         logger.error("Pulse timeout", extra={"uid": user_id})
         return ChatResponse(
-            reply="I’m responding slowly right now. Please try again.",
+            reply="I'm responding slowly right now. Please try again.",
             preview=True
         )
 

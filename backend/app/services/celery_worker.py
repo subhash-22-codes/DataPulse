@@ -21,7 +21,7 @@ import numpy as np
 import operator
 from typing import Coroutine, Any 
 
-# Project Imports
+
 from app.core.database import SessionLocal
 from app.models.workspace import Workspace
 from app.models.data_upload import DataUpload
@@ -33,31 +33,20 @@ from app.core.connection_manager import manager
 from app.models.token import RefreshToken
 from app.models.feedback import Feedback
 
-# --- Setup & Safety Config ---
+# Setup & Safety Config
 logger = logging.getLogger(__name__)
 redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 APP_MODE = os.getenv("APP_MODE", "development") 
 
-# Initialize Gemini model (Defensive initialization)
-gemini_model = None
-if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info(f"✅ Gemini AI model initialized (Mode: {APP_MODE})")
-    except Exception as e:
-        logger.error(f"⚠️ Failed to initialize Gemini AI: {e}")
 
 # Define the Celery app
 celery_app = Celery("tasks", broker=redis_url, backend=redis_url)
 
-# --- (PROD-READY) CELERY CONFIGURATION ---
 celery_app.conf.update(
     task_track_started=True,
     timezone='UTC',
     task_serializer='json',
-    accept_content=['json'],  # Strict content type for safety
+    accept_content=['json'],  # content type for safety
     result_serializer='json',
     task_time_limit=300,      # Hard limit: tasks can't run forever (Survival)
     task_soft_time_limit=240  # Soft limit: allows cleanup before being killed
@@ -71,7 +60,7 @@ celery_app.conf.beat_schedule = {
 }
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# Utility - Identical Parity
+# Utility function to convert UTC to IST string (for email contexts, etc)
 def convert_utc_to_ist_str(utc_dt):
     if not utc_dt: return "N/A"
     try:
@@ -82,70 +71,8 @@ def convert_utc_to_ist_str(utc_dt):
     except Exception:
         return "Invalid Date"
 
-# Move this to the top of your celery_service.py
-AI_SYSTEM_PROMPT = """
-SYSTEM PROMPT (DO NOT CHANGE OUTPUT FORMAT):
-You are a Senior Data Analyst generating insights for a production SaaS dashboard.
 
-CRITICAL OUTPUT RULES:
-- Output ONLY plain Markdown
-- NO HTML tags (<p>, <ul>, etc.)
-- NO code blocks (no ``` or ` )
-- NO emojis or headings
-- NO assumptions beyond the provided data
-
-REQUIRED STRUCTURE:
-1. Exactly ONE paragraph (1-2 sentences) summarizing the impact.
-2. Exactly TWO bullet points using - (dash + space), each a business question.
-
-FAILURE HANDLING:
-If no meaningful insight can be derived, output a single plain sentence explaining that clearly.
-""".strip()
-
-def get_ai_insight(schema_changes: dict) -> str | None:
-    # 1. Fast Exit: Mirroring both versions
-    if not gemini_model:
-        logger.warning("Gemini model not available. Skipping AI insight.")
-        return None
-
-    added = schema_changes.get('added', [])
-    removed = schema_changes.get('removed', [])
-    
-    # 2. Logic Check: Save API costs/quota
-    if not added and not removed:
-        # We use the tasks.py plain text version here, not the HTML version
-        return "No significant schema changes were detected to analyze."
-
-    # 3. Defensive Prompting: Use the strict Cloud prompt
-    user_query = (
-        f"Analyze these schema changes:\n"
-        f"Added Columns: {', '.join(added) if added else 'None'}\n"
-        f"Removed Columns: {', '.join(removed) if removed else 'None'}"
-    )
-
-    try:
-        logger.info("🧠 [AI] Requesting strict markdown insight (Prod Guardrails)...")
-        
-        # Merge the System Prompt with the User Query
-        full_prompt = f"{AI_SYSTEM_PROMPT}\n\nUSER INPUT:\n{user_query}"
-        
-        # 4. Execution
-        response = gemini_model.generate_content(full_prompt)
-        
-        # 5. Strict Cleaning: Ported from tasks.py
-        # This removes any potential Markdown wrappers the AI might hallucinate
-        raw_text = response.text.strip()
-        clean_text = raw_text.replace("```markdown", "").replace("```", "").strip()
-        
-        logger.info("✨ [AI] Insight generated successfully.")
-        return clean_text
-
-    except Exception as e:
-        # 6. Graceful Degradation: Ported from tasks.py
-        logger.error(f"❌ [AI] Error generating insight: {e}", exc_info=True)
-        return "AI analysis is currently unavailable due to a technical error."
-
-# --- TASKS ---
+# TASKS 
 
 @celery_app.task(name="schedule_data_fetches")
 def schedule_data_fetches():
@@ -155,7 +82,6 @@ def schedule_data_fetches():
     try:
         now = datetime.now(timezone.utc)
         
-        # Mirroring Cloud Query: Fetch only what we need
         workspaces = db.query(
             Workspace.id,
             Workspace.name,
@@ -179,7 +105,6 @@ def schedule_data_fetches():
                 last_polled = ws.last_polled_at
                 interval = ws.polling_interval
 
-                # PORTED FROM CLOUD: Strict Interval Matching
                 if not last_polled:
                     is_due = True
                 elif interval == '15min':
@@ -202,7 +127,6 @@ def schedule_data_fetches():
                         is_due = True
 
                 if is_due:
-                    # Offload directly to Celery (No need for 'process_data_fetch_task' gate)
                     if ws.data_source == 'API':
                         fetch_api_data.delay(str(ws.id))
                         triggered_count += 1
@@ -211,35 +135,29 @@ def schedule_data_fetches():
                         triggered_count += 1
                         
             except Exception as e:
-                logger.error(f"⚠️ Error analyzing workspace {ws.id}: {e}")
+                logger.error(f"Error analyzing workspace {ws.id}: {e}")
                 continue
         
         if triggered_count > 0:
-            logger.info(f"🚀 Offloaded {triggered_count} jobs to Celery workers.")
+            logger.info(f"Offloaded {triggered_count} jobs to Celery workers.")
 
     except Exception as e:
-        logger.error(f"🔥 Critical Scheduler Failure: {e}", exc_info=True)
+        logger.error(f"Critical Scheduler Failure: {e}", exc_info=True)
     finally:
         db.close()
 
-# --- HELPER FOR ASYNC BROADCASTS IN CELERY ---
+# HELPER FOR ASYNC BROADCASTS IN CELERY WORKERS ---
 def run_sync(coro):
-    """
-    Glue logic: Safely runs async broadcast logic inside sync Celery workers.
-    This is required to prevent 'RuntimeError: No running event loop'.
-    """
+
     try:
-        # Check if a loop already exists for this thread
         loop = asyncio.get_event_loop()
     except RuntimeError:
-        # If no loop exists (standard for Celery workers), create a new one
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
-    # Run the async function and wait for it to finish before moving to the next line
     return loop.run_until_complete(coro)
 
-# --- PORTED: KILL_POLLER ---
+# Kill Poller Helper (for API & DB fetchers)
 def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reason: str, is_hard_fail: bool = True):
     try:
         ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
@@ -278,9 +196,9 @@ def kill_poller(db: Session, workspace_id: str, user_message: str, internal_reas
 
     except Exception as e:
         db.rollback()
-        logger.error(f"🔥 [KILL_POLLER] DB Update Failed: {e}")
+        logger.error(f"[KILL_POLLER] DB Update Failed: {e}")
 
-# --- PORTED: FETCH_API_DATA ---
+
 @celery_app.task(name="fetch_api_data")
 def fetch_api_data(workspace_id: str):
     logger.info(f"🤖 [API FETCHER] Starting API fetch: {workspace_id}")
@@ -365,16 +283,16 @@ def fetch_api_data(workspace_id: str):
         process_csv_task.delay(str(new_upload.id))
 
     except Exception as e:
-        logger.error(f"🔥 [API FETCHER] Unexpected Engine Crash: {e}", exc_info=True)
+        logger.error(f"[API FETCHER] Unexpected Engine Crash: {e}", exc_info=True)
         kill_poller(db, workspace_id, user_message="Something went wrong while fetching data from the API. We've stopped this task to prevent further issues.", internal_reason=f"API Fetcher Crash: {str(e)[:120]}", is_hard_fail=False)
     finally:
         db.close()
 
-# --- PORTED: FETCH_DB_DATA ---
+
 @celery_app.task(name="fetch_db_data")
 def fetch_db_data(workspace_id: str):
     MAX_ROWS = 25000
-    logger.info(f"🤖 [DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
+    logger.info(f"[DB FETCHER] Starting DB fetch for workspace: {workspace_id}")
     db: Session = SessionLocal()
     engine = None
     
@@ -393,7 +311,6 @@ def fetch_db_data(workspace_id: str):
             kill_poller(db, workspace_id, user_message="Database connection details are missing or incomplete. Please review your database settings.", internal_reason="Hard Fail: Incomplete DB configuration", is_hard_fail=True)
             return
 
-        # Ported SQL Shield Logic
         raw_query = workspace.db_query.strip()
         clean_query = raw_query.rstrip(';')
         query_no_comments = re.sub(r'(--.*)|(/\*[\s\S]*?\*/)', ' ', clean_query)
@@ -431,11 +348,11 @@ def fetch_db_data(workspace_id: str):
             )
             
             with engine.connect() as connection:
-                # Ported Sandbox Logic
+                #  Sandbox Logic
                 connection.execute(text("SET work_mem = '4MB';"))
                 connection.execute(text("SET temp_buffers = '2MB';"))
                 
-                # Ported Row-Limit Logic
+                #  Row-Limit Logic
                 safe_query = f"SELECT * FROM ({clean_query}) AS user_query LIMIT {MAX_ROWS + 1}"
                 df = pd.read_sql(text(safe_query), connection)
 
@@ -445,7 +362,7 @@ def fetch_db_data(workspace_id: str):
 
         except Exception as conn_err:
             err_msg = str(conn_err).lower()
-            # Ported intelligent error parsing
+            # error parsing
             auth_patterns = ["authentication failed", "login failed", "password"]
             if any(p in err_msg for p in auth_patterns):
                 kill_poller(db, workspace_id, user_message="We couldn't connect to your database. Please verify the username and password.", internal_reason="Auth failure", is_hard_fail=True)
@@ -473,12 +390,13 @@ def fetch_db_data(workspace_id: str):
         process_csv_task.delay(str(new_upload.id))
 
     except Exception as e:
-        logger.error(f"🔥 [DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
+        logger.error(f"[DB FETCHER] Critical Engine Crash: {e}", exc_info=True)
         kill_poller(db, workspace_id, user_message="Something went wrong while processing your data.", internal_reason=f"Engine Crash: {str(e)[:120]}", is_hard_fail=False)
         
     finally:
         if engine: engine.dispose()
         db.close()
+
 
 def check_alert_rules(
     db: Session, 
@@ -486,13 +404,10 @@ def check_alert_rules(
     current_upload: DataUpload, 
     analysis_results: dict
 ) -> None:
-    """
-    PORTED FROM CLOUD: Evaluates alert rules with Idempotency and Batching.
-    Now optimized for Celery workers.
-    """
-    logger.info(f"🔍 [ENGINE] Scanning rules for Workspace: {workspace.name}...")
 
-    # 1. Fetch Active Rules
+    logger.info(f"[ENGINE] Scanning rules for Workspace: {workspace.name}...")
+
+
     rules = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id, 
         AlertRule.is_active == True
@@ -507,7 +422,6 @@ def check_alert_rules(
         logger.warning("-> Engine aborted: No statistics found in upload.")
         return
 
-    # 2. IDEMPOTENCY GUARD (Prevents duplicate alerts for the same upload)
     execution_fingerprint = f"upload_{current_upload.id}_ws_{workspace.id}"
     already_processed = db.query(Notification).filter(
         Notification.workspace_id == workspace.id,
@@ -515,7 +429,7 @@ def check_alert_rules(
     ).first()
 
     if already_processed:
-        logger.info(f"🛡️ [GUARD] Already processed {execution_fingerprint}. Skipping.")
+        logger.info(f"[GUARD] Already processed {execution_fingerprint}. Skipping.")
         return
 
     ops = {
@@ -528,7 +442,6 @@ def check_alert_rules(
     triggered_alerts = []
     users_to_notify = list(set(workspace.team_members + [workspace.owner]))
 
-    # 3. Process Rules and Collect (Batching)
     for rule in rules:
         try:
             col_stats = stats.get(rule.column_name)
@@ -539,7 +452,6 @@ def check_alert_rules(
             if actual_value_raw is None:
                 continue
 
-            # Strict Precision Logic from Cloud
             actual_value = round(float(actual_value_raw), 4)
             threshold_value = round(float(rule.value), 4)
 
@@ -547,7 +459,6 @@ def check_alert_rules(
             if not compare_func or not compare_func(actual_value, threshold_value):
                 continue
 
-            # Rule triggered - Add to the batch
             triggered_alerts.append({
                 "rule_id": str(rule.id),
                 "column_name": rule.column_name,
@@ -558,10 +469,9 @@ def check_alert_rules(
             })
 
         except Exception as e:
-            logger.error(f"⚠️ Error evaluating rule {rule.id}: {e}")
+            logger.error(f"[ENGINE] Error evaluating rule {rule.id}: {e}")
             continue
         
-    # 4. Handle Triggered Alerts (Side Effects)
     if triggered_alerts:
         try:
             summary_msg = f"Alert: {len(triggered_alerts)} violations detected in '{workspace.name}'."
@@ -577,14 +487,13 @@ def check_alert_rules(
                 db.add(new_notif)
             
             db.commit()
-            logger.info(f"💾 Records committed for fingerprint: {execution_fingerprint}")
+            logger.info(f"[DB] Records committed for fingerprint: {execution_fingerprint}")
 
         except Exception as e:
             db.rollback()
-            logger.error(f"❌ Database error, aborting alerts: {e}")
+            logger.error(f"[DB] Database error, aborting alerts: {e}")
             return
 
-        # Prepare Email Context
         recipients = [user.email for user in users_to_notify]
         timestamp_to_use = current_upload.uploaded_at or datetime.now(timezone.utc)
         email_context = { 
@@ -596,8 +505,6 @@ def check_alert_rules(
             "idempotency_key": execution_fingerprint
         }
 
-        # 5. ASYNC BROADCASTS (UI + Email)
-        # Using run_sync helper to manage loops within the Celery worker
         for user in users_to_notify:
             run_sync(
                 manager.push_to_user(
@@ -606,12 +513,12 @@ def check_alert_rules(
                 )
             )
 
-        # Batch Email: One email with ALL violations (Cloud Standard)
+        # Batch Email: One email with ALL violations (avoids spamming inboxes if multiple rules are broken)
         run_sync(send_threshold_alert_email(recipients, email_context))
         
-        logger.info(f"✅ Side effects sent for {len(triggered_alerts)} alerts.")
+        logger.info(f"[WORKER] Side effects sent for {len(triggered_alerts)} alerts.")
     else:
-        logger.info("✅ Scan complete: No violations found.")
+        logger.info(f"[WORKER] Scan complete: No violations found.")
             
 def clean_nan(obj):
     if isinstance(obj, dict):
@@ -625,13 +532,12 @@ def clean_nan(obj):
 
 @celery_app.task(name="process_csv_task")
 def process_csv_task(upload_id: str):
-    logger.info(f"🚀 [WORKER] Starting REAL processing for upload ID: {upload_id}...")
+    logger.info(f"[WORKER] Starting REAL processing for upload ID: {upload_id}...")
     db: Session = SessionLocal()
     workspace_id_str = None
     status_message = "job_error"
     new_notifications_created = False
     
-    # PORTED FROM CLOUD: The RAM Bouncer (Strict 25k limit)
     MAX_ROWS = 25000 
     
     try:
@@ -648,7 +554,6 @@ def process_csv_task(upload_id: str):
 
         is_truncated = False
         try:
-            # PORTED FROM CLOUD: nrows logic to protect RAM
             df = pd.read_csv(StringIO(csv_content), nrows=MAX_ROWS + 1)
             original_row_count = len(df)
             
@@ -657,7 +562,6 @@ def process_csv_task(upload_id: str):
                 logger.warning(f"⚠️ [WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
                 df = df.head(MAX_ROWS)
 
-            # PORTED FROM CLOUD: Fixed column-by-column numeric conversion
             for col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='ignore')
                 
@@ -668,8 +572,7 @@ def process_csv_task(upload_id: str):
 
         new_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         new_row_count = len(df)
-        
-        # Comparison logic (Identical to tasks.py)
+
         previous_upload = db.query(DataUpload).filter(
             DataUpload.workspace_id == current_upload.workspace_id, 
             DataUpload.upload_type == current_upload.upload_type, 
@@ -688,7 +591,6 @@ def process_csv_task(upload_id: str):
             old_row_count = previous_upload.analysis_results.get("row_count", 0)
             if old_row_count != new_row_count: row_count_has_changed = True
 
-        # Generate and Clean Stats
         stats_df = df.describe(include='all')
         raw_summary = stats_df.to_dict()
         summary_stats = clean_nan(raw_summary) 
@@ -704,7 +606,6 @@ def process_csv_task(upload_id: str):
         current_upload.analysis_results = analysis_results
         current_upload.schema_changed_from_previous = schema_has_changed
         
-        # PORTED FROM CLOUD: FORCE RELEASE RAM immediately
         del df
         del stats_df
 
@@ -716,7 +617,7 @@ def process_csv_task(upload_id: str):
                 
                 if schema_has_changed:
                     schema_changes_dict = {'added': list(new_cols - old_cols), 'removed': list(old_cols - new_cols)}
-                    ai_insight_text = get_ai_insight(schema_changes_dict)
+                    ai_insight_text = None
                 
                 notification_message = f"Structural change detected in workspace '{workspace.name}'."
                 users_to_notify = list(set(workspace.team_members + [workspace.owner]))
@@ -729,8 +630,7 @@ def process_csv_task(upload_id: str):
                         ai_insight=ai_insight_text
                     ))
                     new_notifications_created = True
-                
-                # Email preparation (Cloud Wording Identical)
+    
                 percent_change = "0%"
                 if old_row_count > 0:
                     percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
@@ -751,13 +651,11 @@ def process_csv_task(upload_id: str):
                 recipients = [user.email for user in users_to_notify]
                 run_sync(send_detailed_alert_email(recipients, email_context))
 
-            # Run Alert Rules
             check_alert_rules(db, workspace, current_upload, analysis_results)
             
         db.commit()
         status_message = "job_complete"
 
-        # Signal UI update via WebSocket (Mirroring tasks.py push_to_user)
         if new_notifications_created:
             for user in users_to_notify:
                 run_sync(manager.push_to_user(str(user.id), {"type": "NEW_NOTIFICATION_ALERT"}))
@@ -765,28 +663,25 @@ def process_csv_task(upload_id: str):
         return {"status": "success"}
 
     except Exception as e:
-        logger.error(f"❌ [WORKER] Error: {e}", exc_info=True)
+        logger.error(f"[WORKER] Error: {e}", exc_info=True)
         status_message = "job_error"
         return {"status": "error", "message": str(e)}
     
     finally:
-        # FINAL BROADCAST: Signals the UI to stop the loading state (As is tasks.py)
         if workspace_id_str:
             payload = {"type": status_message, "workspace_id": workspace_id_str}
             redis_client.publish("workspace_updates", json.dumps(payload))
-            logger.info(f"📡 Published '{status_message}' to Redis for {workspace_id_str}")
+            logger.info(f"[WORKER] Published '{status_message}' to Redis for {workspace_id_str}")
         
         db.close()
 
 
 @celery_app.task(name="send_otp_email_task")
 def send_otp_email_task(to_email: str, otp: str, subject_type: str) -> None:
-    """
-    Background task to send OTP/Password Reset emails.
-    """
-    logger.info(f"📨 [WORKER] Sending {subject_type} email to {to_email}...")
+
+    logger.info(f"[WORKER] Sending {subject_type} email to {to_email}...")
     try:
         asyncio.run(send_otp_email(to_email, otp, subject_type))
-        logger.info(f"✅ [WORKER] Email sent successfully to {to_email}")
+        logger.info(f"[WORKER] Email sent successfully to {to_email}")
     except Exception as e:
-        logger.error(f"❌ [WORKER] Failed to send OTP email: {e}", exc_info=True)
+        logger.error(f"[WORKER] Failed to send OTP email: {e}", exc_info=True)

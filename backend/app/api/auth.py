@@ -46,14 +46,14 @@ APP_MODE = os.getenv("APP_MODE", "development")
 
 
 if APP_MODE == "production":
-    logger.info("🚀 Auth running in PRODUCTION mode. Using asyncio background tasks.")
+    logger.info("Auth running in PRODUCTION mode. Using asyncio background tasks.")
     from app.services.tasks import send_otp_email_task_async
 else:
-    logger.info("🚚 Auth running in DEVELOPMENT mode. Using Celery.")
+    logger.info("Auth running in DEVELOPMENT mode. Using Celery.")
     try:
         from app.services.celery_worker import send_otp_email_task
     except ImportError as e:
-        logger.warning(f"⚠️ Dev dependencies missing: {e}")
+        logger.warning(f"Dev dependencies missing: {e}")
         send_otp_email_task = None
         
 # Credentials
@@ -121,10 +121,10 @@ def record_login_history_task(
         ).delete(synchronize_session=False)
 
         db.commit() 
-        logger.info(f"🛡️ Security audit completed for User ID: {user_id}")
+        logger.info(f"[Login_history] Security audit completed for User ID: {user_id}")
     except Exception as e:
         db.rollback()
-        logger.error(f"⚠️ Background Audit Failed: {str(e)}")
+        logger.error(f"[Login_history] Background Audit Failed: {str(e)}")
     finally:
         db.close()
 
@@ -165,7 +165,7 @@ def create_tokens_and_set_cookies(
 
     cookie_params = {
         "secure": True, 
-        "samesite": "none", 
+        "samesite": "none", # To allow cross-site cookies for frontend-backend communication (we using vercel-render combo)
         "httponly": True,
     }
 
@@ -210,7 +210,7 @@ def get_or_create_social_user(
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     try:
-        # 1. Check if provider ID already exists
+        # Check if provider ID already exists
         existing_social_owner = (
             db.query(User)
             .filter(getattr(User, field_attr) == provider_id)
@@ -236,7 +236,7 @@ def get_or_create_social_user(
         if existing_social_owner:
             return existing_social_owner
 
-        # 2. Check by email
+        # Check by email
         user_by_email = (
             db.query(User)
             .filter(User.email == email)
@@ -254,7 +254,7 @@ def get_or_create_social_user(
             user_by_email.is_verified = True
             return user_by_email
 
-        # 3. Create new user
+        # Create new user
         if background_tasks:
             background_tasks.add_task(
                 send_telegram_alert,
@@ -282,9 +282,7 @@ def get_or_create_social_user(
             detail="Authentication service temporarily unavailable",
         )
 
-# ==========================
 #   SCHEMAS
-# ==========================
 class LoginHistorySchema(BaseModel):
     id: Union[UUID, str]
     provider: str
@@ -366,7 +364,7 @@ async def google_link_redirect(request: Request, return_to: str = "/home"):
     if not return_to.startswith("/"):
         return_to = "/home"
         
-    logger.info(f"🔗 [GOOGLE] Initiating link. Target: {return_to}")
+    logger.info(f"[GOOGLE] Initiating link. Target: {return_to}")
     request.session["post_oauth_redirect"] = return_to
     
     return await oauth.google.authorize_redirect(
@@ -379,7 +377,7 @@ async def google_link_redirect(request: Request, return_to: str = "/home"):
 @limiter.limit("5/minute")
 async def google_callback(
     request: Request, 
-    background_tasks: BackgroundTasks, # ⬅️ 1. Moved here and removed '= None'
+    background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db)
 ):
     try:
@@ -394,7 +392,7 @@ async def google_callback(
         user_info = token.get('userinfo')
         
         if not user_info or not user_info.get("email_verified"):
-            logger.warning("⚠️ [GOOGLE] Auth failed: Email not verified.")
+            logger.warning("[GOOGLE] Auth failed: Email not verified.")
             return RedirectResponse(url=f"{FRONTEND_URL}/login?error=email_not_verified")
 
         email = user_info['email']
@@ -411,20 +409,20 @@ async def google_callback(
                 background_tasks=background_tasks
             )
         except HTTPException as e:
-            logger.warning(f"⚠️ Google Link Blocked: {e.detail}")
+            logger.warning(f"[GOOGLE] Google Link Blocked: {e.detail}")
             return RedirectResponse(url=f"{FRONTEND_URL}/account?error={e.detail.replace(' ', '_')}")
 
         response = RedirectResponse(url=f"{FRONTEND_URL}{destination}")
 
         create_tokens_and_set_cookies(request, response, user, db, 'google', background_tasks)       
         
-        logger.info(f"🚀 [GOOGLE] Success: {user.email} landed at {destination}")
+        logger.info(f"[GOOGLE] Success: {user.email} landed at {destination}")
         
         db.commit()      
         return response
 
     except Exception as e:
-        logger.error(f"❌ [GOOGLE] Callback Critical Failure: {str(e)}", exc_info=True)
+        logger.error(f"[GOOGLE] Callback Critical Failure: {str(e)}", exc_info=True)
         return RedirectResponse(url=f"{FRONTEND_URL}/login?error=google_auth_failed")
 
 @router.get("/github/link")
@@ -444,7 +442,6 @@ async def github_link(request: Request, return_to: str = "/home"):
     request.session["github_oauth_state"] = state
     request.session["post_oauth_redirect"] = return_to
 
-    # FIXED LINE
     logger.info("[GITHUB] start oauth flow")
 
     return await oauth.github.authorize_redirect(
@@ -547,7 +544,7 @@ def google_login(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    # Step 1: verify Google token (no DB here)
+    # verify Google token
     try:
         idinfo = id_token.verify_oauth2_token(
             req.token,
@@ -564,7 +561,7 @@ def google_login(
             detail="Verified Google account required",
         )
 
-    # Step 2: DB work must be guarded
+    # DB work must be guarded
     try:
         user = get_or_create_social_user(
             db,
@@ -630,6 +627,7 @@ def login_email(
     email = req.email.lower()
     user = db.query(User).filter(User.email == email).first()
     
+    # Timing attack mitigation: always verify password against a hash, even if user doesn't exist or has no password
     if not user:
         bcrypt.verify(req.password, DUMMY_HASH)
         raise auth_err
@@ -641,16 +639,17 @@ def login_email(
         provider = user.signup_method or "social provider"
         raise HTTPException(
             status_code=400,
-            detail=f"Account exists via {provider}. Please login using that."
+            detail=f"Account exists via {provider}. Please login using that method."
         )
 
+    # Verify password and handle potential hash upgrade
     if not bcrypt.verify(req.password, user.password_hash):
         raise auth_err
-
+    # Optional: Upgrade hash if needed (e.g. if bcrypt parameters have changed)
     if bcrypt.needs_update(user.password_hash):
         user.password_hash = bcrypt.hash(req.password)
 
-    logger.info(f"✅ Email login success: {user.email}")
+    logger.info(f"Email login success: {user.email}")
 
     create_tokens_and_set_cookies(request, response, user, db, 'email', background_tasks)
 
@@ -727,7 +726,7 @@ def send_otp(request: Request, req: SendOtpRequest, background_tasks: Background
 @router.post("/verify-otp")
 @limiter.limit("5/minute")
 def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: BackgroundTasks ,db: Session = Depends(get_db)):
-    logger.info("✅ verify_otp endpoint HIT")
+    logger.info("verify_otp endpoint HIT")
     email_normalized = req.email.lower().strip()
     user = db.query(User).filter(User.email == email_normalized).first()
     
@@ -753,7 +752,7 @@ def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: Backgr
     user.otp_expiry = None
     user.otp_attempts = 0
     user.last_otp_requested_at = None
-    db.flush() # Push changes to DB but keep transaction open
+    db.flush() 
 
     user.name = req.name
     user.password_hash = bcrypt.hash(req.password)
@@ -764,15 +763,13 @@ def verify_otp(request: Request, req: VerifyOtpRequest, background_tasks: Backgr
     if background_tasks:
         background_tasks.add_task(
             send_telegram_alert, 
-            f"✨ **NEW USER VERIFIED!**\nName: {req.name}\nEmail: {email_normalized}"
+            f"[TELEGRAM] **NEW USER VERIFIED!**\nName: {req.name}\nEmail: {email_normalized}"
         )
     
     return {"msg": "Email verified & password set successfully"}
 
 
-# ==========================
 #   PASSWORD RESET
-# ==========================
 @router.post("/send-password-reset")
 @limiter.limit("3/minute")
 def send_password_reset(request: Request, req: SendPasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -895,7 +892,7 @@ def get_login_history(
         }
 
     except Exception as e:
-        logger.error(f"❌ Failed to fetch login history for user {current_user.id}: {str(e)}")
+        logger.error(f"Failed to fetch login history for user {current_user.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Could not retrieve security activity.")
 
 @router.post("/refresh")
@@ -1042,7 +1039,7 @@ async def delete_account(
     user_name = current_user.name
 
     try:
-        logger.warning(f"🚨 SCRUB INITIATED: User {user_email}")
+        logger.warning(f"[DELETE]SCRUB INITIATED: User {user_email}")
 
         owned_workspaces = db.query(Workspace).filter(Workspace.owner_id == current_user.id).all()
         owned_workspace_ids = [ws.id for ws in owned_workspaces]
@@ -1056,34 +1053,34 @@ async def delete_account(
 
             try:
                 delete_files(paths)
-                logger.warning(f"🧹 Deleted {len(paths)} storage files for user {user_email}")
+                logger.warning(f"[DELETE] Deleted {len(paths)} storage files for user {user_email}")
             except Exception as e:
                 # Don't block account deletion if storage cleanup fails
-                logger.error(f"⚠️ Storage cleanup failed for user {user_email}: {e}")
+                logger.error(f"Storage cleanup failed for user {user_email}: {e}")
 
-        # ✅ 2) Remove user from team tables (many-to-many)
+        # Remove user from team tables (many-to-many)
         db.execute(workspace_team.delete().where(workspace_team.c.user_id == current_user.id))
 
-        # ✅ 3) Delete the user (cascades will delete owned workspaces/uploads from DB)
+        #  Delete the user (cascades will delete owned workspaces/uploads from DB)
         db.delete(current_user)
         db.commit()
 
-        # ✅ 4) Clear Cookies
+        # Clear Cookies
         cookie_params = {
             "samesite": "none",
             "secure": True,
             "httponly": True,
-            "path": "/"
+            "path": "/" # Ensure cookies are cleared across the entire site
         }
         response.delete_cookie("access_token", **cookie_params)
         response.delete_cookie("refresh_token", **cookie_params)
         response.delete_cookie("session_id", **cookie_params)
 
-        # ✅ 5) Notifications
-        background_tasks.add_task(send_farewell_email, user_email, user_name)
+        # Notifications
+        background_tasks.add_task(send_farewell_email, user_email, user_name) # Send farewell email asynchronously
         background_tasks.add_task(
             send_telegram_alert,
-            f"RED ALERT: USER DELETED ACCOUNT\n"
+            f"[TELEGRAM] RED ALERT: USER DELETED ACCOUNT\n"
             f"Name: {user_name}\n"
             f"Email: {user_email}\n"
             f"Status: Data Scrubbed"
@@ -1093,7 +1090,7 @@ async def delete_account(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Scrub failed: {str(e)}")
+        logger.error(f"Scrub failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Account deletion failed.")
 
     
@@ -1105,14 +1102,14 @@ def unlink_provider(
     current_user: User = Depends(get_current_user)
 ):
 
-    logger.info(f"🛡️ Unlink request for {provider} from user: {current_user.email}")
+    logger.info(f"[UNLINK] Unlink request for {provider} from user: {current_user.email}")
     has_password = current_user.password_hash is not None
     has_google = current_user.google_id is not None
     has_github = current_user.github_id is not None
 
     if provider == "google":
         if not (has_password or has_github):
-            logger.warning(f"🚫 Blocked unlink: {current_user.email} tried to remove their only login (Google)")
+            logger.warning(f"[UNLINK] Blocked unlink: {current_user.email} tried to remove their only login (Google)")
             raise HTTPException(
                 status_code=400, 
                 detail="Security Alert: You cannot remove your only login method. Please link GitHub or set a password first."
@@ -1120,7 +1117,7 @@ def unlink_provider(
     
     elif provider == "github":
         if not (has_password or has_google):
-            logger.warning(f"🚫 Blocked unlink: {current_user.email} tried to remove their only login (GitHub)")
+            logger.warning(f"[UNLINK] Blocked unlink: {current_user.email} tried to remove their only login (GitHub)")
             raise HTTPException(
                 status_code=400, 
                 detail="Security Alert: You cannot remove your only login method. Please link Google or set a password first."
@@ -1135,7 +1132,7 @@ def unlink_provider(
             current_user.github_id = None
         
         db.commit()
-        logger.info(f"✅ Successfully unlinked {provider} for {current_user.email}")
+        logger.info(f"[UNLINK] Successfully unlinked {provider} for {current_user.email}")
         
         return {
             "status": "success",
@@ -1148,7 +1145,7 @@ def unlink_provider(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Database error during unlink: {str(e)}")
+        logger.error(f"[UNLINK] Database error during unlink: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error during account disconnection.")
     
 @router.post("/logout-all")
@@ -1200,10 +1197,6 @@ def logout_from_all_devices(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"🚨 Global logout failed: {str(e)}")
+        logger.error(f"[LOGOUT] Global logout failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to perform security reset")
     
-@router.get("/test-crash-guard")
-async def test_crash_guard():
-    result = 1 / 0 
-    return {"msg": result}

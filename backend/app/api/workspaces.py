@@ -48,7 +48,7 @@ from app.core.connection_manager import manager
 from app.services.tasks import process_data_fetch_task
 from app.core.guard import send_telegram_alert
 from app.services.upload_limits import enforce_upload_limit_or_raise
-# --- Setup ---
+# Setup 
 logger = logging.getLogger(__name__)
 APP_MODE = os.getenv("APP_MODE", "development")
 MODE_LOCAL = os.getenv("MODE_LOCAL", "false").lower()
@@ -56,22 +56,20 @@ MODE_LOCAL = os.getenv("MODE_LOCAL", "false").lower()
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
 if APP_MODE == "production":
-    logger.info("🚀 Workspaces running in PRODUCTION mode (BackgroundTasks).")
+    logger.info("[Workspaces] Workspaces running in PRODUCTION mode (BackgroundTasks).")
     from app.services.tasks import process_csv_task
 else:
-    logger.info("🚚 Workspaces running in DEVELOPMENT mode (Celery).")
+    logger.info("[Workspaces] Workspaces running in DEVELOPMENT mode (Celery).")
     # In DEV
     try:
         import redis.asyncio as aioredis
         from app.services.celery_worker import celery_app
     except ImportError as e:
-        logger.warning(f"⚠️ Dev dependencies missing: {e}. Celery tasks may fail.")
+        logger.warning(f"[Workspaces] Dev dependencies missing: {e}. Celery tasks may fail.")
         celery_app = None
 
 
-# =========
 #  Schemas 
-# =========
 class WorkspaceCreate(BaseModel):
     name: str
 
@@ -193,9 +191,8 @@ class TrendResponse(BaseModel):
     
 class DeleteConfirmation(BaseModel):
     otp: str
-# ==========================
+
 #  Routes
-# ==========================
 @router.post("/", response_model=WorkspaceResponse)
 @limiter.limit("5/minute")
 def create_workspace(
@@ -422,7 +419,7 @@ async def update_workspace(
                 notif = Notification(
                     user_id=user.id,
                     workspace_id=db_workspace.id,
-                    message=f"You’ve been added to the workspace \"{ws_name}\" by {actor_name}.",
+                    message=f"You've been added to the workspace \"{ws_name}\" by {actor_name}.",
                     notification_type="team_update",
                     priority="info",
                     action_url=f"/workspaces/{db_workspace.id}",
@@ -461,7 +458,7 @@ async def update_workspace(
         except Exception as notif_err:
             logger.error(f"[TEAM NOTIFY] Failed: {notif_err}", exc_info=True)
 
-        # Reuse computed diff (cleaner)
+        # Reuse computed diff to update WorkspaceUserSettings without extra queries
         for user_id in added_user_ids:
             db.add(
                 WorkspaceUserSettings(
@@ -536,7 +533,7 @@ async def update_workspace(
     )
 
     if should_run_now:
-        logger.info(f"[WS UPDATE] 🚀 Triggering immediate validation run | ws={workspace_id}")
+        logger.info(f"[WS UPDATE] Triggering immediate validation run | ws={workspace_id}")
         current_loop = asyncio.get_running_loop()
         executor.submit(process_data_fetch_task, str(db_workspace.id), current_loop)
     
@@ -572,7 +569,7 @@ async def get_notification_settings(
     if not workspace:
         raise HTTPException(404, "Workspace not found")
 
-    # --- membership check ---
+    # membership check
     is_member = (
         current_user.id == workspace.owner_id
         or current_user in workspace.team_members
@@ -626,7 +623,7 @@ async def update_notification_setting(
     if not workspace:
         raise HTTPException(404, "Workspace not found")
 
-    # --- membership check ---
+    # membership check
     is_member = (
         current_user.id == workspace.owner_id
         or current_user in workspace.team_members
@@ -1224,10 +1221,10 @@ def get_workspace_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 1. Security Check (Uses our optimized get_workspace)
+    # Security Check - ensure user has access to workspace
     workspace = get_workspace(workspace_id, current_user, db)
 
-    # 2. Optimized Query: Filter by workspace and active status
+    # Optimized Query: Filter by workspace and active status
     rules = db.query(AlertRule).filter(
         AlertRule.workspace_id == workspace.id
     ).all()
@@ -1253,7 +1250,6 @@ def get_workspace_alert_count(
     }
 
 
-# --- NEW: Trigger Manual Poll ---
 @router.post("/{workspace_id}/trigger-poll")
 async def trigger_manual_poll(
     workspace_id: str,
@@ -1264,14 +1260,14 @@ async def trigger_manual_poll(
 
     logger.info(f"Manual poll triggered for workspace {workspace_id}")
     
-    # 1. Security & Existence Check
+    # Security & Existence Check
     workspace = get_workspace(workspace_id, current_user, db)
     
-    # 2. Validation
+    # Validation
     if not workspace.is_polling_active:
         return {"message": "Polling is not active for this workspace."}
         
-    # 3. Task Dispatch
+    # Task Dispatch
     if workspace.data_source == 'API' and workspace.api_url:
         from app.services.tasks import fetch_api_data
         

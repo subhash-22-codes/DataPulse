@@ -21,7 +21,7 @@ def get_current_user(
 ) -> Optional[User]:
     token = request.cookies.get("access_token")
     if not token:
-        logger.debug("❌ No access_token cookie found in request")
+        logger.debug("No access_token cookie found in request")
         if not raise_error: return None
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -48,7 +48,7 @@ def get_current_user(
             raise HTTPException(status_code=401, detail="Missing security version")
 
         if token_type != "access":
-            logger.warning(f"❌ Rejected token: Expected 'access', got '{token_type}'")
+            logger.warning(f"Rejected token: Expected 'access', got '{token_type}'")
             raise HTTPException(status_code=401, detail="Invalid token type")
         
         if not user_id:
@@ -66,7 +66,7 @@ def get_current_user(
 
         if user.token_version != token_version:
             logger.warning(
-                f"🛡️ Security Reset Kick: User {user.email} "
+                f"Security Reset Kick: User {user.email} "
                 f"(Token v{token_version} vs DB v{user.token_version})"
             )
             raise HTTPException(
