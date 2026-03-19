@@ -70,21 +70,18 @@ const Team = () => {
               />
             </div>
 
-            {/* Info */}
             <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               Subhash Yaganti
             </h3>
 
             <p className="mt-1 text-xs sm:text-sm font-semibold uppercase tracking-wide text-blue-600">
-               Full-Stack Engineering, Backend Systems & Architecture
+              System Architecture, Backend Engineering & Infrastructure
             </p>
 
             <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
-               Co-designed the system architecture and engineered backend services,
-              including asynchronous task processing, containerized deployment workflows,
-              and application security. Contributed equally to frontend engineering,
-              UI/UX design, and full-stack integration.
-
+              Created and architected the system end-to-end. Built backend services including 
+              authentication, security, data modeling, and asynchronous task processing. 
+              Handled containerized deployment and infrastructure setup.
             </p>
 
             {/* Socials */}
@@ -141,20 +138,18 @@ const Team = () => {
               />
             </div>
 
-            {/* Info */}
-            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+           <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               Siri Mahalaxmi Vemula
             </h3>
 
             <p className="mt-1 text-xs sm:text-sm font-semibold uppercase tracking-wide text-indigo-600">
-              Backend Engineering, Data Systems & AI Integration
+              Backend Development, Data Systems & AI Integration
             </p>
 
             <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
-               Co-engineered backend systems with a focus on database design, SQL operations,
-               and data processing pipelines. Led the integration of AI capabilities and
-               contributed equally to backend logic, frontend functionality, and overall
-               system reliability.
+              Worked on backend development, database design, and API integrations. 
+              Built the DataPulse AI assistant with Gemini model integration for 
+              chat-based querying and insights.
             </p>
 
             {/* Socials */}

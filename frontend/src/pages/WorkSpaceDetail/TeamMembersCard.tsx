@@ -302,6 +302,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                             <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
                         </div>
                         
+                        
                         <div className="flex flex-col min-w-0">
                             <p className="text-xs font-bold text-slate-900 truncate">
                                 {member.name || member.email.split('@')[0]}

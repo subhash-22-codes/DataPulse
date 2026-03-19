@@ -118,11 +118,6 @@ const Hero = () => {
           
           {/* === LEFT COLUMN: COPYWRITING === */}
           <div className="max-w-2xl text-center lg:text-left mx-auto lg:mx-0">
-            
-                <span className="text-xs leading-none tracking-wider font-manrope">
-                DataPulse v1.1.0 — Academic Prototype (Live)
-                </span>
-
             {/* Headline */}
             <h1 
               className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.1] mb-6 animate-fadeInUp"
@@ -207,13 +202,6 @@ const Hero = () => {
               </BatterySaverWrapper>
             </div>
 
-            {/* Floating Elements (Optional: Adds depth) */}
-            <div className="absolute -bottom-6 -left-6 bg-white p-4 rounded-xl shadow-xl border border-slate-100 animate-bounce-slow hidden sm:block">
-               <div className="flex items-center gap-3">
-                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                 <span className="text-xs font-bold text-slate-700">System Healthy</span>
-               </div>
-            </div>
           </div>
 
         </div>
