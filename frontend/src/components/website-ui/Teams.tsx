@@ -81,7 +81,8 @@ const Team = () => {
             <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
               Created and architected the system end-to-end. Built backend services including 
               authentication, security, data modeling, and asynchronous task processing. 
-              Handled containerized deployment and infrastructure setup.
+              Handled containerized deployment and infrastructure. Also contributed to 
+              frontend integration and core UI flows.
             </p>
 
             {/* Socials */}
@@ -149,7 +150,8 @@ const Team = () => {
             <p className="mt-3 text-sm text-slate-500 leading-relaxed max-w-sm">
               Worked on backend development, database design, and API integrations. 
               Built the DataPulse AI assistant with Gemini model integration for 
-              chat-based querying and insights.
+              chat-based querying and insights. Also contributed to frontend features 
+              and integration.
             </p>
 
             {/* Socials */}
