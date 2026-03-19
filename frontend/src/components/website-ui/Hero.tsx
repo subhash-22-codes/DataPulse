@@ -77,10 +77,10 @@ const Hero = () => {
   const marqueeAreas = [...focusAreas, ...focusAreas];
 
   const stats = [
-    { num: "Live", label: "WebSocket Sync" }, // True: You use WebSockets
-    { num: "0.1s", label: "Event Processing" }, // True: Redis/Celery is that fast
-    { num: "100%", label: "Open Source" },   // True: It's on GitHub
-  ];
+  { num: "350K+", label: "Rows per Pipeline Run" },
+  { num: "3.5-5.5s", label: "End-to-End Processing" },
+  { num: "Free Tier", label: "Deployed Infra" },
+];
 
    const handleWatchDemo = () => {
     toast('Demo video coming soon!', {
