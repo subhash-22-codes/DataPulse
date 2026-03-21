@@ -9,7 +9,6 @@ import Navbar from '../components/website-ui/Navbar';
 import Hero from '../components/website-ui/Hero';
 import Features from '../components/website-ui/Features';
 import Architecture from '../components/website-ui/Architecture';
-import About from '../components/website-ui/About'; // <--- NEW IMPORT
 import Team from '../components/website-ui/Teams';
 import Footer from '../components/website-ui/Footer';
 
@@ -38,9 +37,6 @@ const LandingPage: React.FC = () => {
         
         {/* Architecture Diagram */}
         <Architecture />
-
-        {/* About / Tech Stack (THIS WAS MISSING) */}
-        <About />
         
         {/* The Team */}
         <Team />
