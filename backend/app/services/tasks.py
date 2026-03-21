@@ -722,7 +722,7 @@ def fetch_api_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
         db3.close()
 
     try:
-        process_csv_task(str(new_upload.id), loop)
+        process_csv_task(str(new_upload.id), loop, df=df)
     except Exception as e:
         logger.error(f"[API FETCHER] process_csv_task failed: {e}", exc_info=True)
 
@@ -979,7 +979,7 @@ def fetch_db_data(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
             except RuntimeError:
                 loop = None
 
-        process_csv_task(str(new_upload.id), loop)
+        process_csv_task(str(new_upload.id), loop, df=df)
 
 
     except Exception as e:
@@ -1179,7 +1179,7 @@ def _run_email_in_background(recipients, email_context):
         EMAIL_SEM.release()
 
 
-def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
+def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None, df: pd.DataFrame = None):
     logger.info(f"[WORKER] Starting REAL processing for upload ID: {upload_id}...")
     start_time = time.perf_counter()
     db: Session = SessionLocal()
@@ -1206,107 +1206,110 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         workspace_id_str = str(current_upload.workspace_id)
 
         # 1) LOAD CSV BYTES
-        
-        csv_bytes: bytes | None = None
-        t_download = time.perf_counter()
-        if current_upload.storage_path:
-            try:
-                csv_bytes = download_file_bytes(current_upload.storage_path)
-                logger.info(f"[TIME] storage download: {time.perf_counter() - t_download:.2f}s")
-            except Exception as e:
-                logger.error(f"[WORKER] Failed to download CSV from storage: {e}", exc_info=True)
+        if df is None:
+            csv_bytes: bytes | None = None
+            t_download = time.perf_counter()
+            if current_upload.storage_path:
+                try:
+                    csv_bytes = download_file_bytes(current_upload.storage_path)
+                    logger.info(f"[TIME] storage download: {time.perf_counter() - t_download:.2f}s")
+                except Exception as e:
+                    logger.error(f"[WORKER] Failed to download CSV from storage: {e}", exc_info=True)
 
-                _create_incident(
-                    db=db,
-                    current_upload=current_upload,
-                    issue_type="ingestion_failure",
-                    severity="high",
-                    failure_reason="Storage download failed",
-                    affected_columns=None,
-                )
+                    _create_incident(
+                        db=db,
+                        current_upload=current_upload,
+                        issue_type="ingestion_failure",
+                        severity="high",
+                        failure_reason="Storage download failed",
+                        affected_columns=None,
+                    )
 
-                db.commit()
+                    db.commit()
+                    return
+
+
+            # fallback for old uploads (still stored in DB)
+            if csv_bytes is None and current_upload.file_content:
+                try:
+                    csv_bytes = current_upload.file_content.encode("utf-8")
+                except Exception as e:
+                    logger.error(f"❌ [WORKER] Failed to encode DB CSV content: {e}", exc_info=True)
+                    return
+
+            if not csv_bytes:
+                logger.warning(f"[WORKER] No CSV content found for upload {upload_id}.")
                 return
 
 
-        # fallback for old uploads (still stored in DB)
-        if csv_bytes is None and current_upload.file_content:
+            # 2) PARSE CSV (row cap for RAM safety)
+
+            is_truncated = False
+
             try:
-                csv_bytes = current_upload.file_content.encode("utf-8")
-            except Exception as e:
-                logger.error(f"❌ [WORKER] Failed to encode DB CSV content: {e}", exc_info=True)
-                return
+                t_parse_total = time.perf_counter()
 
-        if not csv_bytes:
-            logger.warning(f"[WORKER] No CSV content found for upload {upload_id}.")
-            return
+                t0 = time.perf_counter()
+                chunks = pd.read_csv(BytesIO(csv_bytes), chunksize=50000)
+                logger.info(f"[TIME] read_csv init (lazy): {time.perf_counter() - t0:.2f}s")
 
+                dfs = []
+                total_rows = 0
 
-        # 2) PARSE CSV (row cap for RAM safety)
+                t_chunks = time.perf_counter()
 
-        is_truncated = False
+                for chunk in chunks:
+                    total_rows += len(chunk)
 
-        try:
-            t_parse_total = time.perf_counter()
+                    for col in chunk.columns:
+                        if chunk[col].dtype == "object":
+                            chunk[col] = pd.to_numeric(chunk[col], errors="ignore")
 
-            t0 = time.perf_counter()
-            chunks = pd.read_csv(BytesIO(csv_bytes), chunksize=50000)
-            logger.info(f"[TIME] read_csv init (lazy): {time.perf_counter() - t0:.2f}s")
+                    if total_rows > MAX_ROWS:
+                        is_truncated = True
+                        remaining = MAX_ROWS - (total_rows - len(chunk))
+                        chunk = chunk.head(remaining)
+                        dfs.append(chunk)
+                        break
 
-            dfs = []
-            total_rows = 0
-
-            t_chunks = time.perf_counter()
-
-            for chunk in chunks:
-                total_rows += len(chunk)
-
-                for col in chunk.columns:
-                    if chunk[col].dtype == "object":
-                        chunk[col] = pd.to_numeric(chunk[col], errors="ignore")
-
-                if total_rows > MAX_ROWS:
-                    is_truncated = True
-                    remaining = MAX_ROWS - (total_rows - len(chunk))
-                    chunk = chunk.head(remaining)
                     dfs.append(chunk)
-                    break
 
-                dfs.append(chunk)
+                logger.info(f"[TIME] chunk iteration: {time.perf_counter()- t_chunks:.2f}s")
 
-            logger.info(f"[TIME] chunk iteration: {time.perf_counter()- t_chunks:.2f}s")
+                t_concat = time.perf_counter()
+                df = pd.concat(dfs, ignore_index=True)
+                logger.info(f"[TIME] concat: {time.perf_counter() - t_concat:.2f}s")
 
-            t_concat = time.perf_counter()
-            df = pd.concat(dfs, ignore_index=True)
-            logger.info(f"[TIME] concat: {time.perf_counter() - t_concat:.2f}s")
+                logger.info(f"[METRIC] Rows processed: {len(df)}")
+                logger.info(f"[METRIC] Columns detected: {len(df.columns)}")
 
-            logger.info(f"[METRIC] Rows processed: {len(df)}")
-            logger.info(f"[METRIC] Columns detected: {len(df.columns)}")
+                del csv_bytes
 
-            del csv_bytes
+                if len(df) > MAX_ROWS:
+                    is_truncated = True
+                    logger.warning(f"[WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
+                    df = df.head(MAX_ROWS)
 
-            if len(df) > MAX_ROWS:
-                is_truncated = True
-                logger.warning(f"[WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
-                df = df.head(MAX_ROWS)
+                logger.info(f"[TIME] TOTAL parse block: {time.perf_counter() - t_parse_total:.2f}s")
 
-            logger.info(f"[TIME] TOTAL parse block: {time.perf_counter() - t_parse_total:.2f}s")
-
-        except Exception as e:
-            logger.error(f"[WORKER] Failed to parse CSV: {e}", exc_info=True)
-
-            _create_incident(
+            except Exception as e:
+                logger.error(f"[WORKER] Failed to parse CSV: {e}", exc_info=True)
+                _create_incident(
                 db=db,
                 current_upload=current_upload,
                 issue_type="ingestion_failure",
                 severity="high",
                 failure_reason="CSV parse error",
                 affected_columns=None,
-            )
+                )
 
-            db.commit()
-            status_message = "job_error"
-            return {"status": "error", "message": "Failed to parse CSV"}
+                db.commit()
+                status_message = "job_error"
+                return {"status": "error", "message": "Failed to parse CSV"}
+        else:
+            is_truncated = False
+            logger.info(f"[WORKER] Using provided DataFrame for upload ID {upload_id} (skipping CSV parsing).")
+            
 
 
         # 3) SCHEMA + ROW COUNT CHANGE DETECTION
@@ -1562,7 +1565,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 email_context = {
                     "workspace_name": workspace.name,
                     "upload_type": current_upload.upload_type,
-                    "new_file_name": current_upload.file_path,
+                    "new_file_name": current_upload.storage_path,
                     "old_file_name": previous_upload.file_path if previous_upload else "N/A",
                     "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at),
                     "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email},
@@ -1660,8 +1663,10 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
             db.close()
         except Exception:
             pass
+        
 
-
+    
+    
 async def send_otp_email_task_async(to_email: str, otp: str, subject_type: str) -> None:
     logger.info(f"[WORKER] Preparing to send OTP email to {to_email}...")
     await send_otp_email(to_email, otp, subject_type)

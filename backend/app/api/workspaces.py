@@ -40,7 +40,7 @@ from app.services.tasks import executor
 from app.services.tasks import process_csv_task
 from app.services.storage_service import upload_csv_bytes
 from app.services.storage_service import delete_files
-from app.services.storage_service import download_file_bytes
+from app.services.storage_service import download_file_bytes, create_signed_upload_url
 from app.api.alerts import AlertRuleResponse 
 from app.api.dependencies import get_current_user
 from app.core.limiter import limiter
@@ -191,6 +191,14 @@ class TrendResponse(BaseModel):
     
 class DeleteConfirmation(BaseModel):
     otp: str
+    
+class InitUploadRequest(BaseModel):
+    filename: str
+    file_size: int | None = None
+
+class CompleteUploadRequest(BaseModel):
+    upload_id: str
+    storage_path: str
 
 #  Routes
 @router.post("/", response_model=WorkspaceResponse)
@@ -664,123 +672,164 @@ def get_team_workspaces(
         Workspace.is_deleted == False
     ).all()
 
-
-@router.post("/{workspace_id}/upload-csv", response_model=TaskResponse)
+    
+@router.post("/{workspace_id}/upload-csv/init")
 @limiter.limit("5/minute")
-async def upload_csv_for_workspace(
+async def init_csv_upload(
     request: Request,
     workspace_id: str,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    payload: InitUploadRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
-    start_time = time.time()
-    logger.info(f"[CSV_UPLOAD] Request received | workspace_id={workspace_id} | filename={file.filename}")
+    t_start = time.perf_counter()
+    logger.info(f"[UPLOAD_INIT] Request received | workspace_id={workspace_id} | filename={payload.filename}")
 
     try:
         ws_uuid = uuid.UUID(workspace_id)
     except ValueError:
-        logger.warning(f"[CSV_UPLOAD] Invalid workspace ID format | workspace_id={workspace_id}")
-        raise HTTPException(status_code=400, detail="Invalid workspace ID format")
+        logger.warning(f"[UPLOAD_INIT] Invalid workspace ID format | workspace_id={workspace_id}")
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
 
+    t_ws = time.perf_counter()
     workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
+    logger.info(f"[TIME] workspace fetch: {time.perf_counter() - t_ws:.4f}s")
+
     if not workspace:
-        logger.warning(f"[CSV_UPLOAD] Workspace not found | workspace_id={workspace_id}")
+        logger.warning(f"[UPLOAD_INIT] Workspace not found | workspace_id={workspace_id}")
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     if workspace.owner_id != current_user.id:
         logger.warning(
-            f"[CSV_UPLOAD] Unauthorized upload attempt | workspace_id={workspace_id} | user_id={current_user.id}"
+            f"[UPLOAD_INIT] Unauthorized access | workspace_id={workspace_id} | user_id={current_user.id}"
         )
-        raise HTTPException(status_code=403, detail="Only the workspace owner can upload files")
+        raise HTTPException(status_code=403, detail="Not allowed")
 
-    enforce_upload_limit_or_raise(db, workspace.id)
+    MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
 
-    if MODE_LOCAL == "true":
-        MAX_FILE_SIZE = 50 * 1024 * 1024
-    else:
-        MAX_FILE_SIZE = 30 * 1024 * 1024
+    if payload.file_size is None:
+        logger.warning(f"[UPLOAD_INIT] Missing file size | workspace_id={workspace_id}")
+        raise HTTPException(status_code=400, detail="File size is required")
 
-    read_start = time.time()
+    if payload.file_size > MAX_FILE_SIZE:
+        logger.warning(
+            f"[UPLOAD_INIT] File too large | workspace_id={workspace_id} | size={payload.file_size}"
+        )
+        raise HTTPException(status_code=413, detail="File too large. Max 30MB allowed.")
 
-    try:
-        file_bytes = await file.read(MAX_FILE_SIZE + 1)
-
-        if len(file_bytes) > MAX_FILE_SIZE:
-            await file.close()
-            logger.warning(
-                f"[CSV_UPLOAD] File too large | workspace_id={workspace_id} | size={len(file_bytes)}"
-            )
-            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 30MB.")
-
-    except Exception as e:
-        logger.error(f"[CSV_UPLOAD] Failed to read uploaded file | error={str(e)}")
-        raise HTTPException(status_code=400, detail="Could not read uploaded file")
-
-    logger.info(
-        f"[CSV_UPLOAD] File received | size_bytes={len(file_bytes)} | read_time={time.time() - read_start:.2f}s"
-    )
+    t_db = time.perf_counter()
 
     new_upload = DataUpload(
         workspace_id=workspace.id,
-        file_path=file.filename,
-        file_content=None,
+        file_path=payload.filename,
         upload_type="manual",
-        file_size_bytes=len(file_bytes),
+        file_size_bytes=payload.file_size,
     )
 
     db.add(new_upload)
-    db.flush()
+    db.flush()  
+
+    logger.info(f"[TIME] upload record flush: {time.perf_counter() - t_db:.4f}s")
 
     storage_path = f"workspaces/{workspace.id}/uploads/{new_upload.id}.csv"
 
-    upload_start = time.time()
-
+    t_signed = time.perf_counter()
     try:
-        # This runs the blocking Supabase upload in a threadpool
-        await run_in_threadpool(upload_csv_bytes, storage_path, file_bytes)
-
+        signed = create_signed_upload_url(storage_path)
     except Exception as e:
-        traceback.print_exc()
-        logger.error(
-            f"[CSV_UPLOAD] Storage upload failed | upload_id={new_upload.id} | error={str(e)}"
-        )
+        logger.error(f"[UPLOAD_INIT] Failed to create signed URL | error={str(e)}", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to upload file to storage")
+        raise HTTPException(status_code=500, detail="Failed to generate upload URL")
+
+    logger.info(f"[TIME] signed URL generation: {time.perf_counter() - t_signed:.4f}s")
+
+    t_commit = time.perf_counter()
+    db.commit()
+    logger.info(f"[TIME] db.commit: {time.perf_counter() - t_commit:.4f}s")
 
     logger.info(
-        f"[CSV_UPLOAD] Storage upload completed | upload_id={new_upload.id} | duration={time.time() - upload_start:.2f}s"
+        f"[UPLOAD_INIT] Success | upload_id={new_upload.id} | total_time={time.perf_counter() - t_start:.4f}s"
     )
 
-    new_upload.storage_path = storage_path
-    new_upload.file_url = None
+    return {
+        "upload_id": str(new_upload.id),
+        "storage_path": storage_path,   # frontend can use, but backend will NOT trust it later
+        "upload_url": signed["signedURL"]
+    }
+    
+@router.post("/{workspace_id}/upload-csv/complete", response_model=TaskResponse)
+@limiter.limit("5/minute")
+async def complete_csv_upload(
+    request: Request,
+    workspace_id: str,
+    background_tasks: BackgroundTasks,
+    payload: CompleteUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    t_start = time.perf_counter()
+    logger.info(f"[UPLOAD_COMPLETE] Request received | workspace_id={workspace_id} | upload_id={payload.upload_id}")
+
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        logger.warning(f"[UPLOAD_COMPLETE] Invalid workspace ID | workspace_id={workspace_id}")
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
+    t_ws = time.perf_counter()
+    workspace = db.query(Workspace).filter(Workspace.id == ws_uuid).first()
+    logger.info(f"[TIME] workspace fetch: {time.perf_counter() - t_ws:.4f}s")
+
+    if not workspace:
+        logger.warning(f"[UPLOAD_COMPLETE] Workspace not found | workspace_id={workspace_id}")
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.owner_id != current_user.id:
+        logger.warning(
+            f"[UPLOAD_COMPLETE] Unauthorized access | workspace_id={workspace_id} | user_id={current_user.id}"
+        )
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    t_upload = time.perf_counter()
+    upload = db.query(DataUpload).filter(DataUpload.id == payload.upload_id).first()
+    logger.info(f"[TIME] upload fetch: {time.perf_counter() - t_upload:.4f}s")
+
+    if not upload:
+        logger.warning(f"[UPLOAD_COMPLETE] Upload not found | upload_id={payload.upload_id}")
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    if upload.workspace_id != workspace.id:
+        logger.error(
+            f"[SECURITY] Upload hijack attempt | upload_id={upload.id} | workspace_id={workspace.id}"
+        )
+        raise HTTPException(status_code=403, detail="Invalid upload for this workspace")
+
+    storage_path = f"workspaces/{workspace.id}/uploads/{upload.id}.csv"
+    upload.storage_path = storage_path
+    upload.file_url = None
 
     workspace.data_source = "CSV"
     workspace.is_polling_active = False
 
+    t_commit = time.perf_counter()
     db.commit()
-    db.refresh(new_upload)
+    db.refresh(upload)
+    logger.info(f"[TIME] db.commit: {time.perf_counter() - t_commit:.4f}s")
 
-    logger.info(
-        f"[CSV_UPLOAD] Upload record committed | upload_id={new_upload.id} | workspace_id={workspace.id}"
-    )
-
-    task_id = str(new_upload.id)
+    task_id = str(upload.id)
 
     if APP_MODE == "production":
         loop = asyncio.get_event_loop()
         background_tasks.add_task(process_csv_task, task_id, loop)
-        logger.info(f"[CSV_UPLOAD] Background task scheduled | upload_id={task_id}")
+        logger.info(f"[UPLOAD_COMPLETE] Background task scheduled | upload_id={task_id}")
     else:
         if celery_app:
             task = celery_app.send_task("process_csv_task", args=[task_id])
             task_id = task.id
-            logger.info(f"[CSV_UPLOAD] Celery task dispatched | celery_task_id={task_id}")
+            logger.info(f"[UPLOAD_COMPLETE] Celery task dispatched | celery_task_id={task_id}")
 
     logger.info(
-        f"[CSV_UPLOAD] Pipeline finished | upload_id={new_upload.id} | total_time={time.time() - start_time:.2f}s"
+        f"[UPLOAD_COMPLETE] Success | upload_id={upload.id} | total_time={time.perf_counter() - t_start:.4f}s"
     )
 
     return {
