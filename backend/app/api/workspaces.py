@@ -701,7 +701,7 @@ async def upload_csv_for_workspace(
     if MODE_LOCAL == "true":
         MAX_FILE_SIZE = 50 * 1024 * 1024
     else:
-        MAX_FILE_SIZE = 15 * 1024 * 1024
+        MAX_FILE_SIZE = 30 * 1024 * 1024
 
     read_start = time.time()
 
@@ -713,7 +713,7 @@ async def upload_csv_for_workspace(
             logger.warning(
                 f"[CSV_UPLOAD] File too large | workspace_id={workspace_id} | size={len(file_bytes)}"
             )
-            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 15MB.")
+            raise HTTPException(status_code=413, detail="File too large. Maximum limit is 30MB.")
 
     except Exception as e:
         logger.error(f"[CSV_UPLOAD] Failed to read uploaded file | error={str(e)}")
