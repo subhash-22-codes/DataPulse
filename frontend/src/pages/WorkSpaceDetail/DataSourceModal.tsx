@@ -172,30 +172,52 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({ isOpen, setIsO
     }
   };
   
-
 const handleCsvUpload = async () => {
   if (!selectedFile) return toast.error("Please select a CSV file to upload.");
 
-  const MAX_FILE_SIZE = 30 * 1024 * 1024; //30MB in bytes
+  const MAX_FILE_SIZE = 30 * 1024 * 1024;
   if (selectedFile.size > MAX_FILE_SIZE) {
     return toast.error("File is too large! Maximum limit is 30MB.", {
       style: { fontSize: "13px", background: "#991b1b", color: "#fff" },
     });
   }
 
+  if (!selectedFile.name.endsWith(".csv")) {
+    return toast.error("Only CSV files are allowed.");
+  }
+
   setIsSaving(true);
 
-  const formData = new FormData();
-  formData.append("file", selectedFile);
-
   try {
-    await api.post(`/workspaces/${workspace.id}/upload-csv`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+    // ✅ STEP 1: INIT
+    const initRes = await api.post(
+      `/workspaces/${workspace.id}/upload-csv/init`,
+      {
+        filename: selectedFile.name,
+        file_size: selectedFile.size
+      }
+    );
+
+    const { upload_url, upload_id, storage_path } = initRes.data;
+
+    // ✅ STEP 2: DIRECT UPLOAD TO SUPABASE
+    await fetch(upload_url, {
+      method: "PUT",
+      body: selectedFile,
+      headers: {
+        "Content-Type": "text/csv",
+      },
+    });
+
+    // ✅ STEP 3: COMPLETE (trigger backend processing)
+    await api.post(`/workspaces/${workspace.id}/upload-csv/complete`, {
+      upload_id,
+      storage_path,
     });
 
     onUploadStart();
 
-    const res = await api.put<Workspace>(`/workspaces/${workspace.id}`, {
+    const res = await api.put(`/workspaces/${workspace.id}`, {
       data_source: "CSV",
       is_polling_active: false,
     });
@@ -210,7 +232,6 @@ const handleCsvUpload = async () => {
   } catch (err) {
     console.error(err);
 
-    // ✅ Extract real backend message (FastAPI gives { detail: "..." })
     let msg = "File upload failed.";
 
     if (axios.isAxiosError(err)) {
@@ -219,7 +240,6 @@ const handleCsvUpload = async () => {
       if (typeof detail === "string") {
         msg = detail;
       } else if (Array.isArray(detail) && detail[0]?.msg) {
-        // validation errors sometimes come like this
         msg = detail[0].msg;
       } else if (err.response?.status === 413) {
         msg = "File too large. Max 30MB.";
@@ -233,7 +253,6 @@ const handleCsvUpload = async () => {
     setIsSaving(false);
   }
 };
-
 
   const dataSourceOptions = [
     { value: "CSV", label: "CSV Upload", description: "Static file ingestion", icon: FileSpreadsheet },
