@@ -1181,7 +1181,7 @@ def _run_email_in_background(recipients, email_context):
 
 def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"[WORKER] Starting REAL processing for upload ID: {upload_id}...")
-    start_time = time.time()
+    start_time = time.perf_counter()
     db: Session = SessionLocal()
 
     workspace_id_str = None
@@ -1208,10 +1208,11 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         # 1) LOAD CSV BYTES
         
         csv_bytes: bytes | None = None
-
+        t_download = time.perf_counter()
         if current_upload.storage_path:
             try:
                 csv_bytes = download_file_bytes(current_upload.storage_path)
+                logger.info(f"[TIME] storage download: {time.perf_counter() - t_download:.2f}s")
             except Exception as e:
                 logger.error(f"[WORKER] Failed to download CSV from storage: {e}", exc_info=True)
 
@@ -1246,9 +1247,42 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         is_truncated = False
 
         try:
-            df = pd.read_csv(BytesIO(csv_bytes), nrows=MAX_ROWS + 1)
+            t_parse_total = time.perf_counter()
+
+            t0 = time.perf_counter()
+            chunks = pd.read_csv(BytesIO(csv_bytes), chunksize=50000)
+            logger.info(f"[TIME] read_csv init (lazy): {time.perf_counter() - t0:.2f}s")
+
+            dfs = []
+            total_rows = 0
+
+            t_chunks = time.perf_counter()
+
+            for chunk in chunks:
+                total_rows += len(chunk)
+
+                for col in chunk.columns:
+                    if chunk[col].dtype == "object":
+                        chunk[col] = pd.to_numeric(chunk[col], errors="ignore")
+
+                if total_rows > MAX_ROWS:
+                    is_truncated = True
+                    remaining = MAX_ROWS - (total_rows - len(chunk))
+                    chunk = chunk.head(remaining)
+                    dfs.append(chunk)
+                    break
+
+                dfs.append(chunk)
+
+            logger.info(f"[TIME] chunk iteration: {time.perf_counter()- t_chunks:.2f}s")
+
+            t_concat = time.perf_counter()
+            df = pd.concat(dfs, ignore_index=True)
+            logger.info(f"[TIME] concat: {time.perf_counter() - t_concat:.2f}s")
+
             logger.info(f"[METRIC] Rows processed: {len(df)}")
             logger.info(f"[METRIC] Columns detected: {len(df.columns)}")
+
             del csv_bytes
 
             if len(df) > MAX_ROWS:
@@ -1256,13 +1290,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 logger.warning(f"[WORKER] Truncating file {upload_id} to {MAX_ROWS} rows for RAM safety.")
                 df = df.head(MAX_ROWS)
 
-            # safer conversion 
-            for col in df.columns:
-                try:
-                    df[col] = pd.to_numeric(df[col])
-                except Exception:
-                    # keep original as-is (string/object/etc)
-                    pass
+            logger.info(f"[TIME] TOTAL parse block: {time.perf_counter() - t_parse_total:.2f}s")
 
         except Exception as e:
             logger.error(f"[WORKER] Failed to parse CSV: {e}", exc_info=True)
@@ -1340,27 +1368,48 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         num_df = df.select_dtypes(include="number")
 
         if num_df.shape[1] > 0:
-            stats_df = num_df.describe()
+            if len(num_df) > 10000:
+                sample_df = num_df.sample(n=10000)
+            else:
+                sample_df = num_df
+
+            t2 = time.perf_counter()
+            stats_df = sample_df.describe()
             raw_summary = stats_df.to_dict()
+            logger.info(f"[WORKER] Statistical summary computed in {time.perf_counter() - t2:.2f} seconds.")
+            
             summary_stats = clean_nan(raw_summary)
         else:
             summary_stats = {}
 
-        quality_report, insights = analyze_dataframe_quality(df)
+        if len(df) > 50000:
+            quality_df = df.sample(n=50000)
+        else:
+            quality_df = df
+
+        t3 = time.perf_counter()
+        quality_report, insights = analyze_dataframe_quality(quality_df)
+        logger.info(f"[WORKER] Data quality analysis completed in {time.perf_counter() - t3:.2f} seconds.")
         
+        metrics = []
+
         for col, missing_pct in quality_report["missing_percent_by_column"].items():
             unique_pct = quality_report["unique_percent_by_column"].get(col, 0.0)
 
-            col_metric = ColumnDailyMetrics(
-                workspace_id=current_upload.workspace_id,
-                upload_id=current_upload.id,
-                column_name=col,
-                metric_date=date.today(),
-                missing_percent=float(missing_pct),
-                unique_percent=float(unique_pct),
+            metrics.append(
+                ColumnDailyMetrics(
+                    workspace_id=current_upload.workspace_id,
+                    upload_id=current_upload.id,
+                    column_name=col,
+                    metric_date=date.today(),
+                    missing_percent=float(missing_pct),
+                    unique_percent=float(unique_pct),
+                )
             )
-
-            db.add(col_metric)
+        
+        t4 = time.perf_counter()
+        db.bulk_save_objects(metrics)
+        logger.info(f"[WORKER] Quality metrics saved in {time.perf_counter() - t4:.2f} seconds.")
 
         analysis_results = {
             "row_count": new_row_count,
@@ -1407,8 +1456,9 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
         del num_df
 
         # 5) NOTIFICATIONS + EMAIL + ALERT RULES
-
+        t_ws = time.perf_counter()
         workspace = db.query(Workspace).filter(Workspace.id == current_upload.workspace_id).first()
+        logger.info(f"[WORKER] Workspace query completed in {time.perf_counter() - t_ws:.2f} seconds.")
         if workspace:
             if schema_has_changed or row_count_has_changed or col_count_has_changed:
 
@@ -1487,6 +1537,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     "schema_removed": schema_changes_dict.get("removed") if schema_has_changed else None,
                 }
 
+                t_notify = time.perf_counter()
                 for user in users_to_notify:
                     new_notification = Notification(
                         user_id=user.id,
@@ -1500,6 +1551,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                     )
                     db.add(new_notification)
 
+                logger.info(f"[WORKER] Created {len(users_to_notify)} notifications in {time.perf_counter() - t_notify:.2f} seconds.")
                 new_notifications_created = True
                 logger.info(f"[WORKER] Created {len(users_to_notify)} notifications with priority={priority}.")
 
@@ -1542,20 +1594,25 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None):
                 ]
 
                 logger.info("[WORKER] Scheduling detailed alert email (non-blocking)...")
-
+                t_email_prep = time.perf_counter()
                 if recipients:
                     threading.Thread(
                         target=_run_email_in_background,
                         args=(recipients, email_context),
                         daemon=True,
                     ).start()
+                logger.info(f"[WORKER] Email thread started in {time.perf_counter() - t_email_prep:.2f} seconds.")
 
             # Check Alerts 
+            t_alerts = time.perf_counter()
             check_alert_rules(db, workspace, current_upload, analysis_results, loop)
-        end_time = time.time()
+            logger.info(f"[WORKER] Alert rules evaluated in {time.perf_counter() - t_alerts:.2f} seconds.")
+        end_time = time.perf_counter()
         logger.info(f"[METRIC] Processing time: {end_time - start_time:.2f} seconds")    
 
+        t_commit = time.perf_counter()
         db.commit()
+        logger.info(f"[TIME] db.commit: {time.perf_counter() - t_commit:.2f}s")
 
         logger.info(f"[WORKER] Success. Upload {upload_id} committed.")
 
