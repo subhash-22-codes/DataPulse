@@ -1565,7 +1565,7 @@ def process_csv_task(upload_id: str, loop: asyncio.AbstractEventLoop = None, df:
                 email_context = {
                     "workspace_name": workspace.name,
                     "upload_type": current_upload.upload_type,
-                    "new_file_name": current_upload.storage_path,
+                    "new_file_name": current_upload.file_path,
                     "old_file_name": previous_upload.file_path if previous_upload else "N/A",
                     "upload_time_str": convert_utc_to_ist_str(current_upload.uploaded_at),
                     "owner_info": {"name": workspace.owner.name, "email": workspace.owner.email},
