@@ -1,382 +1,355 @@
+<div align="center">
+
+<img src="https://img.shields.io/badge/DataPulse-Live-22c55e?style=for-the-badge&logoColor=white" />
+<img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+<img src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+<img src="https://img.shields.io/badge/PostgreSQL-Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
+<img src="https://img.shields.io/badge/React-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
+<img src="https://img.shields.io/badge/Redis-Celery-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+<img src="https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
+
+<br /><br />
+
 # DataPulse
 
-**Near Real-Time Data & Schema Change Monitoring System**
+### Real-Time Data & Schema Monitoring Platform
 
-DataPulse is a backend-heavy data monitoring platform designed to track **schema evolution, structural changes, and metric shifts** between dataset versions and live data sources.
+**DataPulse watches your data sources so you don't have to.**  
+Connect an API, a database, or upload a CSV — and get notified the moment something changes, breaks, or drifts.
 
-Unlike static dashboards, DataPulse treats **data change as a first-class problem** and focuses on detecting *what changed, when it changed, and why it matters*.
+<br />
 
----
+[**Live Platform →**](https://data-pulse-eight.vercel.app) &nbsp;&nbsp;·&nbsp;&nbsp; [**Report a Bug**](https://github.com/subhash-22-codes/datapulse/issues) &nbsp;&nbsp;·&nbsp;&nbsp; [**Request a Feature**](https://github.com/subhash-22-codes/datapulse/issues)
 
-## Why DataPulse Exists
-
-Most academic and hobby data projects assume:
-
-* schemas are stable
-* datasets are static
-* uploads are one-time events
-
-In real systems, none of that is true.
-
-DataPulse is built around the assumption that:
-
-* schemas evolve
-* metrics drift
-* data sources change silently
-* teams need early visibility into those changes
-
-This project was built to explore **how real data systems behave as data changes across versions**, not just how to visualize a dataset once.
+</div>
 
 ---
 
-## Core Capabilities
+## The Problem
 
-* Monitor recurring datasets via manual CSV uploads (daily / monthly) with version-to-version comparison
-* Securely connect to **external PostgreSQL and MySQL databases** (read-only)
-* Detect:
+Data breaks silently. All the time.
 
-  * schema drift
-  * structural changes
-  * metric shifts
-* Ingest data from:
+A column gets renamed upstream and your pipeline starts failing with no error message.  
+An API starts returning empty arrays and nobody notices for three days.  
+A nightly job drops 40% of records and your dashboard shows nonsense on Monday morning.
 
-  * file uploads
-  * open APIs
-  * secured APIs with authorization headers
-* Asynchronous processing so UI never blocks
-* Configurable alerts with email notifications
-* Strong authentication and account security model
+Most teams find out when a user complains — not when it happens.
+
+**DataPulse catches it the moment it happens.**
 
 ---
 
-## High-Level Architecture
+## What DataPulse Does
+
+Connect DataPulse to any REST API or PostgreSQL database. Set a polling schedule. Walk away.
+
+Every time new data arrives, DataPulse automatically:
+
+- ✅ Detects **schema drift** — columns added, removed, or renamed
+- ✅ Tracks **row count changes** — drops, spikes, and trends over time  
+- ✅ Runs **statistical analysis** — mean, median, distribution per column
+- ✅ Measures **data quality** — missing values, duplicates, outliers, constant columns
+- ✅ Fires **threshold alerts** — notify your team the moment a metric crosses a limit you set
+- ✅ Raises **incidents** — automatic severity classification for row drops, schema breaks, and quality failures
+- ✅ Broadcasts **real-time notifications** — in-app via WebSocket and email to every workspace member
+
+No manual checks. No scheduled reports. No Monday morning surprises.
+
+---
+
+## Architecture
 
 ```
-┌──────────────┐
-│   Frontend   │  React + TypeScript
-└──────┬───────┘
-       │
-       │ Authenticated API calls
-       ▼
-┌──────────────┐
-│  FastAPI API │
-│ (Auth + Core)│
-└──────┬───────┘
-       │
-       │ Background execution
-       ▼
-┌──────────────┐
-│  Background  │
-│  Execution   │
-│ (Env-Aware)  │
-└──────┬───────┘
-       │
-       │ Schema / data comparison
-       ▼
-┌──────────────┐
-│ PostgreSQL   │
-│ (Supabase)   │
-└──────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                        Frontend                          │
+│              React + TypeScript + Recharts               │
+│         Auth-aware routing · Real-time WebSocket UI      │
+└───────────────────────────┬─────────────────────────────┘
+                            │  HTTPS + WebSocket
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                      FastAPI Layer                       │
+│   Auth · Workspaces · Uploads · Alerts · Notifications  │
+│        CSRF Middleware · Rate Limiting · CORS            │
+└──────────┬──────────────────────────┬───────────────────┘
+           │                          │
+           │ Background Jobs          │ WebSocket Broadcast
+           ▼                          ▼
+┌─────────────────────┐   ┌──────────────────────────────┐
+│  Background Engine  │   │      Connection Manager       │
+│                     │   │  Workspace-scoped channels    │
+│  Production:        │   │  User-scoped channels         │
+│  APScheduler +      │   │  Real-time job status push    │
+│  ThreadPool         │   └──────────────────────────────┘
+│                     │
+│  Development:       │
+│  Celery + Redis     │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Data Processing Layer                  │
+│                                                          │
+│  CSV Ingestion (chunked · OOM-safe · 500k row cap)       │
+│  Statistical Analysis (describe · per-column stats)      │
+│  Quality Engine (missing · duplicates · outliers · IQR)  │
+│  Schema Diff (added · removed · type changes)            │
+│  Incident Engine (row drop · schema break · quality)     │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    PostgreSQL (Supabase)                  │
+│   Users · Workspaces · Uploads · Alerts · Incidents      │
+│   Notifications · Metrics · Login History · Tokens       │
+└─────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Supabase Storage                        │
+│         Private object storage for CSV uploads           │
+│              Signed URL access · Per-workspace           │
+└─────────────────────────────────────────────────────────┘
 ```
 
-The API layer is kept **thin and responsive**.
-All heavy work is pushed into **background execution**.
+---
+
+## Core Features
+
+### Data Ingestion
+
+| Source | How It Works |
+|---|---|
+| **CSV Upload** | Each upload is a versioned snapshot — compared against the previous version automatically |
+| **REST API** | Polls any HTTP/HTTPS endpoint on a schedule — open or secured with auth headers |
+| **PostgreSQL** | Connects read-only to your database, runs your SELECT query, ingests the result as a snapshot |
+
+### Monitoring & Detection
+
+| What | How |
+|---|---|
+| Schema drift | Column additions and removals detected on every ingestion cycle |
+| Row count change | Absolute and percentage delta tracked across versions |
+| Statistical shift | Mean, median, std, min, max computed per column per upload |
+| Data quality | Missing %, duplicate rows, IQR outliers, constant columns, column health score |
+| Incidents | Automatic severity classification — low / medium / high — with open/resolve lifecycle |
+
+### Alerting
+
+- Define rules per workspace: column + metric + condition + threshold
+- Conditions: greater than, less than, equals, not equals
+- Alerts fire only when conditions are genuinely breached — not on every poll
+- Idempotency-safe: no duplicate alerts on worker retry
+- Batch email delivery: one email per event, not one per rule
+
+### Authentication & Security
+
+- Email + OTP registration with bcrypt-hashed OTP storage
+- JWT access tokens (15-minute expiry) + rotating refresh tokens
+- Session binding via device fingerprinting (user-agent hash)
+- Token version invalidation for global logout across all devices
+- Google and GitHub OAuth 2.0 via Authlib
+- HttpOnly cookies with SameSite=None for cross-origin Vercel-Render deployment
+- Login history tracking per user
+- CSRF protection: Origin validation + X-CSRF-Token double submit
+- Rate limiting on all auth endpoints via SlowAPI
+- Field-level Fernet encryption for database passwords and API secrets
+
+### Workspace Management
+
+- Up to 3 active workspaces per user
+- Soft delete with trash and restore (30-day recovery window)
+- OTP-confirmed deletion to prevent accidental data loss
+- Team collaboration — add members, per-user notification preferences
+- Workspace-scoped incident tracking and alert rules
 
 ---
 
-## Data Sources Supported
-
-DataPulse supports multiple data ingestion paths, all designed around
-versioned comparison and change detection rather than one-time analysis.
-
-### 1. CSV Uploads
-
-- Intended for recurring datasets (daily / weekly / monthly)
-- Each upload is treated as a new immutable version
-- Compared against the immediately previous version
-- Used for schema, structural, and metric change detection
-
-### 2. External Database Connections
-
-- PostgreSQL
-- MySQL
-
-Connections are:
-- read-only
-- isolated per workspace
-- credential-safe
-
-Query results are ingested as snapshots rather than live connections.
-
-### 3. API-Based Sources
-
-- Open APIs
-- Secured APIs using headers (e.g. Authorization, API keys)
-- Secrets are encrypted at rest
-- Responses are ingested as bounded snapshots
-
----
-
-## External Database Connectivity (Deep Dive)
-
-External database connectivity is a core feature of DataPulse and is designed
-for **safe, read-only monitoring**, not live querying or mutation.
-
-### Design Goals
-
-- Never mutate external source databases
-- Avoid storing or exposing credentials in plaintext
-- Fail safely without leaving polling or jobs in an inconsistent state
-- Reduce SQL injection risk through strict query validation
-- Isolate ingestion from source systems
-
-### How It Works
-
-- Users provide external database connection details
-- Credentials are encrypted at rest using Fernet (AES-based encryption)
-- Encryption keys are supplied via environment variables
-- Connections use read-only database users
-- Only validated single SELECT queries are allowed
-- Query results are fetched as bounded snapshots
-- Snapshots are converted to CSV and stored in private object storage
-- Schema metadata is derived from the snapshot, not the live database
-
-### Tracked Changes
-
-Across successive snapshots, DataPulse detects:
-- column additions and removals
-- column type changes
-- row count differences
-- structural shifts derived from snapshot comparison
-
-External databases are never modified, and no long-lived connections
-or writable access are maintained.
-
----
-
-## Authentication & Security Model
-
-Authentication is treated as a **core system**, not a bolt-on.
-
-### Supported Methods
-
-* Email/password login
-* OAuth (Google, GitHub)
-
-### Key Security Features
-
-* JWT-based authentication (Access + Refresh tokens)
-* HTTP-only cookies for sensitive tokens
-* Secure account linking across auth methods
-* Token versioning for **global logout across devices**
-* MFA for sensitive operations (e.g., account deletion)
-* GDPR-style account deletion:
-  * data export
-  * full account scrubbing
-* Additional platform safeguards include request rate limiting and strict CORS controls
-  to protect public APIs and prevent unauthorized cross-origin access.
-
----
-
-## Background Processing & Async Execution
-
-DataPulse avoids blocking user requests by offloading all heavy work
-to background execution outside the request lifecycle.
-
-### Local / Controlled Environments
-
-* Celery + Redis
-* Worker-based execution with isolated jobs
-* Failure in one job does not affect others
-
-### Cloud-Constrained Environments
-
-* Execution adapts using:
-  * a process-level scheduler (APScheduler) backed by database state
-  * bounded in-process execution (ThreadPool)
-* Job execution is state-gated and failure-aware
-* Same functional guarantees, different runtime model
-
-This dual approach allows the system to remain usable
-even on limited free-tier infrastructure.
-
-### Performance & Safety Considerations
-
-To avoid resource exhaustion and runaway jobs, DataPulse enforces
-explicit limits on dataset size and processing scope.
-Large inputs are truncated safely with clear UI feedback,
-and polling is automatically disabled on repeated failures.
-
----
-
-## Change Detection Logic
-
-DataPulse compares incoming data against historical versions to detect:
-
-### Schema-Level Changes
-
-* New / removed tables
-* New / removed columns
-* Column type changes
-
-### Structural Changes
-
-* Row count deltas
-* Null density shifts
-* Presence / absence of key fields
-
-### Metric Shifts
-
-* Percentage-based changes
-* Threshold-based alerts
-* Trend comparison across versions
-
-The goal is **signal**, not noise.
-
----
-
-## Alerts & Notifications
-
-* Users define alert rules per dataset
-* Alerts trigger when defined conditions are met
-* Notifications are delivered via email (Brevo)
-* Alerting logic is designed to minimize false positives
-
----
-
-## Frontend & UX
-
-* Built with **React + TypeScript**
-* Auth-aware routing and protected views
-* Processing states are clearly communicated
-* Data visualizations built using **Recharts**
-* Focus is on **understanding change**, not decorative charts
-* Fully responsive UI
-
----
-
-## Technology Stack
+## Tech Stack
 
 ### Backend
-
-* Python – core language for data processing and job orchestration
-* FastAPI – thin API layer with strict request validation and auth
-* SQLAlchemy – ORM and schema inspection for versioned comparisons
-* Celery – worker-based execution for local / controlled environments
-* Redis – broker and transient state store for Celery jobs
+| Layer | Technology |
+|---|---|
+| API Framework | FastAPI |
+| ORM | SQLAlchemy |
+| Auth | PyJWT · Passlib (bcrypt) · Authlib |
+| Background Jobs | Celery + Redis (dev) · APScheduler + ThreadPool (prod) |
+| Data Processing | Pandas · NumPy |
+| Email | Brevo (transactional) |
+| Security | SlowAPI · Fernet · CSRF Middleware |
 
 ### Frontend
-
-* React – authenticated UI and async job state handling
-* TypeScript – strict API contracts and state safety
-* Recharts – focused visualizations for change deltas and trends
-
-### Database & Storage
-
-* PostgreSQL (Supabase) – source of truth for users, datasets, and job state
-* Encrypted fields – credential and secret storage at rest
+| Layer | Technology |
+|---|---|
+| Framework | React 18 + TypeScript |
+| Build Tool | Vite |
+| Styling | Tailwind CSS |
+| Charts | Recharts |
+| Real-time | Native WebSocket |
 
 ### Infrastructure
-
-* Docker – local orchestration of API, workers, and Redis
-* APScheduler – process-level scheduling in cloud environments
-* Vercel – frontend hosting
-* Environment-based configuration
-
----
-
-## Current Status
-
-DataPulse is **live, functional, and under active development**.
-
-Planned improvements:
-
-* Multi-tenant workspaces
-* Expanded role-based access control (beyond read-only team members)
-* More granular alert rules
-* Additional data sources
-* Performance optimizations for large datasets
-
-
-## What This Project Demonstrates
-
-* Secure authentication design
-* Background job orchestration
-* Schema-aware data comparison
-* Real-world tradeoffs under infra limits
-* End-to-end system thinking
-* Clean separation of concerns
+| Layer | Technology |
+|---|---|
+| Database | PostgreSQL via Supabase |
+| File Storage | Supabase Storage (private bucket) |
+| Frontend Hosting | Vercel |
+| Backend Hosting | Render |
+| Local Orchestration | Docker + Docker Compose |
+| Scheduling | APScheduler (prod) · Celery Beat (dev) |
 
 ---
 
-## Live Demo
+## Security Design
 
-- **Application:** https://data-pulse-eight.vercel.app  
-  (Frontend served via Vercel, backed by deployed APIs)
+DataPulse treats security as a core system — not an afterthought.
+
+**SQL Injection Prevention (5 independent layers)**
+```
+1. SELECT-only enforcement       — query must start with SELECT after comment stripping
+2. Multi-statement blocking      — semicolons inside the query are rejected
+3. Keyword blacklisting          — DROP, DELETE, INSERT, ALTER, VACUUM, and others blocked
+4. Comment stripping             — inline and block comments removed before validation
+5. Postgres-level sandboxing     — statement_timeout=30s · work_mem=4MB enforced at connection level
+```
+
+**Why 5 layers?**  
+Bypassing one control must not compromise the rest. Each layer catches a different attack vector independently.
+
+**Timing Attack Mitigation**
+```python
+# Login always runs bcrypt.verify — even when the user does not exist
+# Response time cannot leak whether an email is registered
+DUMMY_HASH = bcrypt.hash("dummy-password-for-timing-attack")
+```
+
+**Refresh Token Rotation**
+- Every token use issues a new token and revokes the old one
+- Reuse of a revoked token triggers global session invalidation
+- Tokens are bound to session ID and device fingerprint
 
 ---
 
-## Authors
+## Data Processing Pipeline
 
-Frontend development and UI/UX were shared across the project.
+```
+CSV / API Response / DB Query Result
+           │
+           ▼
+   Chunked ingestion (50,000 rows/chunk)
+   OOM protection (500k row cap · truncation with UI signal)
+   Type inference per column
+           │
+           ▼
+   Statistical analysis (describe · per-column)
+   Sampled for performance (10k rows for stats · 50k for quality)
+           │
+           ▼
+   Quality analysis
+   ├── Missing value % per column
+   ├── Duplicate row detection
+   ├── IQR outlier detection per numeric column
+   ├── Constant column detection
+   └── Column health score (0–100)
+           │
+           ▼
+   Schema comparison against previous upload
+   ├── Added columns
+   ├── Removed columns
+   └── Type changes
+           │
+           ▼
+   Incident engine
+   ├── Row drop ≥ 20% → severity by drop %
+   ├── Schema change > 3 columns → medium
+   ├── Missing % ≥ 50 on any column → medium
+   └── All-zero numeric column → low
+           │
+           ▼
+   Alert rule evaluation
+   Notifications → WebSocket + Email
+```
 
-**Subhash Yaganti**  
-Project creator and system architect  
-Backend systems, authentication/security, data modeling, background processing, deployment  
-GitHub: https://github.com/subhash-22-codes
-LinkedIn: https://linkedin.com/in/subhash-yaganti-a8b3b626a
-Email: subashyagantisubbu@gmail.com
+---
 
-**Siri Mahalaxmi Vemula**  
-Backend development, database design, API integration  
-Built **DataPulse AI** help bot for chat-based Q&A (Gemini model integration)  
-GitHub: https://github.com/armycodes
-LinkedIn: https://linkedin.com/in/vemula-siri-mahalaxmi-b4b624319 
-Email: sirimahalaxmivemula@gmail.com
+## Project Status
+
+| Area | Status |
+|---|---|
+| Core data pipeline | ✅ Live |
+| Authentication system | ✅ Live |
+| Real-time WebSocket notifications | ✅ Live |
+| Alert engine | ✅ Live |
+| Incident tracking | ✅ Live |
+| Data quality engine | ✅ Live |
+| Workspace management | ✅ Live |
+| AI-powered chat assistant | 🔄 In Progress |
+| Automated test suite | 🔄 Planned |
+| Database migrations (Alembic) | 🔄 Planned |
+| Custom domain | 🔄 Planned |
+| Expanded data source support | 🔄 Planned |
+
+---
+
+## Team
+
+DataPulse was designed and built collaboratively.
+
+**Subhash Yaganti** — Project Creator & System Architect  
+Backend systems · Authentication & security · Data pipeline · Background processing · Deployment  
+[GitHub](https://github.com/subhash-22-codes) · [LinkedIn](https://linkedin.com/in/subhash-yaganti-a8b3b626a)
+
+**Siri Mahalaxmi Vemula** — Backend Engineer  
+API development · Database design · Auth integration · AI chat assistant (Gemini)  
+[GitHub](https://github.com/armycodes) · [LinkedIn](https://linkedin.com/in/vemula-siri-mahalaxmi-b4b624319)
+
+*Additional contributors across frontend, UI/UX, data processing, and infrastructure.*  
+*Full contribution history available in the repository commit log.*
 
 ---
 
 ## Repository Notice
 
-This repository was initially created under Subhash Yaganti’s GitHub account and later forked for collaboration purposes.
-
-Forking does not indicate sole ownership.  
-The project was designed, developed, and documented collaboratively by both authors.
-
----
-
-## Final Note
-
-DataPulse is intentionally built as a **system**, not a showcase app.
-
-It assumes data will change, failures will happen, and infrastructure will be imperfect — and it is designed accordingly.
+This repository was initially created under Subhash Yaganti's GitHub account.  
+The project was designed, built, and documented collaboratively by the core team.  
+Commit history reflects individual contribution areas across both authors and additional contributors.
 
 ---
 
 ## Development Notes
 
-Modern AI tools were used selectively as productivity aids
-(for brainstorming, validation, and documentation).
-
-All system architecture, core logic, security design,
-and implementation decisions were independently designed, 
-implemented, and reviewed by the project contributors.
+AI tools were used selectively as productivity aids — for brainstorming, validation, and documentation review.  
+All system architecture, security design, core logic, and implementation decisions were independently  
+designed, implemented, and reviewed by the project contributors.
 
 ---
 
-## License & Usage
+## License
 
-© 2026 Subhash Yaganti, Siri Mahalaxmi Vemula. All rights reserved.
+**Source Available — Restricted Use**
 
-This repository is shared publicly for **learning, evaluation, and portfolio review**.
+© 2025–2026 Subhash Yaganti, Siri Mahalaxmi Vemula. All rights reserved.
 
-The code and system design may not be reused, redistributed, or presented
-as original work for academic submissions, personal portfolios, or
-commercial purposes without explicit permission from the authors.
+This repository is made publicly visible for **learning, evaluation, and portfolio review only.**
 
-For permission requests or collaboration inquiries, please contact
-**Subhash Yaganti** or **Siri Mahalaxmi Vemula**.
+You may:
+- View and read the source code
+- Reference the architecture and design for educational purposes
+- Fork the repository for private evaluation
+
+You may **not**:
+- Redistribute, sublicense, or publish this code or substantial portions of it
+- Use this code or system design in your own projects, products, or portfolios without explicit written permission
+- Present any part of this work as your own original work in academic or professional contexts
+
+For permission requests or collaboration enquiries, contact **Subhash Yaganti** — subashyagantisubbu@gmail.com
 
 ---
 
+<div align="center">
+
+Built with intention. Designed for real systems.
+
+**[Live Platform](https://data-pulse-eight.vercel.app)**
+
+</div>
 
