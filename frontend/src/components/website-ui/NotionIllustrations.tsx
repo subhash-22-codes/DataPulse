@@ -15,7 +15,7 @@ export const HeroIllustration: React.FC<HeroIllustrationProps> = ({ className = 
       style={{ backgroundColor: '#FAFAFA', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
     >
       <defs>
-        {/* Soft shadow for specific callouts only */}
+        {/* Soft shadow for specific callouts only okay*/}
         <filter id="shadow-sm" x="-10%" y="-10%" width="120%" height="120%">
           <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#000000" floodOpacity="0.05" />
         </filter>
