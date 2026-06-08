@@ -69,7 +69,9 @@ function useLiveInView({ threshold = 0.1 } = {}) {
   return [ref, isInView] as const;
 }
 
-// ─── BATTERY SAVER WRAPPER ────────────────────────────────────────────────────
+// ─── BATTERY SAVER WRAPPER ──────────────────────────────────────────────────── YES
+
+
 const BatterySaverWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [ref, isVisible] = useLiveInView();
   return (

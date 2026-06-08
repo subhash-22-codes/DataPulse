@@ -42,7 +42,7 @@ export const HeroIllustration: React.FC<HeroIllustrationProps> = ({ className = 
         <text x="36" y="17" fontSize="16" fontWeight="600" fill="#111827">DataPulse</text>
       </g>
 
-      {/* Navigation */}
+      {/* Navigation bar */}
       <g transform="translate(16, 88)">
         {/* Active Item */}
         <rect x="0" y="0" width="208" height="36" rx="6" fill="#EFF6FF" />
