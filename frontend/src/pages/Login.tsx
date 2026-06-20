@@ -248,12 +248,12 @@ const Login: React.FC = () => {
       <div className="flex flex-col items-center justify-center text-center gap-2">
 
         <img
-          src="/images/login_pic.png"
+          src="/images/login_pic1.png"
           alt="login visual"
-          className="w-[170px] xl:w-[190px] opacity-85 mix-blend-multiply pointer-events-none select-none"
+          className="w-[170px] xl:w-[190px] opacity-85 pointer-events-none select-none"
         />
 
-        <p className="font-manrope font-bold text-[11px] text-blue-100/80 tracking-wide">
+        <p className="font-poppins font-bold text-[11px] text-blue-100/80 tracking-wide">
           Continue where you left off
         </p>
         

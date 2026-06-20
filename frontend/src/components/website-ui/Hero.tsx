@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { HeroIllustration } from './NotionIllustrations';
 import toast from 'react-hot-toast';
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -69,17 +68,7 @@ function useLiveInView({ threshold = 0.1 } = {}) {
   return [ref, isInView] as const;
 }
 
-// ─── BATTERY SAVER WRAPPER ──────────────────────────────────────────────────── YES okay
 
-
-const BatterySaverWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [ref, isVisible] = useLiveInView();
-  return (
-    <div ref={ref} className="w-full h-full">
-      {isVisible ? children : <div className="w-full h-full invisible" />}
-    </div>
-  );
-};
 
 // ─── ANIMATED COUNTER ─────────────────────────────────────────────────────────
 const AnimatedCounter: React.FC<{ target: string; duration?: number }> = ({
@@ -165,7 +154,7 @@ const Hero: React.FC = () => {
   };
 
   return (
-    <section className="relative bg-white overflow-hidden pt-24 pb-16 lg:pt-28 lg:pb-24">
+    <section id="hero" className="relative bg-white overflow-hidden pt-24 pb-16 lg:pt-28 lg:pb-24">
 
       {/* ── BACKGROUND AMBIENCE ─────────────────────────────────────────────── */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -189,7 +178,6 @@ const Hero: React.FC = () => {
 
           {/* ── LEFT COLUMN: COPY ─────────────────────────────────────────── */}
           <div className="max-w-2xl text-center lg:text-left mx-auto lg:mx-0">
-
 
             {/* Headline — original 6xl size maintained */}
             <h1
@@ -296,25 +284,64 @@ const Hero: React.FC = () => {
             </div>
           </div>
 
-          {/* ── RIGHT COLUMN: ILLUSTRATION ───────────────────────────────── */}
           <div
-            className="relative lg:h-auto animate-fadeInUp flex justify-center lg:justify-end"
+            className="relative w-full max-w-5xl mx-auto flex flex-row items-end justify-center animate-fadeInUp pb-8 sm:pb-16"
             style={getAnimStyle(400)}
           >
-            {/* Soft glow behind illustration */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-3/4 h-3/4 rounded-full bg-blue-100/30 blur-3xl" />
+            {/* 1. The Board Setup */}
+            <div className="relative w-[70%] sm:w-full max-w-2xl flex flex-col items-center justify-center z-10">
+              {/* The "Board" Container */}
+              <div className="relative w-full bg-[#fdfdfc] border border-[#e2e2e2] rounded-[6px] shadow-[0_5px_15px_rgba(0,0,0,0.06),0_15px_35px_-5px_rgba(0,0,0,0.03)] p-1.5 sm:p-2 z-10">
+                {/* Subtle Top Clip */}
+                <div className="absolute -top-1.5 sm:-top-2 left-1/2 -translate-x-1/2 w-8 sm:w-12 h-1.5 sm:h-2 bg-[#e8e8e6] border border-[#d1d1d1] rounded-t-sm shadow-sm" />
+
+                {/* Inner Frame */}
+                <div className="relative overflow-hidden rounded-[4px] border border-[#ebebeb] bg-white">
+                  <img
+                    src="/images/Hero1.png"
+                    alt="DataPulse Dashboard Interface"
+                    className="block w-full h-auto object-cover"
+                  />
+                </div>
+
+                {/* Marker Ledge / Bottom Frame Detail */}
+                <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-[80%] h-0.5 sm:h-1 bg-[#f0f0f0] border-b border-[#e2e2e2] rounded-b-md" />
+              </div>
+
+              {/* The Realistic Stand / Legs */}
+              <div className="relative flex justify-center w-full z-0 -mt-1 sm:-mt-2">
+                {/* Left Leg */}
+                <div className="absolute left-[15%] sm:left-[20%] w-1.5 sm:w-2 h-16 sm:h-24 bg-[#ebebed] border-x border-[#dbdbdb] rounded-t-sm shadow-inner">
+                  <div className="absolute bottom-0 w-full h-1.5 sm:h-2 bg-[#9ca3af] rounded-b-sm" />
+                </div>
+
+                {/* Right Leg */}
+                <div className="absolute right-[15%] sm:right-[20%] w-1.5 sm:w-2 h-16 sm:h-24 bg-[#ebebed] border-x border-[#dbdbdb] rounded-t-sm shadow-inner">
+                  <div className="absolute bottom-0 w-full h-1.5 sm:h-2 bg-[#9ca3af] rounded-b-sm" />
+                </div>
+
+                {/* Connecting Crossbar */}
+                <div className="absolute top-8 sm:top-12 left-[15%] right-[15%] sm:left-[20%] sm:right-[20%] h-1 sm:h-1.5 bg-[#e2e2e2] border-y border-[#d4d4d4]" />
+              </div>
+
+              {/* Floor Shadow */}
+              <div className="w-[80%] sm:w-[70%] max-w-xl h-2 sm:h-3 bg-black/5 rounded-[100%] blur-[4px] sm:blur-[6px] mt-[3.5rem] sm:mt-[5.5rem]" />
             </div>
 
-
-            {/* Main illustration */}
-            <div className="relative w-full max-w-[600px] aspect-[4/3] transform hover:scale-[1.02] transition-transform duration-500">
-              <BatterySaverWrapper>
-                <HeroIllustration />
-              </BatterySaverWrapper>
+            {/* 2. The Explaining Woman (-10% Scaled down again) */}
+            {/* - Mobile width reduced from 27% to 24% (w-[24%])
+                - Tablet max-width reduced from 256px to 230px (max-w-[230px])
+                - Desktop max-width reduced from 320px to 288px (lg:max-w-[288px])
+                - Negative left margins adjusted slightly for the new size (-ml-3 sm:-ml-10 lg:-ml-14)
+            */}
+            <div className="block relative z-20 w-[24%] sm:w-1/3 max-w-[230px] lg:max-w-[288px] -ml-3 sm:-ml-10 lg:-ml-14 pointer-events-none">
+              <img
+                src="/images/woman8.png"
+                alt="Presenter showing dashboard"
+                className="w-full h-auto object-contain drop-shadow-2xl"
+              />
             </div>
           </div>
-
         </div>
       </div>
 

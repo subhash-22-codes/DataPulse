@@ -214,8 +214,8 @@ const handleItemClick = () => {
 
           {/* === DESKTOP NAV === */}
           <div className="hidden lg:flex items-center gap-2">
-            <Link 
-              to="/" 
+            <button 
+              onClick={() => handleScrollToSection('hero')} 
               className="
                 px-3 py-2 
                 text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
@@ -224,7 +224,7 @@ const handleItemClick = () => {
               "
             >
               Home
-            </Link>
+            </button>
             
             {/* Features Dropdown */}
             <div className="relative" ref={featuresRef}>
@@ -260,7 +260,7 @@ const handleItemClick = () => {
             </div>
             
             <button 
-              onClick={() => handleScrollToSection('architecture')} 
+              onClick={() => handleScrollToSection('how-it-works')} 
               className="
                 px-3 py-2 
                 text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
@@ -268,11 +268,11 @@ const handleItemClick = () => {
                 hover:bg-slate-50 hover:text-slate-900
               "
             >
-              Architecture
+              How It Works
             </button>
             
             <button 
-              onClick={() => handleScrollToSection('about')} 
+              onClick={() => handleScrollToSection('who-its-for')} 
               className="
                 px-3 py-2 
                 text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] 
@@ -280,7 +280,7 @@ const handleItemClick = () => {
                 hover:bg-slate-50 hover:text-slate-900
               "
             >
-              About
+              Who It's For
             </button>
           </div>
 
