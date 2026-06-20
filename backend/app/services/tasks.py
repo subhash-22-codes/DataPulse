@@ -1483,7 +1483,7 @@ def _notify_and_alert(
                 percent_change = "0%"
                 if old_row_count > 0:
                     percent_change = f"{((new_row_count - old_row_count) / old_row_count) * 100:+.1f}%"
-
+                t_ctx = time.perf_counter()
                 email_context = {
                     "workspace_name": workspace.name,
                     "upload_type": current_upload.upload_type,
@@ -1502,6 +1502,7 @@ def _notify_and_alert(
                         "new_cols": new_col_count,
                     },
                 }
+                logger.info(f"[NOTIFY] Email context built in {time.perf_counter() - t_ctx:.2f}s")
 
                 threading.Thread(
                     target=_run_email_in_background,
