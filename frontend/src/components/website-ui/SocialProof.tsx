@@ -42,7 +42,10 @@ function useLiveInView({ threshold = 0.1 } = {}) {
 }
 
 // ─── ANIMATED COUNTER ─────────────────────────────────────────────────────────
-const AnimatedCounter: React.FC<{ target: string; duration?: number }> = ({ target, duration = 1200 }) => {
+const AnimatedCounter: React.FC<{ target: string; duration?: number }> = ({
+  target,
+  duration = 1200,
+}) => {
   const [display, setDisplay] = useState('0');
   const [ref, isInView] = useLiveInView({ threshold: 0.5 });
   const hasRun = useRef(false);
@@ -79,7 +82,7 @@ const StarRating: React.FC<{ count: number }> = ({ count }) => (
     {Array.from({ length: 5 }).map((_, i) => (
       <svg
         key={i}
-        className={`w-3 h-3 ${i < count ? 'text-amber-400' : 'text-slate-200'}`}
+        className={`w-3 h-3 flex-shrink-0 ${i < count ? 'text-amber-400' : 'text-slate-200'}`}
         viewBox="0 0 24 24"
         fill="currentColor"
       >
@@ -108,27 +111,68 @@ const NOTES: Note[] = [
     stars: 5,
   },
   {
-  text: "The dashboard is easy to use and gives a quick view of data health. Setting up monitoring was simple, and the alerts were helpful during testing.",
-  from: 'Poojari Srinivasa Bhavesh',
-  role: 'Graduate Software Engineer · RailTel Corporation',
-  avatar: 'PB',
-  stars: 5,
+    text: "The dashboard is easy to use and gives a quick view of data health. Setting up monitoring was simple, and the alerts were helpful during testing.",
+    from: 'Poojari S. Bhavesh',
+    role: 'Graduate Software Engineer · RailTel',
+    avatar: 'PB',
+    stars: 5,
   },
   {
-  text: "The interface is clean and easy to navigate. I especially like being able to see schema changes without digging through database logs.",
-  from: 'Rajashekar K.',
-  role: 'Gen AI Developer · TCS AI Competency Development',
-  avatar: 'RK',
-  stars: 5,
-},//  {
-  //   text: "Good security fundamentals for a product at this stage. Read-only database connections and encrypted credential handling were things I looked for before trying it.",
-  //   from: 'Meera T.',
-  //   role: 'CTO · Dev Tools Startup',
-  //   avatar: 'MT',
-  //   stars: 5,
-  //   security: true,
- // },
+    text: "The interface is clean and easy to navigate. I especially like being able to see schema changes without digging through database logs.",
+    from: 'Rajashekar K.',
+    role: 'Gen AI Developer · TCS',
+    avatar: 'RK',
+    stars: 5,
+  },
 ];
+
+// ─── NOTE CARD ────────────────────────────────────────────────────────────────
+const NoteCard: React.FC<{ note: Note; idx: number }> = ({ note }) => (
+  <div
+    className={`flex items-start gap-3 rounded-sm border px-3 py-3 transition-all duration-300
+      ${note.security
+        ? 'border-blue-200 bg-blue-50/40'
+        : 'border-slate-100 bg-slate-50/50'
+      }`}
+    style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
+  >
+    {/* Avatar */}
+    <div
+      className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center
+        text-[10px] font-bold mt-0.5
+        ${note.security ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white'}`}
+    >
+      {note.avatar}
+    </div>
+
+    <div className="min-w-0 flex-1">
+      {/* Name row — stacks on mobile */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2 mb-0.5">
+        <span className="text-[12px] font-bold text-slate-800 font-manrope leading-tight">
+          {note.from}
+        </span>
+        <span className="text-[10px] text-slate-400 font-manrope leading-tight flex-shrink-0 truncate max-w-[180px] sm:max-w-none">
+          {note.role}
+        </span>
+      </div>
+
+      {/* Stars */}
+      <StarRating count={note.stars} />
+
+      {/* Security badge */}
+      {note.security && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 font-manrope mb-1">
+          <ShieldCheck className="w-3 h-3 flex-shrink-0" /> mentions security
+        </span>
+      )}
+
+      {/* Quote */}
+      <p className="text-[12px] sm:text-[13px] text-slate-600 leading-relaxed font-manrope">
+        "{note.text}"
+      </p>
+    </div>
+  </div>
+);
 
 // ─── LIVE FEED MOCKUP ─────────────────────────────────────────────────────────
 const LiveFeedMockup: React.FC = () => {
@@ -150,72 +194,33 @@ const LiveFeedMockup: React.FC = () => {
       className="rounded-sm border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)] overflow-hidden"
     >
       {/* ── Window chrome ── */}
-      <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-100 bg-slate-50/60">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="w-2 h-2 rounded-full bg-slate-200" />
           <span className="w-2 h-2 rounded-full bg-slate-200" />
           <span className="w-2 h-2 rounded-full bg-slate-200" />
         </div>
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-manrope">
+        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 font-manrope truncate mx-3">
           #early-access-feedback
         </span>
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 font-manrope">
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 font-manrope flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           live
         </span>
       </div>
 
       {/* ── Feed ── */}
-      <div className="px-4 sm:px-5 py-4 sm:py-5 space-y-3 min-h-[300px]">
+      <div className="px-3 sm:px-5 py-4 space-y-3">
         {NOTES.slice(0, visibleCount).map((note, idx) => (
-          <div
-            key={idx}
-            className={`flex items-start gap-3 rounded-sm border px-3.5 py-3 transition-all duration-300
-              ${note.security
-                ? 'border-blue-200 bg-blue-50/40'
-                : 'border-slate-100 bg-slate-50/50'
-              }`}
-            style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
-          >
-            {/* Avatar */}
-            <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold mt-0.5
-              ${note.security ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white'}`}>
-              {note.avatar}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              {/* Name + role */}
-              <div className="flex items-center justify-between gap-2 mb-0.5">
-                <span className="text-[12px] font-bold text-slate-800 font-manrope">
-                  {note.from}
-                </span>
-                <span className="text-[10px] text-slate-400 font-manrope flex-shrink-0">
-                  {note.role}
-                </span>
-              </div>
-
-              {/* Stars */}
-              <StarRating count={note.stars} />
-
-              {/* Security badge */}
-              {note.security && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 font-manrope mb-1">
-                  <ShieldCheck className="w-3 h-3" /> mentions security
-                </span>
-              )}
-
-              {/* Quote */}
-              <p className="text-[13px] text-slate-600 leading-snug font-manrope">
-                "{note.text}"
-              </p>
-            </div>
-          </div>
+          <NoteCard key={idx} note={note} idx={idx} />
         ))}
 
         {/* ── Bottom metrics rail ── */}
         {visibleCount >= NOTES.length && (
           <div
-            className="flex items-center justify-between gap-2 mt-2 pt-3 border-t border-slate-100 text-[11px] font-manrope"
+            className="flex flex-col sm:flex-row items-start sm:items-center
+                       justify-between gap-1 sm:gap-2 mt-2 pt-3
+                       border-t border-slate-100 text-[11px] font-manrope"
             style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
           >
             <span className="text-slate-400">20 early users · 16 workspaces</span>
@@ -236,9 +241,9 @@ const SocialProof: React.FC = () => {
   });
 
   const stats = [
-    { num: '20',   label: 'Early Users'     },
-    { num: '16',   label: 'Workspaces Live' },
-    { num: '300K+', label: 'Rows Monitored' },
+    { num: '20',    label: 'Early Users'     },
+    { num: '16',    label: 'Workspaces Live' },
+    { num: '300K+', label: 'Rows Monitored'  },
   ];
 
   return (
@@ -258,23 +263,27 @@ const SocialProof: React.FC = () => {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
 
           {/* ── LEFT: COPY + STATS + CTA ────────────────────────────────────── */}
           <div className="text-center lg:text-left">
+
+            {/* Badge */}
             <div
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full
                          bg-slate-50 border border-slate-200
                          text-slate-600 text-xs font-bold uppercase tracking-wider
-                         mb-5 shadow-sm animate-fadeInUp"
+                         mb-5 animate-fadeInUp"
               style={getAnimStyle(0)}
             >
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               Early Access
             </div>
 
+            {/* Headline */}
             <h2
-              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 font-poppins leading-[1.1] mb-6 animate-fadeInUp"
+              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight
+                         text-slate-900 font-poppins leading-[1.1] mb-6 animate-fadeInUp"
               style={getAnimStyle(100)}
             >
               We're small.{' '}
@@ -283,8 +292,10 @@ const SocialProof: React.FC = () => {
               </span>
             </h2>
 
+            {/* Description */}
             <p
-              className="text-lg text-slate-500 leading-relaxed font-manrope mb-10 max-w-md mx-auto lg:mx-0 animate-fadeInUp"
+              className="text-base sm:text-lg text-slate-500 leading-relaxed font-manrope
+                         mb-10 max-w-md mx-auto lg:mx-0 animate-fadeInUp"
               style={getAnimStyle(200)}
             >
               DataPulse is in early access. We'd rather show you 20 real teams
@@ -294,7 +305,8 @@ const SocialProof: React.FC = () => {
 
             {/* Stats */}
             <div
-              className="flex items-center justify-center lg:justify-start gap-6 sm:gap-10 mb-10 animate-fadeInUp"
+              className="flex items-center justify-center lg:justify-start
+                         gap-5 sm:gap-10 mb-10 animate-fadeInUp flex-wrap"
               style={getAnimStyle(300)}
             >
               {stats.map((s, i) => (
@@ -308,7 +320,7 @@ const SocialProof: React.FC = () => {
                     </div>
                   </div>
                   {i < stats.length - 1 && (
-                    <div className="h-9 w-px bg-slate-200" />
+                    <div className="h-9 w-px bg-slate-200 hidden sm:block" />
                   )}
                 </React.Fragment>
               ))}
@@ -316,9 +328,9 @@ const SocialProof: React.FC = () => {
 
             {/* CTA */}
             <div className="animate-fadeInUp" style={getAnimStyle(400)}>
-              <Link to="/register">
+              <Link to="/register" className="inline-block w-full sm:w-auto">
                 <button className="
-                  group relative h-11 px-8
+                  group relative w-full sm:w-auto h-11 px-8
                   rounded-sm bg-blue-600
                   text-white font-bold text-[13px] font-manrope tracking-wider
                   shadow-md shadow-blue-600/20
