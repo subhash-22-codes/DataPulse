@@ -1031,7 +1031,7 @@ def schedule_data_fetches() -> None:
 
         if not has_active:
             logger.debug("[SCHEDULER] No active polling workspaces. Skipping cycle.")
-            return  
+            return
 
         now = datetime.now(timezone.utc)
 
@@ -1056,6 +1056,12 @@ def schedule_data_fetches() -> None:
         triggered_count = 0
         buffer = timedelta(seconds=180)
 
+        # Capture event loop once before submitting to threads
+        try:
+            current_loop = asyncio.get_event_loop()
+        except RuntimeError:
+            current_loop = None
+
         for ws in workspaces:
             try:
                 is_due = False
@@ -1065,7 +1071,7 @@ def schedule_data_fetches() -> None:
                 if not last_polled:
                     is_due = True
                 elif interval == "30min":
-                    if (now - last_polled) >= (timedelta(minutes=15) - buffer):
+                    if (now - last_polled) >= (timedelta(minutes=30) - buffer):
                         is_due = True
                 elif interval == "hourly":
                     if (now - last_polled) >= (timedelta(hours=1) - buffer):
@@ -1079,30 +1085,36 @@ def schedule_data_fetches() -> None:
                 elif interval == "daily":
                     if (now - last_polled) >= (timedelta(days=1) - buffer):
                         is_due = True
+                else:
+                    if interval:
+                        logger.warning(
+                            f"[SCHEDULER] Unknown interval '{interval}' "
+                            f"for workspace '{ws.name}' ({ws.id}). Skipping."
+                        )
+                    continue
 
                 if is_due:
                     logger.info(
-                        f"SIGNAL: Offloading '{ws.name}' ({ws.id}) to ThreadPool..."
+                        f"[SCHEDULER] Offloading '{ws.name}' ({ws.id}) to ThreadPool..."
                     )
-
                     executor.submit(
                         process_data_fetch_task,
                         str(ws.id),
-                        None,
+                        current_loop,
                     )
                     triggered_count += 1
 
             except Exception as e:
-                logger.error(f"Error analyzing workspace {ws.id}: {e}")
+                logger.error(f"[SCHEDULER] Error analyzing workspace {ws.id}: {e}")
                 continue
 
         if triggered_count > 0:
-            logger.info(f"Offloaded {triggered_count} jobs to background threads.")
+            logger.info(f"[SCHEDULER] Offloaded {triggered_count} jobs to background threads.")
         else:
             logger.debug("[SCHEDULER] No workspaces due this cycle.")
 
     except Exception as e:
-        logger.error(f"Critical Scheduler Failure: {e}", exc_info=True)
+        logger.error(f"[SCHEDULER] Critical Scheduler Failure: {e}", exc_info=True)
 
     finally:
         try:
@@ -1110,42 +1122,46 @@ def schedule_data_fetches() -> None:
         except Exception:
             pass
 
-
-        
+     
 def process_data_fetch_task(workspace_id: str, loop: asyncio.AbstractEventLoop = None):
     logger.info(f"[GATE] Validating execution request for workspace: {workspace_id}")
 
+    # Loop is expected to be passed in from caller.
+    # Fallback only exists for direct/manual calls.
     if loop is None:
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            try:
-                loop = asyncio.get_event_loop_policy().get_event_loop()
-            except Exception:
-                loop = None
+        logger.warning(
+            f"[GATE] No event loop passed for workspace {workspace_id}. "
+            "WebSocket broadcasts may not work."
+        )
 
     db = SessionLocal()
     try:
         ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        
+
         if not ws or not ws.is_polling_active:
-            logger.warning(f"-> [GATE] Aborting. Workspace {workspace_id} is gone or inactive.")
+            logger.warning(f"[GATE] Aborting. Workspace {workspace_id} is gone or inactive.")
             return
 
         if ws.data_source == 'API':
-            logger.info(f"-> [GATE] Launching API Fetcher for '{ws.name}'...")
-            fetch_api_data(str(ws.id), loop) 
-            
+            logger.info(f"[GATE] Launching API Fetcher for '{ws.name}'...")
+            fetch_api_data(str(ws.id), loop)
+
         elif ws.data_source == 'DB':
-            logger.info(f"-> [GATE] Launching DB Fetcher for '{ws.name}'...")
+            logger.info(f"[GATE] Launching DB Fetcher for '{ws.name}'...")
             fetch_db_data(str(ws.id), loop)
-            
+
+        else:
+            logger.warning(
+                f"[GATE] Unknown data_source '{ws.data_source}' "
+                f"for workspace '{ws.name}' ({workspace_id}). Skipping."
+            )
+
     except Exception as e:
-        logger.error(f"[GATE] Internal Gate Failure: {e}")
+        logger.error(f"[GATE] Internal Gate Failure: {e}", exc_info=True)
     finally:
         db.close()
         
-
+        
 def clean_nan(obj):
     if isinstance(obj, dict):
         return {k: clean_nan(v) for k, v in obj.items()}
