@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text  
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-import google.generativeai as genai
-import markdown2
+# import google.generativeai as genai
+# import markdown2
 import pytz
 from urllib.parse import quote_plus
 from io import StringIO 
