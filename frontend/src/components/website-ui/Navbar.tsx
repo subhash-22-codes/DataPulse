@@ -339,28 +339,27 @@ const handleItemClick = () => {
             
             <div className="space-y-1 py-4">
                 {/* HOME LINK */}
-                <Link 
-                  to="/" 
-                  onClick={() => setIsMobileMenuOpen(false)} 
-                  className="flex items-center justify-between w-full py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
+                 <button 
+                  onClick={() => { handleScrollToSection('hero'); setIsMobileMenuOpen(false); }} 
+                  className="flex items-center justify-between w-full text-left py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
                   Home
-                </Link>
+                </button>
 
                 {/* ARCHITECTURE BUTTON */}
                 <button 
-                  onClick={() => { handleScrollToSection('architecture'); setIsMobileMenuOpen(false); }} 
+                  onClick={() => { handleScrollToSection('how-it-works'); setIsMobileMenuOpen(false); }} 
                   className="flex items-center justify-between w-full text-left py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
-                  Architecture
+                  How It Works
                 </button>
 
                 {/* ABOUT BUTTON */}
                 <button 
-                  onClick={() => { handleScrollToSection('about'); setIsMobileMenuOpen(false); }} 
+                  onClick={() => { handleScrollToSection('who-its-for'); setIsMobileMenuOpen(false); }} 
                   className="flex items-center justify-between w-full text-left py-4 px-3 rounded-sm text-[12px] font-bold text-slate-500 font-manrope tracking-[0.2em] border-b border-slate-100 active:bg-slate-50 active:text-slate-900 transition-all"
                 >
-                  About
+                  Who It's For
                 </button>
 
                 {/* FEATURES ACCORDION */}
