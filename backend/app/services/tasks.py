@@ -1336,15 +1336,10 @@ def _save_results(
     previous_upload: DataUpload | None,
     analysis: dict,
 ) -> None:
-    """
-    Phase 5a: Persist analysis results, metrics, and incidents to DB.
-    Does NOT commit — caller commits after _notify_and_alert succeeds.
-    """
     # Update upload record
     current_upload.schema_info = analysis["new_schema"]
     current_upload.schema_changed_from_previous = analysis["schema_has_changed"]
 
-    # Strip internal keys before saving to analysis_results column
     analysis_results = {k: v for k, v in analysis.items() if k != "new_schema"}
     current_upload.analysis_results = analysis_results
 
@@ -1366,6 +1361,17 @@ def _save_results(
     db.bulk_save_objects(metrics)
     logger.info(f"[SAVE] Column metrics saved in {time.perf_counter() - t:.2f}s")
 
+    # ── NEW LOGS ──────────────────────────────────────────────────────────────
+    logger.info(f"[SAVE] Columns written to DB: {[m.column_name for m in metrics]}")
+    logger.info(f"[SAVE] metric_date written: {date.today()}")
+    for m in metrics:
+        logger.info(
+            f"[SAVE] col={m.column_name} | "
+            f"missing={m.missing_percent}% | "
+            f"unique={m.unique_percent}%"
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     # Table-level daily metrics
     db.add(TableDailyMetrics(
         workspace_id=current_upload.workspace_id,
@@ -1375,6 +1381,13 @@ def _save_results(
         column_count=analysis["column_count"],
     ))
 
+    logger.info(
+        f"[SAVE] TableDailyMetrics staged | "
+        f"rows={analysis['row_count']} | "
+        f"cols={analysis['column_count']} | "
+        f"date={date.today()}"
+    )
+
     # Incident engine
     incident_engine(
         db=db,
@@ -1382,6 +1395,7 @@ def _save_results(
         previous_upload=previous_upload,
         analysis_results=analysis_results,
     )
+    
 
     logger.info(f"[SAVE] Results staged for upload {current_upload.id}.")
 

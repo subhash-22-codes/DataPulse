@@ -1363,7 +1363,28 @@ def manual_resolve_incident(
     }
 
 @router.get("/{workspace_id}/incidents")
-def list_incidents(workspace_id: str, db: Session = Depends(get_db)):
+def list_incidents(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Ownership check
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        # Check if user is a team member
+        workspace = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.is_deleted == False,
+        ).first()
+
+        if not workspace or current_user not in workspace.team_members:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
     incidents = (
         db.query(Incident)
         .filter(Incident.workspace_id == workspace_id)
@@ -1392,12 +1413,71 @@ def list_incidents(workspace_id: str, db: Session = Depends(get_db)):
     ]
 
 
+
+
+@router.get("/{workspace_id}/table-metrics")
+def get_table_metrics(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.owner_id != current_user.id and current_user not in workspace.team_members:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    rows = (
+        db.query(TableDailyMetrics)
+        .filter(TableDailyMetrics.workspace_id == workspace_id)
+        .order_by(TableDailyMetrics.metric_date.asc())
+        .all()
+    )
+
+    return [
+        {
+            "metric_date": r.metric_date,
+            "row_count": r.row_count,
+            "column_count": r.column_count,
+        }
+        for r in rows
+    ]
+
 @router.get("/{workspace_id}/column-metrics")
 def get_column_metrics(
     workspace_id: str,
     column_name: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    logger.info(
+        f"[COLUMN-METRICS] Request | "
+        f"workspace={workspace_id} | "
+        f"column={column_name} | "
+        f"user={current_user.email}"
+    )
+
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        logger.warning(f"[COLUMN-METRICS] Workspace {workspace_id} not found.")
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.owner_id != current_user.id and current_user not in workspace.team_members:
+        logger.warning(
+            f"[COLUMN-METRICS] Unauthorized access attempt | "
+            f"user={current_user.email} | workspace={workspace_id}"
+        )
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     rows = (
         db.query(ColumnDailyMetrics)
         .filter(
@@ -1408,9 +1488,21 @@ def get_column_metrics(
         .all()
     )
 
+    # ── NEW LOGS ──────────────────────────────────────────────────────────────
+    logger.info(
+        f"[COLUMN-METRICS] Found {len(rows)} records for column='{column_name}'"
+    )
+    for r in rows:
+        logger.info(
+            f"[COLUMN-METRICS] date={r.metric_date} | "
+            f"missing={r.missing_percent}% | "
+            f"unique={r.unique_percent}%"
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     return [
         {
-            "date": r.created_at,
+            "date": r.metric_date,
             "column": r.column_name,
             "missing_percent": r.missing_percent,
             "unique_percent": r.unique_percent,
@@ -1418,34 +1510,77 @@ def get_column_metrics(
         for r in rows
     ]
 
-@router.get("/{workspace_id}/table-metrics")
-def get_table_metrics(workspace_id: str, db: Session = Depends(get_db)):
-    rows = (
-        db.query(TableDailyMetrics)
-        .filter(TableDailyMetrics.workspace_id == workspace_id)
-        .order_by(TableDailyMetrics.metric_date.asc())
-        .all()
-    )
-
-    return [
-        {
-            "metric_date": r.created_at,
-            "row_count": r.row_count,
-            "column_count": r.column_count,
-        }
-        for r in rows
-    ]
 
 @router.get("/{workspace_id}/columns")
-def list_columns(workspace_id: str, db: Session = Depends(get_db)):
+def list_columns(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    logger.info(
+        f"[COLUMNS] Request | "
+        f"workspace={workspace_id} | "
+        f"user={current_user.email}"
+    )
+
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        logger.warning(f"[COLUMNS] Workspace {workspace_id} not found.")
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.owner_id != current_user.id and current_user not in workspace.team_members:
+        logger.warning(
+            f"[COLUMNS] Unauthorized access | "
+            f"user={current_user.email} | workspace={workspace_id}"
+        )
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # ── FIND MOST RECENT UPLOAD PER UPLOAD TYPE ───────────────────────────────
+    # We only show columns from the latest snapshot of each source type.
+    # This prevents stale columns from old uploads polluting the column list.
+    upload_types = ["manual", "api_poll", "db_query"]
+
+    latest_upload_ids = []
+    for upload_type in upload_types:
+        latest = (
+            db.query(DataUpload.id)
+            .filter(
+                DataUpload.workspace_id == workspace_id,
+                DataUpload.upload_type == upload_type,
+            )
+            .order_by(DataUpload.uploaded_at.desc())
+            .first()
+        )
+        if latest:
+            latest_upload_ids.append(latest[0])
+            logger.info(
+                f"[COLUMNS] Latest upload for type='{upload_type}': {latest[0]}"
+            )
+
+    if not latest_upload_ids:
+        logger.info(f"[COLUMNS] No uploads found for workspace {workspace_id}.")
+        return []
+
+    # ── FETCH COLUMNS ONLY FROM THOSE UPLOADS ────────────────────────────────
     rows = (
         db.query(ColumnDailyMetrics.column_name)
-        .filter(ColumnDailyMetrics.workspace_id == workspace_id)
+        .filter(
+            ColumnDailyMetrics.workspace_id == workspace_id,
+            ColumnDailyMetrics.upload_id.in_(latest_upload_ids),
+        )
         .distinct()
         .all()
     )
 
-    return [r[0] for r in rows]
+    columns = sorted([r[0] for r in rows])
+
+    logger.info(f"[COLUMNS] Returning {len(columns)} columns from {len(latest_upload_ids)} latest uploads: {columns}")
+
+    return columns
 
 def _load_upload_dataframe(
     workspace_id: str,
