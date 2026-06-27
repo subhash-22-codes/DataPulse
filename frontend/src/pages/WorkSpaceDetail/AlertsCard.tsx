@@ -147,12 +147,12 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
 
   return (
     <>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-full font-sans group hover:shadow-md transition-all duration-300">
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col h-full font-sans group hover:shadow-md transition-all duration-300">
 
         {/* HEADER */}
         <div className="px-5 py-4 border-b border-slate-100 bg-white flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-8 h-8 bg-amber-50 text-amber-600 rounded-md border border-amber-100 flex items-center justify-center shadow-sm">
+            <div className="flex-shrink-0 w-8 h-8 bg-amber-50 text-amber-600 rounded-sm border border-amber-100 flex items-center justify-center shadow-sm">
               <BellRing className="w-4 h-4" />
             </div>
             <div>
@@ -181,14 +181,14 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="p-4 bg-white border border-slate-200 rounded-xl flex items-center gap-4"
+                  className="p-4 bg-white border border-slate-200 rounded-sm flex items-center gap-4"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-slate-100" />
+                  <div className="w-10 h-10 rounded-sm bg-slate-100" />
                   <div className="flex-1 space-y-2">
                     <div className="h-3 w-40 bg-slate-200 rounded" />
                     <div className="h-3 w-24 bg-slate-100 rounded" />
                   </div>
-                  <div className="w-10 h-5 bg-slate-200 rounded-full" />
+                  <div className="w-10 h-5 bg-slate-200 rounded-sm" />
                 </div>
               ))}
               <div className="flex items-center justify-center pt-2">
@@ -198,7 +198,7 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
             </div>
           ) : fetchError ? (
             <div className="flex flex-col items-center justify-center h-48 text-center">
-              <div className="w-12 h-12 bg-red-50 border border-red-100 rounded-full flex items-center justify-center mb-3">
+              <div className="w-12 h-12 bg-red-50 border border-red-100 rounded-sm flex items-center justify-center mb-3">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
               <h3 className="text-sm font-semibold text-slate-900">Failed to load alerts</h3>
@@ -215,7 +215,7 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
             </div>
           ) : rules.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center h-full opacity-60 hover:opacity-100 transition-opacity">
-              <div className="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
+              <div className="w-12 h-12 bg-white border border-slate-200 rounded-sm flex items-center justify-center mb-4 shadow-sm">
                 <Activity className="h-5 w-5 text-slate-300" />
               </div>
               <h3 className="text-sm font-semibold text-slate-900">No active alerts</h3>
@@ -238,13 +238,13 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
                 return (
                   <div
                     key={rule.id}
-                    className="group/item relative flex items-center justify-between p-2.5 sm:p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300"
+                    className="group/item relative flex items-center justify-between p-2.5 sm:p-4 bg-white border border-slate-200 rounded-sm hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300"
                   >
                     {/* LEFT: Info */}
                     <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
                       
                       {/* ICON (smaller on mobile) */}
-                      <div className="flex-shrink-0 w-7 h-7 sm:w-10 sm:h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center">
+                      <div className="flex-shrink-0 w-7 h-7 sm:w-10 sm:h-10 rounded-sm bg-slate-50 border border-slate-100 flex items-center justify-center">
                         {getMetricIcon(rule.metric)}
                       </div>
 
@@ -285,28 +285,51 @@ export const AlertsCard: React.FC<AlertsCardProps> = ({ workspace, isOwner }) =>
                         <>
                           {/* MOBILE-OPTIMIZED TOGGLE */}
                           <button
-                            onClick={() => handleToggleRule(rule.id)}
-                            disabled={isToggling === rule.id}
-                            className={`relative inline-flex h-4 w-7 sm:h-5 sm:w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-all duration-200 ease-in-out ${
-                              rule.is_active ? 'bg-emerald-500' : 'bg-slate-200'
-                            } ${
-                              isToggling === rule.id
-                                ? 'opacity-50 cursor-not-allowed'
-                                : 'cursor-pointer'
-                            }`}
-                          >
-                            <span
-                              className={`inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
-                                rule.is_active ? 'translate-x-3 sm:translate-x-4' : 'translate-x-0'
-                              }`}
-                            />
-                          </button>
+  onClick={() => handleToggleRule(rule.id)}
+  disabled={isToggling === rule.id}
+  className={`
+    relative inline-flex
+    h-5 w-9
+    sm:h-5 sm:w-9
+    flex-shrink-0
+    items-center
+    rounded-md
+    border border-slate-300
+    transition-all duration-200
+    ${
+      rule.is_active
+        ? "bg-emerald-500 border-emerald-500"
+        : "bg-slate-200"
+    }
+    ${
+      isToggling === rule.id
+        ? "opacity-50 cursor-not-allowed"
+        : "cursor-pointer active:scale-95"
+    }
+  `}
+>
+  <span
+    className={`
+      absolute top-0.5 left-0.5
+      h-4 w-4
+      rounded
+      bg-white
+      shadow-sm
+      transition-transform duration-200 ease-in-out
+      ${
+        rule.is_active
+          ? "translate-x-4"
+          : "translate-x-0"
+      }
+    `}
+  />
+</button>
 
                           {/* DELETE (visible on mobile, hover-only on desktop) */}
                           <button
                             onClick={() => handleDeleteRule(rule.id)}
                             disabled={deletingId === rule.id}
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all sm:opacity-0 sm:group-hover/item:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all sm:opacity-0 sm:group-hover/item:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                           >
                             {deletingId === rule.id ? (
                               <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin text-red-500" />

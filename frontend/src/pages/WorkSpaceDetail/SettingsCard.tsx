@@ -133,7 +133,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
         </div>
 
         {/* Danger Zone Card */}
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <div className="rounded-sm border border-slate-200 bg-white overflow-hidden shadow-sm">
           {/* Layout */}
           <div className="px-6 py-6 sm:p-8 flex flex-col-reverse sm:flex-row gap-6 sm:gap-8 items-center sm:items-start">
 
@@ -155,7 +155,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                   for deletion and immediately disable access.
                 </p>
 
-                <div className="inline-flex items-start gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] sm:text-xs text-slate-600">
+                <div className="inline-flex items-start gap-1.5 rounded-sm border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] sm:text-xs text-slate-600">
                   <span className="font-medium">Note:</span>
                   <span>
                     Deleted workspaces can be recovered for 30 days before permanent removal.
@@ -235,14 +235,14 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-[480px] transform overflow-hidden rounded-xl bg-white text-left align-middle shadow-2xl transition-all border border-slate-100">
+                <Dialog.Panel className="w-full max-w-[480px] transform overflow-hidden rounded-sm bg-white text-left align-middle shadow-2xl transition-all border border-slate-100">
                   
                   {/* SUCCESS STATE */}
                   {step === 'success' ? (
                     <div className="flex flex-col items-center justify-center px-6 py-8 bg-white animate-in fade-in duration-200">
 
                       {/* Icon */}
-                      <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-sm bg-emerald-50 border border-emerald-100 flex items-center justify-center">
                         <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       </div>
 

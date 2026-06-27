@@ -116,7 +116,7 @@ export default function NotificationsCard({
 
   if (loading) {
     return (
-      <div className="rounded-xl bg-white ring-1 ring-slate-200/60 p-6 space-y-4">
+      <div className="rounded-sm bg-white ring-1 ring-slate-200/60 p-6 space-y-4">
         <div className="h-6 w-48 bg-slate-200 rounded animate-pulse" />
         {[1, 2, 3].map(i => (
           <div key={i} className="space-y-2">
@@ -132,13 +132,13 @@ export default function NotificationsCard({
 
   if (error) {
     return (
-      <div className="rounded-xl bg-white ring-1 ring-slate-200/60 p-6 text-center space-y-3">
+      <div className="rounded-sm bg-white ring-1 ring-slate-200/60 p-6 text-center space-y-3">
         <div className="text-red-600 font-semibold">
           Failed to load notification settings
         </div>
         <button
           onClick={loadSettings}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md"
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-sm"
         >
           Retry
         </button>
@@ -149,7 +149,7 @@ export default function NotificationsCard({
   /* ---------- UI ---------- */
 
   return (
-    <div className="rounded-xl bg-white ring-1 ring-slate-200/60">
+    <div className="rounded-sm bg-white ring-1 ring-slate-200/60">
 
       {/* Header */}
       <header className="p-6 border-b border-slate-100">
@@ -240,7 +240,7 @@ export default function NotificationsCard({
       {/* Warning */}
       {allDisabled && (
         <section className="p-6 border-t border-slate-100">
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="rounded-sm border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             All members have disabled notifications. Important alerts may go unnoticed.
           </div>
         </section>

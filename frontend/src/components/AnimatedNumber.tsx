@@ -3,9 +3,11 @@ import { animate } from "framer-motion";
 
 interface AnimatedNumberProps {
   value: number;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
-export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({ value }) => {
+export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({ value, className = "", style = {} }) => {
   const nodeRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -23,5 +25,5 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({ value }) => {
     return () => controls.stop();
   }, [value]);
 
-  return <p ref={nodeRef} />;
+  return <p ref={nodeRef} className={className} style={style} />;
 };

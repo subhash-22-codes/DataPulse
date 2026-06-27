@@ -99,13 +99,13 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
+    <div className="bg-white rounded-sm border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
       
       {/* --- HEADER --- */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white gap-4">
           <div className="flex items-center gap-3">
              {/* Consistent Icon Container */}
-            <div className="flex-shrink-0 w-8 h-8 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100/50 flex items-center justify-center shadow-sm">
+            <div className="flex-shrink-0 w-8 h-8 bg-indigo-50 text-indigo-600 rounded-sm border border-indigo-100/50 flex items-center justify-center shadow-sm">
                 <Users className="h-4 w-4" />
             </div>
             
@@ -113,7 +113,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
             <div className="flex flex-col">
               <h2 className="text-sm font-bold text-slate-900 leading-none">Team Access</h2>
               <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${teamEmails.length >= 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                        <span className={`w-1.5 h-1.5 rounded-sm ${teamEmails.length >= 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                   <p className="text-[11px] text-slate-500 font-medium tabular-nums">
                     {teamEmails.length} / 2 Members
                   </p>
@@ -124,7 +124,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
         {isOwner && !isEditing && (
           <button 
             onClick={() => setIsEditing(true)} 
-            className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-md hover:bg-indigo-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-sm hover:bg-indigo-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Manage Team"
           >
             <Edit3 className="h-3.5 w-3.5" />
@@ -144,7 +144,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                         Invite Member
                     </label>
                     {teamEmails.length >= 2 && (
-                        <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-sm border border-amber-100">
                             <ShieldAlert className="w-3 h-3" /> Max Limit Reached
                         </span>
                     )}
@@ -163,7 +163,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                           autoFocus
                           className={`
                             w-full
-                            rounded-md
+                            rounded-sm
                             border
                             bg-white
                             px-3 py-2
@@ -190,7 +190,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                         onClick={handleAddEmail} 
                         type="button" 
                         disabled={teamEmails.length >= 2 || !newEmail.trim()}
-                        className="bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:transform active:scale-95"
+                        className="bg-slate-900 text-white px-3 py-2 rounded-sm hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:transform active:scale-95"
                     >
                         <Plus className="h-4 w-4" />
                     </button>
@@ -202,7 +202,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                     Pending List
                 </label>
-                <div className="bg-white rounded-lg border border-slate-200 shadow-sm min-h-[100px] p-1">
+                <div className="bg-white rounded-sm border border-slate-200 shadow-sm min-h-[100px] p-1">
                     {teamEmails.length > 0 ? (
                         <div className="space-y-1">
                         <AnimatePresence>
@@ -212,13 +212,13 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                                     initial={{ opacity: 0, height: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, height: 'auto', scale: 1 }}
                                     exit={{ opacity: 0, height: 0, scale: 0.95 }}
-                                    className="group flex items-center justify-between bg-white hover:bg-slate-50 p-2 rounded-md border border-transparent hover:border-slate-100 transition-all"
+                                    className="group flex items-center justify-between bg-white hover:bg-slate-50 p-2 rounded-sm border border-transparent hover:border-slate-100 transition-all"
                                 >
                                     <div className="flex items-center gap-3 min-w-0">
                                         <img 
                                             src={getAvatarUrl(email)} 
                                             alt="Avatar" 
-                                            className="w-6 h-6 rounded-full bg-slate-50 border border-slate-200"
+                                            className="w-6 h-6 rounded-sm bg-slate-50 border border-slate-200"
                                         />
                                         <span className="text-xs font-medium text-slate-700 truncate">
                                             {email}
@@ -290,16 +290,16 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
             {(workspace.team_members && workspace.team_members.length > 0) ? (
               <div className="flex flex-col gap-2">
                  {workspace.team_members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200/60 rounded-lg hover:border-indigo-200 hover:shadow-sm hover:bg-indigo-50/30 transition-all group/item">
+                    <div key={member.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200/60 rounded-sm hover:border-indigo-200 hover:shadow-sm hover:bg-indigo-50/30 transition-all group/item">
                         
                         {/* Avatar */}
                         <div className="relative flex-shrink-0">
                             <img 
                               src={getAvatarUrl(member.email)} 
                               alt={member.email} 
-                              className="w-10 h-10 rounded-full bg-white border border-slate-200 object-cover shadow-sm group-hover/item:scale-105 transition-transform"
+                              className="w-10 h-10 rounded-sm bg-white border border-slate-200 object-cover shadow-sm group-hover/item:scale-105 transition-transform"
                             />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-sm"></div>
                         </div>
                         
                         

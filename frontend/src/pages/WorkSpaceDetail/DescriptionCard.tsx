@@ -53,13 +53,13 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
   const isOverLimit = description.length > MAX_DESC_LENGTH;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden relative font-sans group">
+    <div className="bg-white rounded-sm border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden relative font-sans group">
       
       {/* --- HEADER --- */}
       <div className="px-5 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {/* Consistent Icon Style */}
-          <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-md border border-slate-200/60 flex items-center justify-center shadow-sm">
+          <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-sm border border-slate-200/60 flex items-center justify-center shadow-sm">
              <Info className="h-4 w-4" />
           </div>
 
@@ -72,7 +72,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
         {isOwner && !isEditing && (
           <button 
             onClick={() => setIsEditing(true)} 
-            className="text-slate-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="text-slate-400 hover:text-blue-600 p-1.5 rounded-sm hover:bg-blue-50 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Edit Description"
           >
             <Edit3 className="h-3.5 w-3.5" />
@@ -90,7 +90,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
                 onChange={(e) => setDescription(e.target.value)}
                 className={`
                   w-full min-h-[160px] sm:min-h-[180px]
-                  resize-none rounded-md border bg-white
+                  resize-none rounded-sm border bg-white
                   px-3 py-2.5 text-sm leading-relaxed
                   text-slate-700 placeholder:text-slate-400
                   shadow-sm transition outline-none custom-scrollbar
@@ -105,7 +105,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
 
               <div className="absolute bottom-3 right-3 flex items-center gap-2">
                  {isOverLimit && <span className="text-[10px] font-medium text-red-600 animate-pulse">Limit exceeded</span>}
-                 <span className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border backdrop-blur-sm ${
+                 <span className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-sm border backdrop-blur-sm ${
                     isOverLimit 
                       ? 'bg-red-50 text-red-600 border-red-100' 
                       : 'bg-slate-50/80 text-slate-500 border-slate-200'
@@ -241,7 +241,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = ({ workspace, isO
                       initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full"
+                      className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-sm"
                     >
                       <div className="bg-emerald-500 rounded-full p-0.5"><Check className="w-2 h-2 text-white" /></div>
                       <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Saved</span>

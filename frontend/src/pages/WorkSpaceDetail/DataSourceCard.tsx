@@ -45,14 +45,14 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
+      <div className="bg-white rounded-sm border border-slate-200 shadow-sm flex flex-col h-full group transition-all duration-300 hover:shadow-md overflow-hidden font-sans">
         
         {/* --- HEADER --- */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white gap-4">
           <div className="flex items-center gap-3">
             
             {/* Standardized Icon Container for Consistency */}
-            <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-md border border-slate-200/60 flex items-center justify-center shadow-sm overflow-hidden p-1">
+            <div className="flex-shrink-0 w-8 h-8 bg-slate-50 text-slate-600 rounded-sm border border-slate-200/60 flex items-center justify-center shadow-sm overflow-hidden p-1">
                <Illustration className="w-full h-full object-contain" /> 
             </div>
 
@@ -62,8 +62,8 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                 <span className="text-[11px] text-slate-500 font-medium">{sub}</span>
                 {/* Status Indicator */}
                 {(workspace.data_source === 'API' || workspace.data_source === 'DB') && (
-                    <span className={`flex items-center gap-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${workspace.is_polling_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${workspace.is_polling_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                    <span className={`flex items-center gap-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm border ${workspace.is_polling_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-sm ${workspace.is_polling_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
                         {workspace.is_polling_active ? 'LIVE' : 'PAUSED'}
                     </span>
                 )}
@@ -74,7 +74,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
           {isOwner && (
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className="text-slate-400 hover:text-slate-900 p-1.5 rounded-md hover:bg-slate-100 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
+              className="text-slate-400 hover:text-slate-900 p-1.5 rounded-sm hover:bg-slate-100 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
               title="Configure Data Source"
             >
               <Settings2 className="h-3.5 w-3.5" />
@@ -144,10 +144,10 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                {workspace.data_source === 'CSV' && (
                 <div className="flex-grow flex flex-col justify-center animate-in fade-in duration-300">
                    {lastUpload && lastUpload.upload_type === 'manual' ? (
-                     <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 group/file relative hover:border-blue-300 transition-colors">
+                     <div className="bg-white border border-slate-200 shadow-sm rounded-sm p-4 group/file relative hover:border-blue-300 transition-colors">
                         <div className="flex items-start gap-4">
                            {/* Illustration as Icon */}
-                           <div className="w-10 h-10 flex-shrink-0 bg-slate-50 rounded-lg p-1.5 border border-slate-100">
+                           <div className="w-10 h-10 flex-shrink-0 bg-slate-50 rounded-sm p-1.5 border border-slate-100">
                               <LatestCsvIllustration className="w-full h-full" />
                            </div>
                            
@@ -167,7 +167,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                             <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                                 <button 
                                     onClick={() => setIsModalOpen(true)}
-                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-2 py-1 hover:bg-blue-50 rounded-sm transition-colors"
                                 >
                                     <Upload className="w-3 h-3" /> Upload New Version
                                 </button>
@@ -175,7 +175,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                         )}
                      </div>
                    ) : (
-                      <div className="text-center py-8 border border-dashed border-slate-300 rounded-xl bg-slate-50/50">
+                      <div className="text-center py-8 border border-dashed border-slate-300 rounded-sm bg-slate-50/50">
                           <div className="w-10 h-10 mx-auto mb-2 opacity-50 grayscale">
                              <CsvIllustration className="w-full h-full" />
                           </div>
@@ -195,21 +195,21 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                 <div className="flex flex-col h-full animate-in fade-in duration-300">
                     <div className="space-y-3">
                         {/* URL Card */}
-                        <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                        <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm">
                              <div className="flex items-center gap-1.5 mb-1.5">
                                 <Link className="w-3 h-3 text-slate-400" />
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                     Endpoint
                                 </span>
                              </div>
-                            <code className="block text-xs font-mono text-slate-700 bg-slate-50 px-2 py-1.5 rounded border border-slate-100 break-all">
+                            <code className="block text-xs font-mono text-slate-700 bg-slate-50 px-2 py-1.5 rounded-sm border border-slate-100 break-all">
                                 {workspace.api_url}
                             </code>
                         </div>
                         
                         {/* Stats Grid */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                            <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm flex flex-col justify-between">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     <Clock className="w-3 h-3" /> Interval
                                 </span>
@@ -217,7 +217,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                                     {workspace.polling_interval}
                                 </p>
                             </div>
-                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                            <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm flex flex-col justify-between">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     <Power className="w-3 h-3" /> Status
                                 </span>
@@ -239,7 +239,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                 <div className="flex flex-col h-full animate-in fade-in duration-300">
                     <div className="space-y-3">
                         {/* Host Card */}
-                        <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm relative overflow-hidden">
+                        <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-16 h-16 opacity-[0.03] -mr-3 -mt-3 pointer-events-none rotate-12">
                                 <DbIllustration className="w-full h-full text-slate-900" />
                             </div>
@@ -250,11 +250,11 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <code className="text-xs font-mono text-slate-700 font-semibold bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                                <code className="text-xs font-mono text-slate-700 font-semibold bg-slate-50 px-2 py-1 rounded-sm border border-slate-100">
                                     {workspace.db_host}
                                 </code>
                                 <span className="text-slate-300 text-xs">:</span>
-                                <code className="text-xs font-mono text-slate-500 bg-slate-50 px-1.5 py-1 rounded border border-slate-100">
+                                <code className="text-xs font-mono text-slate-500 bg-slate-50 px-1.5 py-1 rounded-sm border border-slate-100">
                                     {workspace.db_port}
                                 </code>
                             </div>
@@ -262,7 +262,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
 
                         {/* Stats Grid */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                            <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     <Clock className="w-3 h-3" /> Rate
                                 </span>
@@ -270,12 +270,12 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({ workspace, isOwn
                                     {workspace.polling_interval}
                                 </p>
                             </div>
-                            <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                            <div className="p-3 bg-white rounded-sm border border-slate-200 shadow-sm">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
                                     Status
                                 </span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${workspace.is_polling_active ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                    <span className={`w-2 h-2 rounded-sm ${workspace.is_polling_active ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
                                     <p className={`text-sm font-semibold ${workspace.is_polling_active ? 'text-slate-900' : 'text-slate-500'}`}>
                                         {workspace.is_polling_active ? 'Polling' : 'Idle'}
                                     </p>

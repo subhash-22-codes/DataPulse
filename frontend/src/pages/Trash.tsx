@@ -95,7 +95,7 @@ export const Trash: React.FC = () => {
 
 
   return (
-    <div className="max-w-6xl mx-auto py-8 sm:py-12 px-4 sm:px-6 relative z-10">
+    <div className="max-w-7xl mx-auto py-8 sm:py-12 px-4 sm:px-6 relative z-10">
       
       {/* --- NAVIGATION --- */}
       <button 

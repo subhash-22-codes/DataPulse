@@ -142,7 +142,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-[440px] transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-2xl transition-all border border-slate-200">
+              <Dialog.Panel className="w-full max-w-[440px] transform overflow-hidden rounded-sm bg-white text-left align-middle shadow-2xl transition-all border border-slate-200">
                 
                 {/* Header: Minimalist, Text-First */}
                 <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between bg-white">
@@ -154,7 +154,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                   <button
                     onClick={() => !isSaving && setIsOpen(false)}
                     disabled={isSaving}
-                    className="rounded-md p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all focus:outline-none"
+                    className="rounded-sm p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all focus:outline-none"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -168,8 +168,8 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                       <p className="text-xs text-slate-500 font-medium">Analyzing schema...</p>
                     </div>
                   ) : availableColumns.length === 0 ? (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
-                      <div className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-white border border-slate-200 mb-2 shadow-sm">
+                    <div className="py-8 text-center bg-slate-50/50 rounded-sm border border-dashed border-slate-200">
+                      <div className="inline-flex items-center justify-center w-8 h-8 rounded-sm bg-white border border-slate-200 mb-2 shadow-sm">
                         <Table2 className="w-4 h-4 text-slate-400" />
                       </div>
                       <h4 className="text-slate-900 font-medium text-xs">No Numeric Data</h4>
@@ -190,7 +190,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                             id="column"
                             value={columnName}
                             onChange={e => setColumnName(e.target.value)}
-                            className="block w-full appearance-none rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
+                            className="block w-full appearance-none rounded-sm border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
                             >
                             {availableColumns.map(col => <option key={col} value={col}>{col}</option>)}
                             </select>
@@ -211,7 +211,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                                 id="metric"
                                 value={metric}
                                 onChange={e => setMetric(e.target.value)}
-                                className="block w-full appearance-none rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
+                                className="block w-full appearance-none rounded-sm border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
                             >
                                 <option value="mean">Average</option>
                                 <option value="50%">Median (50th %)</option>
@@ -233,7 +233,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                                 id="condition"
                                 value={condition}
                                 onChange={e => setCondition(e.target.value)}
-                                className="block w-full appearance-none rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
+                                className="block w-full appearance-none rounded-sm border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-medium focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all cursor-pointer"
                             >
                                 <option value="greater_than">Greater than</option>
                                 <option value="less_than">Less than</option>
@@ -256,7 +256,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
                             id="value"
                             value={value}
                             onChange={e => setValue(parseFloat(e.target.value))}
-                            className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-mono focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all placeholder:text-slate-300"
+                            className="block w-full rounded-sm border border-slate-200 bg-white px-3 py-2 text-slate-900 text-sm font-mono focus:border-slate-400 focus:ring-4 focus:ring-slate-100 shadow-sm transition-all placeholder:text-slate-300"
                             step="any"
                             placeholder="0.00"
                             />
