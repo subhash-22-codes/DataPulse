@@ -1353,6 +1353,7 @@ def _save_results(
             metric_date=date.today(),
             missing_percent=float(missing_pct),
             unique_percent=float(quality_report["unique_percent_by_column"].get(col, 0.0)),
+            health_score=float(quality_report["column_health_score"].get(col, 100.0)),
         )
         for col, missing_pct in quality_report["missing_percent_by_column"].items()
     ]
@@ -1360,17 +1361,6 @@ def _save_results(
     t = time.perf_counter()
     db.bulk_save_objects(metrics)
     logger.info(f"[SAVE] Column metrics saved in {time.perf_counter() - t:.2f}s")
-
-    # ── NEW LOGS ──────────────────────────────────────────────────────────────
-    logger.info(f"[SAVE] Columns written to DB: {[m.column_name for m in metrics]}")
-    logger.info(f"[SAVE] metric_date written: {date.today()}")
-    for m in metrics:
-        logger.info(
-            f"[SAVE] col={m.column_name} | "
-            f"missing={m.missing_percent}% | "
-            f"unique={m.unique_percent}%"
-        )
-    # ─────────────────────────────────────────────────────────────────────────
 
     # Table-level daily metrics
     db.add(TableDailyMetrics(

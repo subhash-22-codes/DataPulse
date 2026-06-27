@@ -28,6 +28,7 @@ class ColumnDailyMetrics(Base):
 
     missing_percent = Column(Float, nullable=False)
     unique_percent = Column(Float, nullable=False)
+    health_score = Column(Float, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

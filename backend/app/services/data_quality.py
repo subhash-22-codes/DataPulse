@@ -12,15 +12,89 @@ MAX_ROWS_ANALYSIS = 100_000
 # HEURISTIC HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _looks_like_id_column_name(col: str) -> bool:
-    """Detects ID/key columns that are expected to be unique — exempt from uniqueness penalty."""
+# ─────────────────────────────────────────────────────────────────────────────
+# CARDINALITY HEURISTICS
+# Determines whether a column is expected to have high or low uniqueness.
+# Used to exempt columns from the low-uniqueness penalty in health scoring.
+#
+# Design principles:
+# - Column name check runs first (cheap, O(1))
+# - Data content check runs second (more expensive, samples 30 rows)
+# - When in doubt, do NOT exempt — penalize low uniqueness
+# - All checks are additive — first match wins
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Column name keywords that strongly suggest HIGH cardinality
+# (unique per row by design)
+_HIGH_CARDINALITY_NAME_KEYWORDS: frozenset[str] = frozenset({
+    # Identity
+    "id", "uuid", "guid", "uid", "oid", "pk",
+    # Keys & references
+    "key", "token", "hash", "checksum", "fingerprint", "signature",
+    # Codes that are unique
+    "serial", "barcode", "sku", "isbn", "iban", "ssn",
+    "passport", "license", "registration", "tracking",
+    # Personal name identifiers  ← ADDED
+    "name", "firstname", "lastname", "fullname",
+    "surname", "username", "nickname", "alias",
+    # Contact (high cardinality per person)
+    "email", "phone", "mobile", "fax", "url", "website", "link",
+    # Address (high cardinality)
+    "address", "street", "postcode", "zipcode", "zip",
+    # Free text
+    "description", "comment", "note", "remark", "bio",
+    "summary", "detail", "message", "content", "body", "text",
+    # Timestamps & versions (often unique)
+    "timestamp", "datetime", "created_at", "updated_at",
+    "transaction", "order", "invoice", "receipt",
+})
+
+# Column name keywords that strongly suggest LOW cardinality
+# (few distinct values by design)
+_LOW_CARDINALITY_NAME_KEYWORDS: frozenset[str] = frozenset({
+    # Geography (bounded sets)
+    "country", "nation", "continent", "region", "territory",
+    "state", "province", "county", "district", "zone",
+    # Classification
+    "status", "state", "stage", "phase", "step",
+    "type", "kind", "category", "class", "group", "tier", "level",
+    "tag", "label", "flag", "mode", "format",
+    # Demographics
+    "gender", "sex", "marital", "education", "degree",
+    "nationality", "language", "currency",
+    # Organisation
+    "department", "division", "team", "unit", "branch",
+    "role", "title", "rank", "grade", "band",
+    # Boolean-like
+    "is_", "has_", "can_", "active", "enabled", "verified",
+    "approved", "deleted", "archived", "published",
+    # Priority / severity
+    "priority", "severity", "urgency", "impact",
+    "rating", "score_band", "quality",
+})
+
+
+def _col_name_suggests_high_cardinality(col: str) -> bool:
+    """
+    Returns True if the column name contains a keyword associated with
+    high-cardinality data (IDs, emails, free text, timestamps, etc.).
+    """
     c = col.lower().strip()
-    has_id_keyword = any(k in c for k in ["id", "uuid", "guid", "key"])
-    is_bad = any(k in c for k in ["email", "name", "location", "address", "city"])
-    return has_id_keyword and not is_bad
+    return any(kw in c for kw in _HIGH_CARDINALITY_NAME_KEYWORDS)
+
+
+def _col_name_suggests_low_cardinality(col: str) -> bool:
+    """
+    Returns True if the column name contains a keyword associated with
+    low-cardinality data (status, type, country, department, etc.).
+    These columns should NOT be exempt from the uniqueness penalty.
+    """
+    c = col.lower().strip()
+    return any(kw in c for kw in _LOW_CARDINALITY_NAME_KEYWORDS)
 
 
 def _looks_like_email_series(s: pd.Series) -> bool:
+    """Detects email columns by scanning data content."""
     sample = s.dropna().astype(str).head(30)
     if sample.empty:
         return False
@@ -28,29 +102,112 @@ def _looks_like_email_series(s: pd.Series) -> bool:
     return (hits / len(sample)) >= 0.6
 
 
-def _looks_like_name_series(s: pd.Series) -> bool:
+def _looks_like_url_series(s: pd.Series) -> bool:
+    """Detects URL/link columns by scanning data content."""
     sample = s.dropna().astype(str).head(30)
     if sample.empty:
         return False
     hits = sum(
-        1 for v in sample
-        if 2 <= len(v.strip()) <= 40 and re.fullmatch(r"[A-Za-z\s\.\-']+", v.strip())
+        bool(re.match(r"https?://|www\.", v.strip(), re.IGNORECASE))
+        for v in sample
+    )
+    return (hits / len(sample)) >= 0.5
+
+
+def _looks_like_phone_series(s: pd.Series) -> bool:
+    """Detects phone number columns by scanning data content."""
+    sample = s.dropna().astype(str).head(30)
+    if sample.empty:
+        return False
+    hits = sum(
+        bool(re.search(r"[\+\-\(\)\s\d]{7,15}", v.strip()))
+        for v in sample
     )
     return (hits / len(sample)) >= 0.6
 
 
+def _looks_like_free_text_series(s: pd.Series) -> bool:
+    """
+    Detects free-text columns by checking average string length.
+    Long strings (avg > 40 chars) are almost certainly free text —
+    descriptions, comments, notes — and are expected to be unique.
+    """
+    sample = s.dropna().astype(str).head(50)
+    if sample.empty:
+        return False
+    avg_len = sample.str.len().mean()
+    return avg_len > 40
+
+
+def _looks_like_name_series(s: pd.Series) -> bool:
+    """
+    Detects personal name columns by scanning data content.
+    Matches single-word names (First_Name, Last_Name) and
+    full names (John Smith) alike.
+
+    Safe to use without space requirement because
+    _col_name_suggests_low_cardinality runs first and blocks
+    country/city/status columns from reaching this check.
+    """
+    sample = s.dropna().astype(str).head(30)
+    if sample.empty:
+        return False
+
+    hits = sum(
+        1 for v in sample
+        if 2 <= len(v.strip()) <= 40
+        and re.fullmatch(r"[A-Za-z\s\.\-']+", v.strip())
+    )
+    return (hits / len(sample)) >= 0.5
+
+
 def _is_high_cardinality_expected(col: str, s: pd.Series) -> bool:
     """
-    Returns True for columns where high uniqueness is expected by nature.
-    These are exempt from the low-uniqueness penalty.
-    Examples: IDs, emails, names, free-text fields.
+    Master function. Returns True if this column is expected to have
+    high uniqueness by nature — and should be EXEMPT from the
+    low-uniqueness penalty in health scoring.
+
+    Decision order (first match wins):
+    1. Column name → known LOW cardinality keywords  → NOT exempt
+    2. Column name → known HIGH cardinality keywords → exempt
+    3. Data content → emails                         → exempt
+    4. Data content → URLs                           → exempt
+    5. Data content → phone numbers                  → exempt
+    6. Data content → free text (avg len > 40)       → exempt
+    7. Data content → personal names                 → exempt
+    8. Default                                       → NOT exempt
     """
-    if _looks_like_id_column_name(col):
+    # ── Step 1: Low-cardinality name check (blocks exemption early) ───────────
+    # If the column name clearly suggests low cardinality, skip all content
+    # checks. This prevents "Country", "Status", "Department" etc. from
+    # being wrongly exempted by the name content heuristics below.
+    if _col_name_suggests_low_cardinality(col):
+        return False
+
+    # ── Step 2: High-cardinality name check ───────────────────────────────────
+    # Column name strongly suggests unique-per-row data.
+    if _col_name_suggests_high_cardinality(col):
         return True
+
+    # ── Step 3–7: Data content checks ─────────────────────────────────────────
+    # Only run if column name gave no signal.
+    # Each check samples a small number of rows — cheap enough for production.
     if _looks_like_email_series(s):
         return True
+
+    if _looks_like_url_series(s):
+        return True
+
+    if _looks_like_phone_series(s):
+        return True
+
+    if _looks_like_free_text_series(s):
+        return True
+
     if _looks_like_name_series(s):
         return True
+
+    # ── Default: do NOT exempt ─────────────────────────────────────────────────
     return False
 
 
@@ -488,7 +645,7 @@ def _generate_quality_insights(
     # Informational — helps users know what they can visualize
     chartable_num_cols = [
         c for c in metrics["numeric_columns"]
-        if not _looks_like_id_column_name(c)
+        if not _col_name_suggests_high_cardinality(c)
     ]
     if chartable_num_cols:
         insights.append({

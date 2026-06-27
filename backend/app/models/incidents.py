@@ -31,7 +31,8 @@ class Incident(Base):
     first_seen = Column(DateTime(timezone=True), nullable=False)
     last_seen = Column(DateTime(timezone=True), nullable=False)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-
+    
+    column_name = Column(String, nullable=True)
     row_drop_percent = Column(Integer, nullable=True)
     schema_change_size = Column(Integer, nullable=True)
     missing_percent = Column(Integer, nullable=True)

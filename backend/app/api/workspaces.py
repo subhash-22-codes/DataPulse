@@ -1336,7 +1336,24 @@ def manual_resolve_incident(
     workspace_id: str = Path(...),
     incident_id: str = Path(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    # Ownership check - same pattern as list_incidents
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        workspace = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.is_deleted == False,
+        ).first()
+
+        if not workspace or current_user not in workspace.team_members:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
     incident = (
         db.query(Incident)
         .filter(
@@ -1348,6 +1365,9 @@ def manual_resolve_incident(
 
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+
+    if incident.status != "open":
+        raise HTTPException(status_code=400, detail=f"Incident is already {incident.status}")
 
     incident.status = "ignored"
     incident.resolved_at = datetime.now(timezone.utc)
@@ -1361,6 +1381,7 @@ def manual_resolve_incident(
         "status": incident.status,
         "resolved_at": incident.resolved_at,
     }
+
 
 @router.get("/{workspace_id}/incidents")
 def list_incidents(
@@ -1400,6 +1421,7 @@ def list_incidents(
             "status": i.status,
             "trigger_file_name": i.trigger_file_name,
             "upload_type": i.upload_type,
+            "column_name": i.column_name,
             "first_seen": i.first_seen,
             "last_seen": i.last_seen,
             "resolved_at": i.resolved_at,
@@ -1411,9 +1433,6 @@ def list_incidents(
         }
         for i in incidents
     ]
-
-
-
 
 @router.get("/{workspace_id}/table-metrics")
 def get_table_metrics(
@@ -1488,7 +1507,6 @@ def get_column_metrics(
         .all()
     )
 
-    # ── NEW LOGS ──────────────────────────────────────────────────────────────
     logger.info(
         f"[COLUMN-METRICS] Found {len(rows)} records for column='{column_name}'"
     )
@@ -1496,9 +1514,9 @@ def get_column_metrics(
         logger.info(
             f"[COLUMN-METRICS] date={r.metric_date} | "
             f"missing={r.missing_percent}% | "
-            f"unique={r.unique_percent}%"
+            f"unique={r.unique_percent}% | "
+            f"health={r.health_score}"
         )
-    # ─────────────────────────────────────────────────────────────────────────
 
     return [
         {
@@ -1506,6 +1524,7 @@ def get_column_metrics(
             "column": r.column_name,
             "missing_percent": r.missing_percent,
             "unique_percent": r.unique_percent,
+            "health_score": r.health_score,
         }
         for r in rows
     ]
