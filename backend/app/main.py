@@ -17,7 +17,7 @@ import json
 from app.core.connection_manager import manager 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.api import auth, workspaces, notifications, uploads, alerts, chat, user_action, feedbacks
-from app.models import user, workspace, data_upload, notification, alert_rule, token, feedback, workspace_user_settings, table_daily_metrics, column_daily_metrics, incidents
+from app.models import user, workspace, data_upload, notification, alert_rule, token, feedback, workspace_user_settings, table_daily_metrics, column_daily_metrics, incidents, incident_events
 from app.core.guard import send_telegram_alert
 
 # Load environment variables

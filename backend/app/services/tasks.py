@@ -31,11 +31,12 @@ from app.models.column_daily_metrics import ColumnDailyMetrics
 from app.models.incidents import Incident
 from app.services.email_service import send_detailed_alert_email, send_threshold_alert_email, send_otp_email
 from app.core.connection_manager import manager
+from app.core.email_concurrency import EMAIL_SEM
 import concurrent.futures
 import json
 import re
 from sqlalchemy.exc import OperationalError, InterfaceError
-from app.services.incident_engine import incident_engine
+from app.services.incident_engine import incident_engine, _check_ingestion_failure
 from app.services.incident_engine import _create_incident
 from app.services.data_quality import analyze_dataframe_quality
 from app.services.storage_service import download_file_bytes
@@ -1112,7 +1113,7 @@ def clean_nan(obj):
             return None
     return obj
 
-EMAIL_SEM = threading.BoundedSemaphore(3)
+
 
 def _run_email_in_background(recipients, email_context):
     if not EMAIL_SEM.acquire(blocking=False):
@@ -1164,13 +1165,10 @@ def _load_dataframe(
         except Exception as e:
             logger.error(f"[LOAD] Storage download failed: {e}", exc_info=True)
             try:
-                _create_incident(
+                _check_ingestion_failure(
                     db=db,
                     current_upload=current_upload,
-                    issue_type="ingestion_failure",
-                    severity="high",
-                    failure_reason="Storage download failed",
-                    affected_columns=None,
+                    failure_reason="Storage download failed",   # or "CSV parse error" in the other spot
                 )
                 db.commit()
             except Exception as inc_err:
@@ -1202,7 +1200,10 @@ def _load_dataframe(
 
             for col in chunk.columns:
                 if chunk[col].dtype == "object":
-                    chunk[col] = pd.to_numeric(chunk[col], errors="ignore")
+                    try:
+                        chunk[col] = pd.to_numeric(chunk[col])
+                    except (ValueError, TypeError):
+                        pass
 
             if total_rows > MAX_ROWS:
                 is_truncated = True
@@ -1226,13 +1227,10 @@ def _load_dataframe(
     except Exception as e:
         logger.error(f"[LOAD] CSV parse failed: {e}", exc_info=True)
         try:
-            _create_incident(
+            _check_ingestion_failure(
                 db=db,
                 current_upload=current_upload,
-                issue_type="ingestion_failure",
-                severity="high",
-                failure_reason="CSV parse error",
-                affected_columns=None,
+                failure_reason="CSV parse error",   # or "CSV parse error" in the other spot
             )
             db.commit()
         except Exception as inc_err:

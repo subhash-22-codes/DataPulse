@@ -34,8 +34,10 @@ from app.services.email_service import send_delete_otp_email
 from app.models.notification import Notification
 from app.models.workspace_user_settings import WorkspaceUserSettings
 from app.models.incidents import Incident
+from app.models.incident_events import IncidentEvent 
 from app.models.table_daily_metrics import TableDailyMetrics
 from app.models.column_daily_metrics import ColumnDailyMetrics
+from app.models.incident_events import IncidentEvent
 from app.services.tasks import executor
 from app.services.tasks import process_csv_task
 from app.services.storage_service import upload_csv_bytes
@@ -1373,6 +1375,14 @@ def manual_resolve_incident(
     incident.resolved_at = datetime.now(timezone.utc)
     incident.last_seen = datetime.now(timezone.utc)
 
+    db.add(IncidentEvent(
+        incident_id=incident.id,
+        upload_id=incident.upload_id,
+        event_type="ignored",
+        severity=incident.severity,
+        metrics={"resolved_by": "manual", "resolved_by_name": current_user.name},
+    ))
+
     db.commit()
     db.refresh(incident)
 
@@ -1389,22 +1399,16 @@ def list_incidents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Ownership check
     workspace = db.query(Workspace).filter(
         Workspace.id == workspace_id,
-        Workspace.owner_id == current_user.id,
         Workspace.is_deleted == False,
     ).first()
 
     if not workspace:
-        # Check if user is a team member
-        workspace = db.query(Workspace).filter(
-            Workspace.id == workspace_id,
-            Workspace.is_deleted == False,
-        ).first()
+        raise HTTPException(status_code=404, detail="Workspace not found")
 
-        if not workspace or current_user not in workspace.team_members:
-            raise HTTPException(status_code=403, detail="Not authorized")
+    if workspace.owner_id != current_user.id and current_user not in workspace.team_members:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     incidents = (
         db.query(Incident)
@@ -1434,6 +1438,59 @@ def list_incidents(
         for i in incidents
     ]
 
+@router.get("/{workspace_id}/incidents/{incident_id}/events")
+def list_incident_events(
+    workspace_id: str = Path(...),
+    incident_id: str = Path(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Same ownership check as list_incidents / manual_resolve_incident
+    workspace = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.owner_id == current_user.id,
+        Workspace.is_deleted == False,
+    ).first()
+
+    if not workspace:
+        workspace = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.is_deleted == False,
+        ).first()
+
+        if not workspace or current_user not in workspace.team_members:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Confirm the incident actually belongs to this workspace before
+    # returning its events — otherwise a valid incident_id from a
+    # DIFFERENT workspace could leak events cross-tenant.
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id,
+        Incident.workspace_id == workspace_id,
+    ).first()
+
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    events = (
+        db.query(IncidentEvent)
+        .filter(IncidentEvent.incident_id == incident_id)
+        .order_by(IncidentEvent.created_at.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(e.id),
+            "event_type": e.event_type,
+            "severity": e.severity,
+            "metrics": e.metrics,
+            "created_at": e.created_at,
+        }
+        for e in events
+    ]
+    
+    
 @router.get("/{workspace_id}/table-metrics")
 def get_table_metrics(
     workspace_id: str,
