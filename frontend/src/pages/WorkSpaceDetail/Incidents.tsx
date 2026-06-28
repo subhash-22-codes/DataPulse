@@ -26,6 +26,14 @@ type Incident = {
   failure_reason: string | null;
 };
 
+type IncidentEvent = {
+  id: string;
+  event_type: "created" | "updated" | "resolved" | "reopened";
+  severity: "low" | "medium" | "high";
+  metrics: Record<string, unknown> | null;
+  created_at: string;
+};
+
 // ─── HELPERS — untouched ─────────────────────────────────────────────────────
 
 const fmtShort = (iso: string | null) => {
@@ -59,6 +67,14 @@ const SEV = {
   low:    { dot: "bg-slate-400",  badge: "bg-slate-50 text-slate-600 border-slate-200", label: "Low"    },
 };
 
+const EVENT_CONFIG: Record<string, { icon: typeof Activity; color: string; label: string }> = {
+  created:  { icon: AlertTriangle, color: "text-red-500",     label: "Created" },
+  updated:  { icon: Activity,      color: "text-amber-500",   label: "Updated" },
+  resolved: { icon: CheckCircle2,  color: "text-emerald-500", label: "Resolved" },
+  reopened: { icon: Clock,         color: "text-blue-500",    label: "Reopened" },
+  ignored:  { icon: CheckCheck,    color: "text-slate-500",   label: "Reviewed" }, // ADD THIS
+};
+
 // ─── RENDER REASON — untouched logic ─────────────────────────────────────────
 const renderReason = (i: Incident): string => {
   if (i.issue_type === "ingestion_failure" && i.failure_reason)
@@ -78,14 +94,95 @@ const renderReason = (i: Incident): string => {
   return "Unusual data change detected";
 };
 
+const Timeline: React.FC<{ events: IncidentEvent[]; loading: boolean }> = ({ events, loading }) => {
+  if (loading) {
+    return (
+      <div className="pl-8 pb-1 space-y-2">
+        {[1, 2].map(i => (
+          <div key={i} className="h-8 rounded-sm bg-slate-100 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <p className="pl-8 text-[11px] text-slate-400 font-manrope py-2">
+        No history yet for this incident.
+      </p>
+    );
+  }
+
+  return (
+    <div className="pl-8 pr-2 pb-1 space-y-3 border-l border-slate-100 ml-3 mt-1">
+      {events.map((e) => {
+        const cfg = EVENT_CONFIG[e.event_type] ?? EVENT_CONFIG.updated;
+        const Icon = cfg.icon;
+        return (
+          <div key={e.id} className="flex items-start gap-2.5 -ml-[29px]">
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center mt-0.5">
+              <Icon className={`h-2.5 w-2.5 ${cfg.color}`} />
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-700 font-manrope">
+                  {cfg.label}
+                </span>
+                <span className={`text-[10px] font-bold ${SEV[e.severity].badge} px-1.5 py-0.5 rounded-full border`}>
+                  {SEV[e.severity].label}
+                </span>
+                <span className="text-[10px] text-slate-400 font-manrope">
+                  {fmtShort(e.created_at)}
+                </span>
+              </div>
+              {e.metrics && Object.keys(e.metrics).length > 0 && (
+                <p className="text-[10px] text-slate-400 font-manrope mt-0.5 font-mono">
+                  {Object.entries(e.metrics)
+                    .filter(([, v]) => v !== null && v !== undefined)
+                    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(",") : v}`)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // ─── INCIDENT CARD ───────────────────────────────────────────────────────────
 const IncidentCard: React.FC<{
   incident: Incident;
   onResolve: (id: string) => void;
   resolving: boolean;
-}> = ({ incident: i, onResolve, resolving }) => {
+  workspaceId: string;
+}> = ({ incident: i, onResolve, resolving, workspaceId }) => {
   const sev = SEV[i.severity];
   const isOpen = i.status === "open";
+
+  const [expanded, setExpanded] = useState(false);
+  const [events, setEvents] = useState<IncidentEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
+
+  const toggleExpand = async () => {
+    const next = !expanded;
+    setExpanded(next);
+
+    if (next && !eventsLoaded) {
+      setEventsLoading(true);
+      try {
+        const res = await dataMetricsService.getIncidentEvents(workspaceId, i.id);
+        setEvents(Array.isArray(res.data) ? res.data : []);
+        setEventsLoaded(true);
+      } catch (err) {
+        console.error("getIncidentEvents failed", err);
+      } finally {
+        setEventsLoading(false);
+      }
+    }
+  };
 
   return (
     <div className={`bg-white border rounded-sm transition-all duration-200 ${
@@ -176,9 +273,17 @@ const IncidentCard: React.FC<{
             </div>
           </div>
 
-          {/* Resolve button */}
-          {isOpen && (
-            <div className="flex-shrink-0 mt-0.5">
+          {/* Timeline toggle + Resolve button */}
+          <div className="flex-shrink-0 mt-0.5 flex items-center gap-2">
+            <button
+              onClick={toggleExpand}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border border-slate-200 bg-white text-[11px] font-bold text-slate-500 font-manrope hover:border-slate-300 hover:text-slate-900 transition-all active:scale-[0.98]"
+            >
+              <Clock className="h-3 w-3" />
+              {expanded ? "Hide" : "History"}
+            </button>
+
+            {isOpen && (
               <button
                 disabled={resolving}
                 onClick={() => onResolve(i.id)}
@@ -190,14 +295,20 @@ const IncidentCard: React.FC<{
                   <><CheckCircle2 className="h-3 w-3" />Mark reviewed</>
                 )}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Timeline panel */}
+      {expanded && (
+        <div className="border-t border-slate-100 px-4 sm:px-5 py-3">
+          <Timeline events={events} loading={eventsLoading} />
+        </div>
+      )}
     </div>
   );
 };
-
 // ─── STAT CHIP ────────────────────────────────────────────────────────────────
 const StatChip: React.FC<{
   value: number;
@@ -479,6 +590,7 @@ export default function Incidents() {
                   incident={i}
                   onResolve={resolveIncident}
                   resolving={resolvingId === i.id}
+                  workspaceId={id!}
                 />
               ))}
             </div>

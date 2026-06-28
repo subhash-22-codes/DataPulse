@@ -12,7 +12,13 @@ import { ModalShell } from "./ModelShell";
 import { Link } from "react-router-dom";
 
 // ─── TYPES — untouched ───────────────────────────────────────────────────────
-type Priority = "low" | "info" | "warning" | "critical";
+type Priority =
+  | "low"
+  | "medium"
+  | "high"
+  | "info"
+  | "warning"
+  | "critical";
 
 interface Payload {
   workspace_name?: string | null;
@@ -61,15 +67,49 @@ const getStatusLabel = (n: Notification) => {
     if (p?.event === "team_added")   return { text: "Team Update",    color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold" };
     return { text: "Workspace Update", color: "text-slate-700 bg-slate-50 border-slate-100 font-manrope font-bold" };
   }
-  if (n.notification_type === "data_update") {
-    if (n.priority === "critical") return { text: "Action Needed", color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
-    if (n.priority === "warning")  return { text: "Data Changed",  color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold" };
-    return { text: "Data Updated", color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold" };
+  if (n.notification_type === "incident") {
+    if (n.priority === "critical" || n.priority === "high") return { text: "Incident", color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
+    if (n.priority === "warning" || n.priority === "medium") return { text: "Incident", color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold" };
+    return { text: "Incident", color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold" };
   }
-  if (p?.event === "data_violation" || n.priority === "critical") return { text: "Action Needed",     color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
+  if (n.notification_type === "data_update") {
+  if (n.priority === "critical" || n.priority === "high")
+    return {
+      text: "Action Needed",
+      color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold",
+    };
+
+  if (n.priority === "warning" || n.priority === "medium")
+    return {
+      text: "Data Changed",
+      color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold",
+    };
+
+  return {
+    text: "Data Updated",
+    color: "text-blue-700 bg-blue-50 border-blue-100 font-manrope font-bold",
+  };
+}
+  if (
+    p?.event === "data_violation" ||
+    n.priority === "critical" ||
+    n.priority === "high"
+  )
+    return {
+      text: "Action Needed",
+      color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold"
+    };
   if (p?.event === "workspace_deleted")  return { text: "Workspace Deleted",  color: "text-red-700 bg-red-50 border-red-100 font-manrope font-bold" };
   if (p?.event === "workspace_restored") return { text: "Workspace Restored", color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold" };
-  if (p?.event === "pipeline_failure" || n.priority === "warning") return { text: "Issue Found", color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold" };
+  if (
+    p?.event === "pipeline_failure" ||
+    n.priority === "warning" ||
+    n.priority === "medium"
+  )
+    return {
+      text: "Issue Found",
+      color: "text-amber-700 bg-amber-50 border-amber-100 font-manrope font-bold"
+    };
   if (!p && (n.notification_type === "alert" || n.priority === "info")) return { text: "Update", color: "text-slate-700 bg-slate-50 border-slate-100 font-manrope font-bold" };
   return { text: "Healthy", color: "text-emerald-700 bg-emerald-50 border-emerald-100 font-manrope font-bold" };
 };
@@ -78,6 +118,7 @@ const getVerbalFeedback = (n: Notification) => {
   const p = n.payload;
   if (n.notification_type === "polling_error") return n.message;
   if (n.notification_type === "team_update")   return n.message;
+  if (n.notification_type === "incident") return n.message;
   if (p?.event === "workspace_deleted" || p?.event === "workspace_restored") return n.message;
 
   let feedback = !p ? n.message : "";
@@ -117,10 +158,22 @@ const getVerbalFeedback = (n: Notification) => {
 // ─── PRIORITY ACCENT ─────────────────────────────────────────────────────────
 const priorityAccent = (priority: Priority) => {
   switch (priority) {
-    case "critical": return "border-l-red-400";
-    case "warning":  return "border-l-amber-400";
-    case "info":     return "border-l-blue-400";
-    default:         return "border-l-slate-200";
+    case "critical":
+    case "high":
+      return "border-l-red-400";
+
+    case "warning":
+    case "medium":
+      return "border-l-amber-400";
+
+    case "info":
+      return "border-l-blue-400";
+
+    case "low":
+      return "border-l-slate-200";
+
+    default:
+      return "border-l-slate-200";
   }
 };
 
@@ -159,7 +212,8 @@ const NotificationCard: React.FC<{
     (Array.isArray(p?.schema_added)   && (p?.schema_added?.length   ?? 0) > 0) ||
     (Array.isArray(p?.schema_removed) && (p?.schema_removed?.length ?? 0) > 0);
 
-  const isCritical = n.priority === "critical";
+  const isCritical =
+    n.priority === "critical" || n.priority === "high";
   const accent     = priorityAccent(n.priority);
 
   return (

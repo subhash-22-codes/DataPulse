@@ -138,6 +138,10 @@ export const dataMetricsService = {
     return api.get(`/workspaces/${workspaceId}/incidents`);
   },
 
+  getIncidentEvents(workspaceId: string, incidentId: string) {
+    return api.get(`/workspaces/${workspaceId}/incidents/${incidentId}/events`);
+  },
+
   resolveIncident(workspaceId: string, incidentId: string) {
     return api.post(
       `/workspaces/${workspaceId}/incidents/${incidentId}/resolve`

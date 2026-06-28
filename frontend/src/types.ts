@@ -39,6 +39,7 @@ export type QualityReport = {
   unique_percent_by_column: Record<string, number>;
   duplicate_rows: number;
   outliers_by_column: Record<string, number>;
+  dataset_health_score?: number;
 };
 
 export type AnalysisResults = {

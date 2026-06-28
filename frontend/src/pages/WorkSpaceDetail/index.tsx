@@ -20,6 +20,12 @@ function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
+type IncidentSummaryItem = {
+  status: string;
+  severity: string;
+  issue_type: string;
+};
+
 const WorkspaceDetail: React.FC = () => {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
@@ -32,6 +38,11 @@ const WorkspaceDetail: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [refreshHistoryKey, setRefreshHistoryKey] = useState(0);
   const [lastUpload, setLastUpload] = useState<DataUpload | null>(null); 
+  const [incidentSummary, setIncidentSummary] = useState<{
+    activeCount: number;
+    highCount: number;
+    schemaStable: boolean;
+  } | null>(null);
   // ----------------------------------------
 
   const fetchWorkspace = useCallback(async () => {
@@ -51,7 +62,21 @@ const WorkspaceDetail: React.FC = () => {
       setLoading(false);
     }
   }, [id]); 
+  
 
+  const fetchIncidentSummary = useCallback(async () => {
+  if (!id) return;
+  try {
+    const res = await api.get<IncidentSummaryItem[]>(`/workspaces/${id}/incidents`);
+    const incidents = Array.isArray(res.data) ? res.data : [];
+    const active = incidents.filter((i) => i.status === "open");
+    const high = active.filter((i) => i.severity === "high");
+    const schemaStable = !active.some((i) => i.issue_type === "schema_breaking_change");
+    setIncidentSummary({ activeCount: active.length, highCount: high.length, schemaStable });
+  } catch (err) {
+    console.error("fetchIncidentSummary failed", err);
+  }
+}, [id]);
   // Initial Fetch Effect
   useEffect(() => {
     if (id) fetchWorkspace();
@@ -116,6 +141,7 @@ useEffect(() => {
         if (data.type === "job_complete") {
           setIsProcessing(false);
           setRefreshHistoryKey((prev) => prev + 1);
+          fetchIncidentSummary(); 
 
           if (data.status === "failed") {
             setWorkspace((prev) =>
@@ -190,7 +216,7 @@ useEffect(() => {
 
     document.removeEventListener("visibilitychange", handleVisibilityChange);
   };
-}, [id, user]);
+}, [id, user, fetchIncidentSummary]);
 
 
   const handleHistoryLoaded = useCallback((manualUploads: DataUpload[], scheduledFetches: DataUpload[]) => {
@@ -305,6 +331,7 @@ if (!workspace) {
 
 
   const isOwner = String(workspace.owner_id) === String(user?.id);
+  const healthScore = lastUpload?.analysis_results?.quality_report?.dataset_health_score;
 
   return (
     <div className="workspace-background min-h-screen bg-slate-50/50">
@@ -437,39 +464,45 @@ if (!workspace) {
               </div>
 
               <div className="w-full space-y-4">
+                {/* Module cards */}
+                {/* Module cards */}
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
 
                   {/* Trends */}
                   <Link
                     to={`/workspace/${id}/trends`}
-                    className="
-                      group
-                      flex items-center justify-between
-                      px-5 py-4
-                      border border-slate-200
-                      bg-white
-                      hover:border-blue-400
-                      transition
-                    "
+                    className="group relative flex flex-col overflow-hidden rounded-sm border border-slate-200 bg-white transition-all hover:border-blue-300 hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)]"
                   >
-                    <div className="flex items-start gap-3">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        className="h-5 w-5 text-blue-600 mt-0.5"
-                      >
-                        <path d="M3 20H21" />
-                        <path d="M5 14L10 9L14 13L20 6" />
-                      </svg>
-
+                    <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Trends
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-sm font-bold text-slate-900 font-poppins">Trends</p>
+                        <p className="text-xs text-slate-500 mt-1 font-manrope leading-relaxed">
                           Historical volume and schema stability
+                        </p>
+                      </div>
+                      <img src="/images/trends.svg" alt="" className="w-14 h-14 object-contain flex-shrink-0" />
+                    </div>
+                    <div className="px-5 pb-4 mt-auto flex items-center gap-4 border-t border-slate-100 pt-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">Latest rows</p>
+                        <p className="text-base font-bold text-slate-900 font-poppins tabular-nums">
+                          {lastUpload ? lastUpload?.analysis_results?.row_count?.toLocaleString() ?? "—" : "—"}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-100" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">Schema</p>
+                        <p
+                          className={classNames(
+                            "text-base font-bold font-poppins",
+                            incidentSummary === null
+                              ? "text-slate-900"
+                              : incidentSummary.schemaStable
+                              ? "text-emerald-600"
+                              : "text-red-600"
+                          )}
+                        >
+                          {incidentSummary === null ? "—" : incidentSummary.schemaStable ? "Stable" : "Changed"}
                         </p>
                       </div>
                     </div>
@@ -478,35 +511,46 @@ if (!workspace) {
                   {/* Incidents */}
                   <Link
                     to={`/workspace/${id}/incidents`}
-                    className="
-                      group
-                      flex items-center justify-between
-                      px-5 py-4
-                      border border-slate-200
-                      bg-white
-                      hover:border-amber-400
-                      transition
-                    "
+                    className={classNames(
+                      "group relative flex flex-col overflow-hidden rounded-sm border bg-white transition-all hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)]",
+                      incidentSummary && incidentSummary.highCount > 0
+                        ? "border-red-300 hover:border-red-400"
+                        : incidentSummary && incidentSummary.activeCount > 0
+                        ? "border-amber-300 hover:border-amber-400"
+                        : "border-slate-200 hover:border-amber-300"
+                    )}
                   >
-                    <div className="flex items-start gap-3">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        className="h-5 w-5 text-amber-600 mt-0.5"
-                      >
-                        <path d="M12 3L2 21H22L12 3Z" />
-                        <path d="M12 9V13" />
-                        <circle cx="12" cy="17" r="0.6" />
-                      </svg>
-
+                    <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Incidents
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-sm font-bold text-slate-900 font-poppins">Incidents</p>
+                        <p className="text-xs text-slate-500 mt-1 font-manrope leading-relaxed">
                           Active alerts and ingestion failures
+                        </p>
+                      </div>
+                      <img src="/images/incident.svg" alt="" className="w-14 h-14 object-contain flex-shrink-0" />
+                    </div>
+                    <div className="px-5 pb-4 mt-auto flex items-center gap-4 border-t border-slate-100 pt-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">Active</p>
+                        <p
+                          className={classNames(
+                            "text-base font-bold font-poppins tabular-nums",
+                            incidentSummary && incidentSummary.activeCount > 0 ? "text-amber-600" : "text-slate-900"
+                          )}
+                        >
+                          {incidentSummary?.activeCount ?? "—"}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-100" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">High severity</p>
+                        <p
+                          className={classNames(
+                            "text-base font-bold font-poppins tabular-nums",
+                            incidentSummary && incidentSummary.highCount > 0 ? "text-red-600" : "text-slate-900"
+                          )}
+                        >
+                          {incidentSummary?.highCount ?? "—"}
                         </p>
                       </div>
                     </div>
@@ -515,35 +559,40 @@ if (!workspace) {
                   {/* Column Health */}
                   <Link
                     to={`/workspace/${id}/columns-health`}
-                    className="
-                      group
-                      flex items-center justify-between
-                      px-5 py-4
-                      border border-slate-200
-                      bg-white
-                      hover:border-emerald-400
-                      transition
-                    "
+                    className="group relative flex flex-col overflow-hidden rounded-sm border border-slate-200 bg-white transition-all hover:border-emerald-300 hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)]"
                   >
-                    <div className="flex items-start gap-3">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        className="h-5 w-5 text-emerald-600 mt-0.5"
-                      >
-                        <rect x="3" y="4" width="18" height="16" rx="2" />
-                        <path d="M3 10H21" />
-                        <path d="M9 4V20" />
-                      </svg>
-
+                    <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Column Health
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-sm font-bold text-slate-900 font-poppins">Column health</p>
+                        <p className="text-xs text-slate-500 mt-1 font-manrope leading-relaxed">
                           Per-column missing and uniqueness trends
+                        </p>
+                      </div>
+                      <img src="/images/column.svg" alt="" className="w-14 h-14 object-contain flex-shrink-0" />
+                    </div>
+                    <div className="px-5 pb-4 mt-auto flex items-center gap-4 border-t border-slate-100 pt-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">Columns</p>
+                        <p className="text-base font-bold text-slate-900 font-poppins tabular-nums">
+                          {lastUpload ? lastUpload?.analysis_results?.column_count?.toLocaleString() ?? "—" : "—"}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-100" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-manrope">Health score</p>
+                        <p
+                          className={classNames(
+                            "text-base font-bold font-poppins tabular-nums",
+                            healthScore == null
+                              ? "text-slate-900"
+                              : healthScore >= 75
+                              ? "text-emerald-600"
+                              : healthScore >= 50
+                              ? "text-amber-600"
+                              : "text-red-600"
+                          )}
+                        >
+                          {healthScore != null ? Math.round(healthScore) : "—"}
                         </p>
                       </div>
                     </div>
