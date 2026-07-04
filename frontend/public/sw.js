@@ -1,6 +1,5 @@
-const CACHE_NAME = "datapulse-pwa-v3";
+const CACHE_NAME = "datapulse-pwa-v4"; // bump this — forces old poisoned cache to be deleted on activate
 
-// Bare minimum shell only
 const CORE_ASSETS = [
   "/",
   "/index.html",
@@ -9,7 +8,6 @@ const CORE_ASSETS = [
   "/favicon.ico"
 ];
 
-// Install: cache shell + take control immediately
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS))
@@ -17,43 +15,31 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: wipe old caches + claim all clients
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      )
+      Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))
     )
   );
   self.clients.claim();
 });
 
-// Fetch strategy
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache your backend or APIs
-  if (url.origin.includes("datapulse-hidk.onrender.com")) {
-    return;
+  // Never cache ANY API calls — same-origin /api/* (via proxy) OR direct Render origin
+  if (url.pathname.startsWith("/api/") || url.origin.includes("datapulse-hidk.onrender.com")) {
+    return; // let the browser handle it natively, no SW interference at all
   }
 
-  // Navigation must always prefer network
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() =>
-        caches.match("/offline.html")
-      )
+      fetch(event.request).catch(() => caches.match("/offline.html"))
     );
     return;
   }
 
-  // Static assets: cache-first
   event.respondWith(
-    caches.match(event.request).then(cached =>
-      cached || fetch(event.request)
-    )
+    caches.match(event.request).then(cached => cached || fetch(event.request))
   );
 });
