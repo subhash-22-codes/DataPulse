@@ -302,10 +302,10 @@ class UserResponse(BaseModel):
     name: Optional[str] = None
     google_id: Optional[str] = None
     github_id: Optional[str] = None
-    signup_method: str = "email" 
+    signup_method: str = "email"
     created_at: Optional[datetime] = None
+    last_feedback_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
-    is_feedback_submitted: bool = False
 
 class AuthResponse(BaseModel):
     message: str
@@ -783,6 +783,7 @@ def send_password_reset(request: Request, req: SendPasswordResetRequest, backgro
         
         user.otp_code = bcrypt.hash(otp)
         user.otp_expiry = expiry 
+        user.otp_attempts = 0
         db.commit()
         
         if APP_MODE == "production":
@@ -806,7 +807,19 @@ def reset_password(request: Request, req: ResetPasswordRequest, db: Session = De
     if not user.otp_expiry or now > user.otp_expiry:
         raise HTTPException(status_code=400, detail="The reset code has expired. Please request a new one.")
 
+    if user.otp_attempts >= 5:
+        user.otp_code = None
+        user.otp_expiry = None
+        user.otp_attempts = 0
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail="Too many failed attempts. Please request a new reset code."
+        )
+
     if not bcrypt.verify(req.reset_code, user.otp_code):
+        user.otp_attempts += 1
+        db.commit()
         raise HTTPException(status_code=400, detail="Invalid or incorrect reset code.")
 
     user.password_hash = bcrypt.hash(req.new_password)

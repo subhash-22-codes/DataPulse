@@ -21,16 +21,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const isAccountPage = location.pathname === '/account';
 
-  useEffect(() => {
-    if (!user?.id || user?.is_feedback_submitted) return;
+  const isOnCooldown = user?.last_feedback_at
+    ? (Date.now() - new Date(user.last_feedback_at).getTime()) < 30 * 24 * 60 * 60 * 1000
+    : false;
 
-    const hintKey = `dp_hint_seen_1${user.id}`;
-    const hasSeen = localStorage.getItem(hintKey);
-    
-    if (!hasSeen) {
-      setShowHint(true);
-    }
-  }, [user?.id, user?.is_feedback_submitted]);
+    useEffect(() => {
+        if (!user?.id || isOnCooldown) return;
+
+        const hintKey = `dp_hint_seen_1${user.id}`;
+        const hasSeen = localStorage.getItem(hintKey);
+        
+        if (!hasSeen) {
+          setShowHint(true);
+        }
+      }, [user?.id, isOnCooldown]);
 
   const openFeedback = () => {
     if (user?.id) {
@@ -97,7 +101,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Notifications />
                 <WhatsNewTrigger />
                 
-                {!user?.is_feedback_submitted && (
+                {!isOnCooldown && (
                   <div className="relative">
                    <button
                       onClick={openFeedback}
@@ -124,7 +128,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                         </div>
                         <button
                           onClick={() => {
-                            localStorage.setItem("dp_feedback_hint_seen", "true");
+                            localStorage.setItem(`dp_hint_seen_1${user?.id}`, 'true');
                             setShowHint(false);
                           }}
                           className="mt-2 w-full text-[9px] font-bold text-slate-400 hover:text-slate-900 text-left uppercase tracking-widest"
@@ -201,8 +205,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <FeedbackModal 
         isOpen={showFeedback} 
         onClose={() => setShowFeedback(false)}
-        userId={user?.id} 
-        isSubmitted={user?.is_feedback_submitted}
       />
 
       {showConfirm && (
