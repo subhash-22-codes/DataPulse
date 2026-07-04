@@ -167,6 +167,7 @@ def create_tokens_and_set_cookies(
         "secure": True, 
         "samesite": "none", # To allow cross-site cookies for frontend-backend communication (we using vercel-render combo)
         "httponly": True,
+        "path": "/",
     }
 
     response.set_cookie(
@@ -1006,6 +1007,7 @@ def refresh_token(
         "httponly": True,
         "secure": True,
         "samesite": "none",
+        "path": "/",
     }
 
     response.set_cookie(
@@ -1186,7 +1188,8 @@ def logout_from_all_devices(
         cookie_settings = {
             "samesite": "none",
             "secure": True,
-            "httponly": True
+            "httponly": True,
+            "path": "/"  # Ensure cookies are cleared across the entire site
         }
         
         response.delete_cookie(key="access_token", **cookie_settings)
