@@ -119,7 +119,7 @@ async def lifespan(app: FastAPI):
         logger.info("[APScheduler] 'Smart Watch' shut down.")
 
 # FastAPI Application Setup
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, redirect_slashes=False)
 
 
 # Guardian Middleware - CSRF Protection & Error Alerting
