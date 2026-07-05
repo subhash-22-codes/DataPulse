@@ -85,7 +85,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({ isOpen, setI
         condition,
         value,
       };
-      await api.post('/alerts/', payload);
+      await api.post('/alerts', payload);
       
       toast.success("Alert rule created", {
          style: { fontSize: '13px', background: '#334155', color: '#fff', borderRadius: '4px' }

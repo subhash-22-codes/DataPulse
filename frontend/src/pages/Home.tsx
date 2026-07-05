@@ -379,8 +379,8 @@ const Home: React.FC = () => {
 
         try {
             const [ownedRes, teamRes] = await Promise.all([
-                api.get<Workspace[]>("/workspaces/"),
-                api.get<Workspace[]>("/workspaces/team/")
+                api.get<Workspace[]>("/workspaces"),
+                api.get<Workspace[]>("/workspaces/team")
             ]);
 
             // 🔒 Runtime contract validation

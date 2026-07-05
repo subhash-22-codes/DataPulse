@@ -22,7 +22,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
     }
     setIsCreating(true);
     try {
-      const res = await api.post<Workspace>('/workspaces/', { name });
+      const res = await api.post<Workspace>('/workspaces', { name });
       toast.success(`Created: ${name}`);
       onWorkspaceCreated(res.data);
       setName('');

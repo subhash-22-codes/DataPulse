@@ -37,7 +37,7 @@ export const Notifications: React.FC = () => {
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api.get<Notification[]>('/notifications/?limit=5');
+      const res = await api.get<Notification[]>('/notifications?limit=5');
       setNotifications(res.data);
     } catch (error) {
       console.error("Fetch failed", error);

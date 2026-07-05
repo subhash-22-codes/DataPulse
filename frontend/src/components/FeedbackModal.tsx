@@ -78,7 +78,7 @@ export const FeedbackModal: React.FC<Props> = ({ isOpen, onClose }) => {
     setState("submitting");
 
     try {
-      await api.post("/feedback/",
+      await api.post("/feedback",
         { message: trimmed, feedback_type: feedbackType, mood: mood ?? undefined },
         { timeout: REQUEST_TIMEOUT, signal: abortRef.current.signal }
       );

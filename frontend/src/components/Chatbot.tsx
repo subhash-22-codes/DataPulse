@@ -71,7 +71,7 @@ export const Chatbot: React.FC = () => {
           text: m.text
         }));
 
-      const res = await api.post<{ reply: string; preview?: boolean }>('/chat/', {
+      const res = await api.post<{ reply: string; preview?: boolean }>('/chat', {
         message: userMessage,
         history: recentContext
       });
