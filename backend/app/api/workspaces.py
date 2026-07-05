@@ -44,7 +44,7 @@ from app.services.storage_service import upload_csv_bytes
 from app.services.storage_service import delete_files
 from app.services.storage_service import download_file_bytes, create_signed_upload_url
 from app.api.alerts import AlertRuleResponse 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, create_ws_ticket, verify_ws_ticket
 from app.core.limiter import limiter
 from app.core.connection_manager import manager
 from app.services.tasks import process_data_fetch_task
@@ -955,17 +955,11 @@ async def websocket_endpoint(
     user_id_str = None
 
     try:
-        # Mock request for auth
-        mock_scope = websocket.scope.copy()
-        mock_scope["type"] = "http"
-        mock_scope["method"] = "GET"
-        
-        from fastapi import Request
-        mock_request = Request(mock_scope)
-        
-        # Authenticate
-        from app.api.dependencies import get_current_user
-        user = get_current_user(mock_request, db)
+        ticket = websocket.query_params.get("ticket")
+        if not ticket:
+            raise ValueError("Missing ticket")
+
+        user = verify_ws_ticket(ticket, db)
         user_id_str = str(user.id)
         
     except Exception as e:
@@ -976,7 +970,7 @@ async def websocket_endpoint(
             pass 
         db.close()
         return
-    db.close() 
+    db.close()
 
     await websocket.accept()
     await manager.connect('workspace', workspace_id, websocket)
@@ -997,7 +991,20 @@ async def websocket_endpoint(
             manager.disconnect('workspace', workspace_id, websocket)
             manager.disconnect('user', user_id_str, websocket)
             
-
+@router.get("/ws-ticket")
+def get_ws_ticket(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Called by the frontend right before opening a WebSocket connection.
+    This route IS behind the normal cookie auth (get_current_user), since
+    it's called through the Vercel proxy (same-origin, cookies work fine
+    here). It returns a 30-second ticket that the WebSocket route below
+    uses instead of cookies, since cookies can't cross from vercel.app
+    to onrender.com.
+    """
+    ticket = create_ws_ticket(current_user)
+    return {"ticket": ticket}
 
 @router.post("/{workspace_id}/request-delete-otp", status_code=200)
 @limiter.limit("3/minute")

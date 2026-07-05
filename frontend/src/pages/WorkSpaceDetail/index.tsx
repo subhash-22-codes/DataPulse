@@ -101,12 +101,26 @@ useEffect(() => {
     }, 30000);
   };
 
-  const connect = () => {
+  const connect = async () => {
     // ✅ Guard inside connect too
     if (
       socketRef.current?.readyState === WebSocket.OPEN ||
       socketRef.current?.readyState === WebSocket.CONNECTING
     ) {
+      return;
+    }
+
+    // Fetch a short-lived ticket first — this call goes through the
+    // Vercel proxy (same-origin), so our normal auth cookies work fine
+    // here. The ticket is what proves identity to Render, since cookies
+    // themselves can't travel from vercel.app to onrender.com.
+    let ticket: string;
+    try {
+      const ticketRes = await api.get<{ ticket: string }>("/auth/ws-ticket");
+      ticket = ticketRes.data.ticket;
+    } catch (err) {
+      console.error("🔌 Failed to fetch WS ticket, will retry", err);
+      retryTimeout = setTimeout(connect, RECONNECT_DELAY);
       return;
     }
 
@@ -117,12 +131,12 @@ useEffect(() => {
     let wsUrl: string;
     if (envWsUrl) {
       const sanitizedEnvUrl = envWsUrl.replace(/^(ws|wss):\/\//, "");
-      wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}`;
+      wsUrl = `${wsProtocol}://${sanitizedEnvUrl}/api/workspaces/${id}/ws/${Date.now()}?ticket=${ticket}`;
     } else {
-      wsUrl = `${wsProtocol}://${window.location.host}/api/workspaces/${id}/ws/${Date.now()}`;
+      wsUrl = `${wsProtocol}://${window.location.host}/api/workspaces/${id}/ws/${Date.now()}?ticket=${ticket}`;
     }
 
-    console.log(`🔌 Attempting WS Connection: ${wsUrl}`);
+    console.log(`🔌 Attempting WS Connection`);
 
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
