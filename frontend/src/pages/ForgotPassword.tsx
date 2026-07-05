@@ -181,7 +181,7 @@ const ForgotPassword: React.FC = () => {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+            className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
             placeholder="name@example.com"
           />
         </div>
@@ -284,7 +284,7 @@ const ForgotPassword: React.FC = () => {
               required
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
+              className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors"
               placeholder="••••••••"
             />
             <button
@@ -327,7 +327,7 @@ const ForgotPassword: React.FC = () => {
               disabled={!isStrong}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className={`block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors ${!isStrong ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`}
+              className={`block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors ${!isStrong ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`}
               placeholder="••••••••"
             />
             <button

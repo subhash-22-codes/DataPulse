@@ -221,7 +221,7 @@ export const FeedbackModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     feedbackType === "praise"  ? "What's working well for you?" :
                     "Share anything on your mind…"
                   }
-                  className="w-full min-h-[110px] resize-none rounded-sm border border-slate-200 bg-white px-3.5 py-3 text-[13px] font-manrope text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150 custom-scrollbar"
+                  className="w-full min-h-[110px] resize-none rounded-sm border border-slate-200 bg-white px-3.5 py-3 text-base sm:text-sm font-manrope text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150 custom-scrollbar"
                   disabled={state === "submitting"}
                 />
                 <div className="flex justify-between items-center mt-1.5">

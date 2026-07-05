@@ -109,7 +109,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
                         id="workspace-name"
                         className={`
                           block w-full rounded-sm border border-slate-200 py-2 px-3 
-                          text-slate-900 text-sm transition-all outline-none 
+                          text-slate-900 text-base sm:text-sm transition-all outline-none 
                           placeholder:text-slate-300
                           focus:border-slate-900 focus:ring-0
                           ${isCreating ? 'bg-slate-50 opacity-60' : 'bg-white'}

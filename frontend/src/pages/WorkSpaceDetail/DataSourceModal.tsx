@@ -395,7 +395,7 @@ const PollingSection: React.FC<{
             value={pollingInterval}
             onChange={e => setPollingInterval(e.target.value)}
             disabled={!isPollingActive}
-            className="appearance-none w-full rounded border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 py-2 pl-3 pr-8 text-[13px] font-manrope text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 transition-all font-medium"
+            className="appearance-none w-full rounded border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 py-2 pl-3 pr-8 text-[16px] sm:text-[13px] font-manrope text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 transition-all font-medium"
           >
             <option value="30min">Every 30 Minutes</option>
             <option value="hourly">Hourly</option>
@@ -870,7 +870,7 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">Endpoint URL</label>
                               <div className="relative">
                                 <Globe className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                                <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full pl-9 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-[13px] font-mono text-slate-700 placeholder:text-slate-400 transition-all" placeholder="https://api.example.com/v1/data" />
+                                <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full pl-9 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-base sm:text-sm font-mono text-slate-700 placeholder:text-slate-400 transition-all" placeholder="https://api.example.com/v1/data" />
                               </div>
                             </div>
                             <div className="bg-slate-50/50 rounded p-4 border border-slate-100 space-y-3">
@@ -880,11 +880,11 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({
                               <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                   <label className="block text-[10px] font-semibold text-slate-500 font-manrope">Key</label>
-                                  <input type="text" value={apiHeaderName} onChange={e => setApiHeaderName(e.target.value)} className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] font-manrope focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Authorization" />
+                                  <input type="text" value={apiHeaderName} onChange={e => setApiHeaderName(e.target.value)} className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-base sm:text-sm font-manrope focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Authorization" />
                                 </div>
                                 <div className="space-y-1">
                                   <label className="block text-[10px] font-semibold text-slate-500 font-manrope">Value</label>
-                                  <input type="password" value={apiHeaderValue} onChange={e => setApiHeaderValue(e.target.value)} className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-mono" placeholder="Bearer token..." />
+                                  <input type="password" value={apiHeaderValue} onChange={e => setApiHeaderValue(e.target.value)} className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-base sm:text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-mono" placeholder="Bearer token..." />
                                 </div>
                               </div>
                             </div>
@@ -897,31 +897,31 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({
                             <div className="grid grid-cols-12 gap-3">
                               <div className="col-span-8 space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">Host</label>
-                                <input type="text" value={dbHost} onChange={e => setDbHost(e.target.value)} className="w-full px-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-[13px] font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="db.example.com" />
+                                <input type="text" value={dbHost} onChange={e => setDbHost(e.target.value)} className="w-full px-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-base sm:text-sm font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="db.example.com" />
                               </div>
                               <div className="col-span-4 space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">Port</label>
-                                <input type="number" value={dbPort} onChange={e => setDbPort(Number(e.target.value))} className="w-full px-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-[13px] font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="5432" />
+                                <input type="number" value={dbPort} onChange={e => setDbPort(Number(e.target.value))} className="w-full px-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-base sm:text-sm font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="5432" />
                               </div>
                               <div className="col-span-6 space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">User</label>
                                 <div className="relative">
                                   <User className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                                  <input type="text" value={dbUser} onChange={e => setDbUser(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-[13px] font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="postgres" />
+                                  <input type="text" value={dbUser} onChange={e => setDbUser(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-base sm:text-sm font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="postgres" />
                                 </div>
                               </div>
                               <div className="col-span-6 space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">Password</label>
                                 <div className="relative">
                                   <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                                  <input type="password" value={dbPassword} onChange={e => setDbPassword(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-[13px] font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="••••••••" />
+                                  <input type="password" value={dbPassword} onChange={e => setDbPassword(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-base sm:text-sm font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="••••••••" />
                                 </div>
                               </div>
                               <div className="col-span-12 space-y-1">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope">Database Name</label>
                                 <div className="relative">
                                   <Database className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                                  <input type="text" value={dbName} onChange={e => setDbName(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-[13px] font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="production_db" />
+                                  <input type="text" value={dbName} onChange={e => setDbName(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded border border-slate-200 bg-white shadow-sm text-base sm:text-sm font-manrope focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="production_db" />
                                 </div>
                               </div>
                             </div>
@@ -929,7 +929,7 @@ export const DataSourceModal: React.FC<DataSourceModalProps> = ({
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-manrope flex items-center gap-1.5">
                                 <BookOpen className="w-3.5 h-3.5 text-slate-400" /> SQL Query
                               </label>
-                              <textarea value={dbQuery} onChange={e => setDbQuery(e.target.value)} rows={4} className="w-full px-3 py-3 rounded border border-slate-200 bg-slate-900 text-slate-200 shadow-sm font-mono text-[12px] leading-relaxed focus:ring-2 focus:ring-blue-500/50 resize-y" placeholder="SELECT * FROM my_table LIMIT 100;" />
+                              <textarea value={dbQuery} onChange={e => setDbQuery(e.target.value)} rows={4} className="w-full px-3 py-3 rounded border border-slate-200 bg-slate-900 text-slate-200 shadow-sm font-mono text-base sm:text-sm leading-relaxed focus:ring-2 focus:ring-blue-500/50 resize-y" placeholder="SELECT * FROM my_table LIMIT 100;" />
                             </div>
                             <PollingSection pollingInterval={pollingInterval} setPollingInterval={setPollingInterval} isPollingActive={isPollingActive} setIsPollingActive={setIsPollingActive} />
                           </div>

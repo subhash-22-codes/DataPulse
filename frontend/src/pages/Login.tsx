@@ -143,7 +143,7 @@ const Login: React.FC = () => {
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800/5 transition-all"
+                    className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800/5 transition-all"
                     placeholder="name@example.com"
                   />
                 </div>
@@ -163,7 +163,7 @@ const Login: React.FC = () => {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full rounded-md border border-slate-300 pl-9 pr-10 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800/5 transition-all"
+                    className="block w-full rounded-md border border-slate-300 pl-9 pr-10 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800/5 transition-all"
                     placeholder="••••••••"
                   />
                   <button

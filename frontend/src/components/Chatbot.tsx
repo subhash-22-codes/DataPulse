@@ -313,7 +313,7 @@ export const Chatbot: React.FC = () => {
                         onChange={(e) => setInputValue(e.target.value)}
                         placeholder="Ask DataPulse..."
                         disabled={isLoading}
-                        className="w-full bg-gray-50 text-sm rounded-xl pl-4 pr-12 py-3 border border-gray-200 focus:border-slate-900 focus:ring-0"
+                        className="w-full bg-gray-50 text-base sm:text-sm rounded-xl pl-4 pr-12 py-3 border border-gray-200 focus:border-slate-900 focus:ring-0"
                       />
                       <button
                         type="submit"

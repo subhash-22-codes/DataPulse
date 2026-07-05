@@ -264,7 +264,7 @@ const Register: React.FC = () => {
                   <label htmlFor="email" className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">Email Address</label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" placeholder="name@example.com" />
+                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" placeholder="name@example.com" />
                   </div>
                 </div>
 
@@ -355,7 +355,7 @@ const Register: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">Full Name</label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input id="name" type="text" required value={name} onChange={(e) => setName(e.target.value)} className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" placeholder="John Doe" />
+                    <input id="name" type="text" required value={name} onChange={(e) => setName(e.target.value)} className="block w-full rounded-md border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" placeholder="John Doe" />
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -368,7 +368,7 @@ const Register: React.FC = () => {
                       required 
                       value={password} 
                       onChange={(e) => setPassword(e.target.value)} 
-                      className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" 
+                      className="block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors" 
                       placeholder="••••••••" 
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
@@ -404,7 +404,7 @@ const Register: React.FC = () => {
                       disabled={!isStrong} 
                       value={confirmPassword} 
                       onChange={(e) => setConfirmPassword(e.target.value)} 
-                      className={`block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors ${!isStrong ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`} 
+                      className={`block w-full rounded-md border border-slate-300 pl-9 pr-9 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-800 focus:outline-none focus:ring-0 transition-colors ${!isStrong ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`} 
                       placeholder="••••••••" 
                     />
                     <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">

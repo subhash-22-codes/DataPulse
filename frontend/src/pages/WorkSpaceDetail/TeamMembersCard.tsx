@@ -168,7 +168,7 @@ export const TeamMembersCard: React.FC<TeamMembersCardProps> = ({ workspace, isO
                             bg-white
                             px-3 py-2
                             pl-9
-                            text-sm
+                            text-base sm:text-sm
                             text-slate-700
                             placeholder:text-slate-400
                             shadow-sm

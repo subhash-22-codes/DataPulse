@@ -316,7 +316,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ workspace, isOwner }
                                   setConfirmationText(e.target.value);
                                   setInputError(false);
                                 }}
-                                className={`block w-full rounded-sm border px-3 py-2.5 text-xs font-bold transition-all outline-none
+                                className={`block w-full rounded-sm border px-3 py-2.5 text-base sm:text-sm font-bold transition-all outline-none
                                   ${inputError 
                                     ? 'border-red-600 bg-red-50/30' 
                                     : 'border-slate-300 bg-white focus:border-slate-900'
