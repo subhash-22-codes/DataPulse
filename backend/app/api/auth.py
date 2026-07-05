@@ -26,7 +26,7 @@ from app.models.user import User
 from app.models.token import RefreshToken 
 from app.core.database import get_db
 from app.core.limiter import limiter
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, create_ws_ticket
 from app.models.user import LoginHistory 
 from app.services.email_service import send_farewell_email
 from app.models.workspace import workspace_team
@@ -1216,3 +1216,17 @@ def logout_from_all_devices(
         logger.error(f"[LOGOUT] Global logout failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to perform security reset")
     
+@router.get("/ws-ticket/")
+def get_ws_ticket(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Called by the frontend right before opening a WebSocket connection.
+    This route IS behind the normal cookie auth (get_current_user), since
+    it's called through the Vercel proxy (same-origin, cookies work fine
+    here). It returns a 30-second ticket that the WebSocket route below
+    uses instead of cookies, since cookies can't cross from vercel.app
+    to onrender.com.
+    """
+    ticket = create_ws_ticket(current_user)
+    return {"ticket": ticket}
