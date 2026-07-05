@@ -400,7 +400,7 @@ export const NotificationsPage: React.FC = () => {
     setError(null);
     abortRef.current = new AbortController();
     try {
-      const res = await api.get<Notification[]>("/notifications/", {
+      const res = await api.get<Notification[]>("/notifications", {
         signal: abortRef.current.signal,
       });
       const sorted = res.data.sort(
@@ -633,7 +633,7 @@ export const NotificationsPage: React.FC = () => {
                 <button
                   onClick={async () => {
                     setClearingAll(true);
-                    await api.delete("/notifications/");
+                    await api.delete("/notifications");
                     setNotifications([]);
                     setShowClearModal(false);
                     setClearingAll(false);

@@ -35,7 +35,7 @@ export const Trash: React.FC = () => {
     try {
       const [trashRes, workspacesRes] = await Promise.all([
         api.get<Workspace[]>('/workspaces/trash'),
-        api.get<Workspace[]>('/workspaces/')
+        api.get<Workspace[]>('/workspaces')
       ]);
 
       setDeletedWorkspaces(trashRes.data);

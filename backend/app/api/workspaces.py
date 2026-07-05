@@ -203,7 +203,7 @@ class CompleteUploadRequest(BaseModel):
     storage_path: str
 
 #  Routes
-@router.post("/", response_model=WorkspaceResponse)
+@router.post("", response_model=WorkspaceResponse)
 @limiter.limit("5/minute")
 def create_workspace(
     request: Request,
@@ -241,7 +241,7 @@ def create_workspace(
     db.refresh(new_ws)
     return new_ws
 
-@router.get("/", response_model=List[WorkspaceResponse])
+@router.get("", response_model=List[WorkspaceResponse])
 def list_workspaces(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     workspaces = db.query(Workspace).options(
         joinedload(Workspace.team_members),
@@ -661,7 +661,7 @@ async def update_notification_setting(
     return {"status": "updated"}
 
 
-@router.get("/team/", response_model=List[WorkspaceResponse])
+@router.get("/team", response_model=List[WorkspaceResponse])
 def get_team_workspaces(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)

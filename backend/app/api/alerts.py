@@ -49,7 +49,7 @@ class AlertRuleResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/", response_model=AlertRuleResponse, status_code=201)
+@router.post("", response_model=AlertRuleResponse, status_code=201)
 def create_alert_rule(
     rule: AlertRuleCreate,
     db: Session = Depends(get_db),

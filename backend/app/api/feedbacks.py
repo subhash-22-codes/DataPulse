@@ -40,7 +40,7 @@ class FeedbackResponse(BaseModel):
     status: str = "success"
 
 
-@router.post("/", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def create_feedback(
     request: Request,

@@ -1216,7 +1216,7 @@ def logout_from_all_devices(
         logger.error(f"[LOGOUT] Global logout failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to perform security reset")
     
-@router.get("/ws-ticket/")
+@router.get("/ws-ticket")
 def get_ws_ticket(
     current_user: User = Depends(get_current_user),
 ):

@@ -131,7 +131,7 @@ RULES
 - If a feature sounds advanced or uncertain, say it is in preview or not available.
 """
 
-@router.post("/", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 async def handle_chat_message(
     request: Request,
     chat_request: ChatRequest,
