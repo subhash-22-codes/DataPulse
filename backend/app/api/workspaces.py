@@ -262,6 +262,19 @@ def get_trash(
         Workspace.owner_id == current_user.id,
         Workspace.is_deleted == True  
     ).all()
+    
+@router.get("/team", response_model=List[WorkspaceResponse])
+def get_team_workspaces(
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    return db.query(Workspace).options(
+        joinedload(Workspace.team_members),
+        joinedload(Workspace.owner)
+    ).filter(
+        Workspace.team_members.any(User.id == current_user.id),
+        Workspace.is_deleted == False
+    ).all()
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
@@ -661,18 +674,7 @@ async def update_notification_setting(
     return {"status": "updated"}
 
 
-@router.get("/team", response_model=List[WorkspaceResponse])
-def get_team_workspaces(
-    current_user: User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    return db.query(Workspace).options(
-        joinedload(Workspace.team_members),
-        joinedload(Workspace.owner)
-    ).filter(
-        Workspace.team_members.any(User.id == current_user.id),
-        Workspace.is_deleted == False
-    ).all()
+
 
     
 @router.post("/{workspace_id}/upload-csv/init")
