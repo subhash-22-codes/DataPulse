@@ -2,10 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ */
+/* BASE                                                                */
+/* ------------------------------------------------------------------ */
+
 input,
 select,
 textarea {
-  font-size: 16px !important;
+  font-size: 16px !important; /* prevents iOS auto-zoom on focus */
 }
 
 @layer base {
@@ -13,81 +17,94 @@ textarea {
     font-family: 'Poppins', sans-serif;
     font-weight: 700;
   }
-}
-@layer base {
+
   p {
-    font-family: 'manrope', sans-serif;
+    font-family: 'Manrope', sans-serif;
     font-weight: 400;
   }
-}
-@layer base {
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none;    /* Firefox */
+    scroll-behavior: smooth;
   }
 
-  body {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  /* ------------------------------------------------------------------
+     ACCESSIBILITY: visible keyboard focus everywhere.
+     Nothing in the previous CSS defined a focus-visible style, which
+     means keyboard-only users had no way to see what was focused.
+     This uses the brand token so it stays on-system as colors evolve.
+  ------------------------------------------------------------------ */
+  :focus-visible {
+    outline: 2px solid #2563eb; /* brand-600 */
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
-  html::-webkit-scrollbar,
-  body::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
-  }
-
-
-}
-@layer base {
-  /* Improve tap targets on mobile */
+  /* Improve tap targets on touch devices */
   @media (hover: none) and (pointer: coarse) {
-    button, 
-    input[type="button"], 
-    input[type="submit"], 
+    button,
+    input[type="button"],
+    input[type="submit"],
     [role="button"] {
       min-height: 44px;
     }
   }
-  
-  /* Better touch scrolling on iOS */
+
   * {
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
   }
-  
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
+
+  /* ------------------------------------------------------------------
+     ACCESSIBILITY: respect reduced-motion preference.
+     None of the animations in this file were gated on this before.
+  ------------------------------------------------------------------ */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
-  
 }
 
+/* ------------------------------------------------------------------ */
+/* COMPONENTS                                                          */
+/*                                                                      */
+/* NOTE: kept both variants working for now so nothing currently        */
+/* rendering breaks. In Phase 2 we standardize every primary action     */
+/* in the app on the slate-900 style (matches App.tsx's retry/          */
+/* maintenance screens) and retire the gradient variant, or vice versa  */
+/* — your call once you see both side by side in the browser.           */
+/* ------------------------------------------------------------------ */
 
 @layer components {
   .btn-primary {
     @apply bg-gradient-to-r from-blue-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-teal-700 transition-all duration-200 shadow-sm;
   }
-  
+
   .btn-secondary {
     @apply bg-white text-gray-700 px-6 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-all duration-200 shadow-sm;
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* UTILITIES                                                           */
+/* ------------------------------------------------------------------ */
+
 @layer utilities {
-  .animate-pulse-slow {
-    animation: pulse 3s ease-in-out infinite;
-  }
   .touch-target-44 {
     min-height: 44px;
     min-width: 44px;
   }
-  
-  /* Safe area padding for iOS */
+
   .safe-area-top {
     padding-top: env(safe-area-inset-top);
   }
-  
+
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -108,31 +125,34 @@ textarea {
   animation: fade-in 0.25s ease-out forwards;
 }
 
+/* ------------------------------------------------------------------ */
+/* PAGE-SPECIFIC BACKGROUNDS                                           */
+/* Kept as-is for now — Layout.tsx and LandingPage currently depend on  */
+/* these class names directly. Flagged for Phase 2/4: these are the    */
+/* "one-off pattern" Subhash wants eliminated, and `.workspace-background`*/
+/* is currently applied globally in Layout.tsx (all protected pages),  */
+/* not just workspace pages, despite its name. We'll fix that when we   */
+/* rebuild Layout.                                                      */
+/* ------------------------------------------------------------------ */
+
 .Landing-page-design-pattern {
-  /* Full screen & flex layout */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
-
-  /* Background gradient (already in Tailwind, optional backup) */
   background: linear-gradient(
     135deg,
-    #f8fafc, /* slate-50 */
-    rgba(191, 219, 254, 0.3), /* blue-50/30 */
-    rgba(199, 210, 254, 0.2) /* indigo-50/20 */
+    #f8fafc,
+    rgba(191, 219, 254, 0.3),
+    rgba(199, 210, 254, 0.2)
   );
-
-  /* Grid overlay */
 }
 
 .Landing-page-design-pattern::before {
   content: "";
   position: absolute;
   inset: 0;
-  pointer-events: none; /* allow clicks through */
-  
-  /* Subtle grid pattern */
+  pointer-events: none;
   background-image:
     repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 40px),
     repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 40px);
@@ -141,10 +161,32 @@ textarea {
 
 .workspace-background {
   background-color: #f9fafb;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
   background-size: 48px 48px;
+}
+
+/* ------------------------------------------------------------------ */
+/* SCROLLBARS                                                          */
+/* Main page scrollbar is fully hidden, matching the original design.  */
+/* (Flagged once for accessibility — Subhash reviewed and prefers it   */
+/* hidden, so keeping it this way going forward.)                     */
+/* ------------------------------------------------------------------ */
+
+html {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -167,48 +209,52 @@ textarea {
   background-color: rgba(156, 163, 175, 0.5);
 }
 
-
-
-
 .chatbot-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 10px;
-        }
-        .chatbot-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
-        }
-        
-        @keyframes float {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-5px); }
-          100% { transform: translateY(0px); }
-        }
-        
-        .animate-float {
-          animation: float 3s ease-in-out infinite;
-        }
+  width: 5px;
+}
 
-        .typing-dot {
-          animation: typing 1.4s infinite ease-in-out both;
-        }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        
-        @keyframes typing {
-          0%, 80%, 100% { transform: scale(0); }
-          40% { transform: scale(1); }
-        }
+.chatbot-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-        @keyframes scaleIn {
-          from { transform: scale(0.8); opacity: 0; }
-          to   { transform: scale(1); opacity: 1; }
-        }
+.chatbot-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.chatbot-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+/* ------------------------------------------------------------------ */
+/* CHATBOT-SPECIFIC ANIMATIONS                                         */
+/* ------------------------------------------------------------------ */
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.typing-dot {
+  animation: typing 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
 
 @media screen and (max-width: 767px) {
   input,
