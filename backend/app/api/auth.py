@@ -536,6 +536,12 @@ async def github_callback(
         )
 
 
+# NOTE: Two separate Google auth flows exist intentionally.
+# This endpoint (POST /auth/google) handles the mobile/SPA flow —
+# the client verifies the Google ID token client-side and sends it here.
+# The GET /auth/google/callback endpoint handles the server-side
+# OAuth code flow via Authlib (web redirect flow).
+# Both call get_or_create_social_user — neither is dead code.
 @router.post("/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
 def google_login(

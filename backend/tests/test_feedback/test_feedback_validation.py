@@ -13,7 +13,7 @@ def _auth(client, app, user):
 
 def post_feedback(client, payload):
     return client.post(
-        "/api/feedback/",
+        "/api/feedback",
         json=payload,
         headers={"X-CSRF-Token": "test", "Origin": "http://localhost:5173"},
     )
@@ -168,7 +168,7 @@ class TestAuthValidation:
         app_instance.dependency_overrides.pop(get_current_user, None)
 
         resp = client.post(
-            "/api/feedback/",
+            "/api/feedback",
             json={"message": "No auth test.", "feedback_type": "general"},
             headers={"X-CSRF-Token": "test", "Origin": "http://localhost:5173"},
         )

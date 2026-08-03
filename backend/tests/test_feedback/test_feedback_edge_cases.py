@@ -11,7 +11,7 @@ def _auth(client, app, user):
 
 def post_feedback(client, payload):
     return client.post(
-        "/api/feedback/",
+        "/api/feedback",
         json=payload,
         headers={"X-CSRF-Token": "test", "Origin": "http://localhost:5173"},
     )

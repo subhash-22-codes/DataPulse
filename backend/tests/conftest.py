@@ -139,7 +139,7 @@ def client(db):
         yield db
 
     app.dependency_overrides[get_db] = _override_get_db
-    test_client = TestClient(app)
+    test_client = TestClient(app, base_url="https://testserver")
 
     yield test_client
 

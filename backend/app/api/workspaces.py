@@ -1020,7 +1020,10 @@ async def request_delete_otp(
                 detail=f"Please wait {retry_after} seconds before requesting a new code."
             )
 
-    ws_uuid = uuid.UUID(workspace_id)
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
     
     workspace = db.query(Workspace).filter(
         Workspace.id == ws_uuid,
@@ -1337,15 +1340,20 @@ def manual_resolve_incident(
     current_user: User = Depends(get_current_user),
 ):
     # Ownership check - same pattern as list_incidents
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
         Workspace.is_deleted == False,
     ).first()
-
+    
     if not workspace:
         workspace = db.query(Workspace).filter(
-            Workspace.id == workspace_id,
+            Workspace.id == ws_uuid,
             Workspace.is_deleted == False,
         ).first()
 
@@ -1395,10 +1403,17 @@ def list_incidents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.is_deleted == False,
     ).first()
+  
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -1442,15 +1457,20 @@ def list_incident_events(
     current_user: User = Depends(get_current_user),
 ):
     # Same ownership check as list_incidents / manual_resolve_incident
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.owner_id == current_user.id,
         Workspace.is_deleted == False,
     ).first()
 
     if not workspace:
         workspace = db.query(Workspace).filter(
-            Workspace.id == workspace_id,
+            Workspace.id == ws_uuid,
             Workspace.is_deleted == False,
         ).first()
 
@@ -1493,8 +1513,13 @@ def get_table_metrics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.is_deleted == False,
     ).first()
 
@@ -1534,8 +1559,13 @@ def get_column_metrics(
         f"user={current_user.email}"
     )
 
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.is_deleted == False,
     ).first()
 
@@ -1595,8 +1625,13 @@ def list_columns(
         f"user={current_user.email}"
     )
 
+    try:
+        ws_uuid = uuid.UUID(workspace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID")
+
     workspace = db.query(Workspace).filter(
-        Workspace.id == workspace_id,
+        Workspace.id == ws_uuid,
         Workspace.is_deleted == False,
     ).first()
 
